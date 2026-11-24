@@ -79,6 +79,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { RenameOps } from "../marketplace/clone-swap.ts";
 import type { GitAuthBundle, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginUpdateFailedOutcome,
@@ -123,6 +124,10 @@ export interface UpdatePluginsOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /** D-SG-10: the rename the marketplace sync's swap moves a checkout with. */
+  readonly renameOps?: RenameOps;
+  /** D-SG-15: the environment the keep variable is read from; the process's by default. */
+  readonly environment?: NodeJS.ProcessEnv;
 }
 
 /** Candidate state required by the staged update swap. */

@@ -22,7 +22,6 @@ import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 import { mock, verify } from "strong-mock";
 
-import { refreshGitHubClone } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   checkout,
   clone,
@@ -47,12 +46,6 @@ import {
   StoredCredentialRejectedError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import {
-  cgiEnvironment,
-  httpBackendArguments,
-  parseCgiResponse,
-  runHttpBackend,
-} from "../../features/lib/https-git-host/cgi.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
@@ -1297,104 +1290,6 @@ describe("clone", () => {
       return true;
     });
   });
-});
-
-/** Header names in lower case, as the CGI environment reads them. */
-function lowerCaseHeaders(headers: Iterable<readonly [string, string]>): Record<string, string> {
-  return Object.fromEntries([...headers].map(([name, value]) => [name.toLowerCase(), value]));
-}
-
-/**
- * Answers every isomorphic-git request with `git http-backend` over the bare
- * repositories under `projectRoot`, so the in-process fetch reads what real
- * git serves, never a canned pack. A request for `REMOTE_URL` reads the bare
- * repository `<projectRoot>/owner/repo.git`.
- */
-async function installHttpBackendTransport(t: TestContext, projectRoot: string): Promise<void> {
-  const home = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
-  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    const cgiRequest = {
-      method: request.method ?? "GET",
-      url: new URL(request.url),
-      headers: lowerCaseHeaders(Object.entries(request.headers ?? {})),
-      body: await collectBody(request.body),
-    };
-    const output = await runHttpBackend(
-      httpBackendArguments("allow-reachable"),
-      cgiEnvironment(cgiRequest, projectRoot, home),
-      cgiRequest.body,
-      () => undefined,
-    );
-    const served = parseCgiResponse(output);
-    async function* body(): AsyncIterableIterator<Uint8Array> {
-      await Promise.resolve();
-      yield Uint8Array.from(served.body);
-    }
-
-    return {
-      url: request.url,
-      method: cgiRequest.method,
-      statusCode: served.status,
-      statusMessage: "",
-      headers: lowerCaseHeaders(served.headers),
-      body: body(),
-    };
-  });
-}
-
-/**
- * Interim until the re-clone swap replaces D-14 (`marketplace update`, the
- * mirror refresh, and the PUP-2 sync): the D-14 verbs, the in-process `fetch`
- * included, must still bring a depth-1 system-git clone to its remote's new
- * commit.
- */
-describe("D-14 on a depth-1 system-git clone", () => {
-  const SHAPES: ReadonlyArray<{ readonly title: string; readonly ref?: string }> = [
-    { title: "a default-branch clone" },
-    { title: "a --branch clone", ref: "dev" },
-  ];
-
-  for (const { title, ref } of SHAPES) {
-    test(`D-14, SG-TRN-02: the refresh brings ${title} to the remote's new commit`, async (t) => {
-      // arrange
-      const origin = await createGitTestRepository(t, { boundary: "local" });
-      await origin.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
-      await origin.run("branch", "dev");
-      const projectRoot = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
-      const bare = path.join(projectRoot, "owner", "repo.git");
-      await origin.cloneBare(bare);
-      const systemGit = await hermeticGitProcess(t, {
-        GIT_CONFIG_COUNT: "1",
-        GIT_CONFIG_KEY_0: `url.file://${bare}.insteadOf`,
-        GIT_CONFIG_VALUE_0: REMOTE_URL,
-      });
-      const dir = await cloneTarget(t);
-      await clone(
-        { dir, url: REMOTE_URL, ...(ref !== undefined && { ref, singleBranch: true }) },
-        systemGit,
-      );
-      const shallowBefore = await isShallowCheckout(dir);
-      const branch = ref ?? "main";
-      await origin.run("checkout", "-q", branch);
-      const newOid = await origin.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
-      await origin.run("push", "-q", bare, branch);
-      await installHttpBackendTransport(t, projectRoot);
-
-      // act
-      await refreshGitHubClone(dir, ref, systemGitOps(systemGit));
-
-      // assert
-      assert.deepStrictEqual(
-        {
-          shallowBefore,
-          head: await resolveRef({ dir, ref: "HEAD" }, systemGit),
-          next: await readFile(path.join(dir, "next.txt"), "utf8"),
-          status: await gitTestCheckout(dir).run("status", "--porcelain"),
-        },
-        { shallowBefore: true, head: newOid, next: "next\n", status: "" },
-      );
-    });
-  }
 });
 
 describe("fetch", () => {

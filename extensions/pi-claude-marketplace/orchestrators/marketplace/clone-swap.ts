@@ -23,6 +23,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 
+import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -35,6 +36,7 @@ import {
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import type { GitHubSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { GitAuthBundle, GitOps } from "./shared.ts";
@@ -62,6 +64,25 @@ export async function writeOwnershipMarker(stagingDir: string): Promise<void> {
   const markerPath = ownershipMarkerPath(stagingDir);
   await assertPathInside(stagingDir, markerPath, "marketplace ownership marker");
   await atomicWriteJson(markerPath, { generatedBy: "pi-claude-marketplace" });
+}
+
+/** D-SG-10: the file whose presence makes a marketplace checkout valid. */
+export const MARKETPLACE_MANIFEST_MARKER = path.join(".claude-plugin", "marketplace.json");
+
+/**
+ * D-SG-10: the URL a refresh of a marketplace checkout clones from: the live
+ * checkout's recorded `origin`, which is the URL the checkout was cloned from,
+ * or the source's clone URL when the checkout records none. An earlier
+ * version recorded some url sources under a URL that is not their clone URL.
+ * `marketplace update` and `plugin update`'s marketplace sync (PUP-2) share it.
+ */
+export async function swapCloneUrl(
+  liveDir: string,
+  source: GitHubSource | UrlSource,
+  gitOps: GitOps,
+): Promise<string> {
+  const remotes = await gitOps.listRemotes({ dir: liveDir });
+  return remotes.kind === "origin" ? remotes.url : networkCloneUrl(source);
 }
 
 /** The rename the swap moves whole checkouts with; tests inject a failing one. */

@@ -4,13 +4,16 @@ import os from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { githubSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
+  MARKETPLACE_MANIFEST_MARKER,
   ownershipMarkerPath,
   refreshCloneBySwap,
+  swapCloneUrl,
   type CloneSwapArgs,
   type RenameOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts";
@@ -140,7 +143,7 @@ function swapArgs(
     url: REMOTE_URL,
     gitOps,
     auth: AUTH,
-    liveMarker: path.join(".claude-plugin", "marketplace.json"),
+    liveMarker: MARKETPLACE_MANIFEST_MARKER,
     keepOnUnreachable: false,
     ownershipMarker: true,
     carryOver: [],
@@ -1064,3 +1067,31 @@ test("D-PL9-10 / NFR-10: the installed roots inside a checkout are its records' 
   // assert
   assert.deepStrictEqual(roots, [path.join("plugins", "pkp"), ""]);
 });
+
+for (const { title, listRemotesResult, expected } of [
+  {
+    title: "the checkout's recorded origin",
+    listRemotesResult: { kind: "origin", url: "https://git.example/acme/tools.git" },
+    expected: "https://git.example/acme/tools.git",
+  },
+  {
+    title: "the source's clone URL when the checkout records no origin",
+    listRemotesResult: { kind: "not-a-repo" },
+    expected: "https://github.com/acme/market.git",
+  },
+] as const) {
+  test(`D-SG-10: a marketplace refresh clones from ${title}`, async () => {
+    // arrange
+    const git = createGitOpsFake({ boundary: "memory", listRemotesResult });
+
+    // act
+    const url = await swapCloneUrl(
+      "/scope/sources/market",
+      githubSource("https://github.com/acme/market"),
+      git.gitOps,
+    );
+
+    // assert
+    assert.strictEqual(url, expected);
+  });
+}

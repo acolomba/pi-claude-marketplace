@@ -4,10 +4,13 @@
 //
 //   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Nine primitives:
 //     clone + fetch + fetchCommit + forceUpdateRef + checkout + resolveRef +
-//     currentBranch + resolveRemoteRef + listRemotes.
-//     NO `pull` -- D-14 follow-upstream-blindly semantics require the
-//     three-step force-overwrite path that `pull --ff-only` cannot
-//     express.
+//     currentBranch + resolveRemoteRef + listRemotes. A marketplace checkout
+//     and a plugin mirror refresh by D-SG-10's freshness check, re-clone,
+//     and swap (`clone-swap.ts`), never by a fetch and checkout in place, so
+//     `fetch`, `forceUpdateRef`, and `currentBranch` have no refresh caller.
+//
+//   - lacksStoredCredential (GAUTH-04): whether an auth failure gains the
+//     line that names how to store a credential.
 //
 //   - cascadeUnstagePlugin (D-02, D-03): per-plugin hand-rolled
 //     try/catch envelope that composes the 6 bridge unstage*
@@ -46,7 +49,6 @@ import {
 import {
   CrossOriginChallengeError,
   errorMessage,
-  GitCommandError,
   InvalidMarketplaceManifestError,
   isErrnoException,
   MarketplaceInBaseLayerOnlyError,
@@ -60,20 +62,13 @@ import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type MarketplaceRows, type Single } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { NO_STORED_CREDENTIAL_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
-import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { UrlSource } from "../../domain/source.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type {
-  AuthAttemptResult,
-  BuildAuthCallbacksOpts,
-} from "../../platform/git-auth-callbacks.ts";
-import type { CredentialOps } from "../../platform/git-credential.ts";
+import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -127,8 +122,8 @@ export class WorkflowsUnstageFailureError extends Error {
 }
 
 /**
- * Optional auth bundle passed through GitOps.clone / GitOps.fetch and
- * refreshGitHubClone: the readonly form of the platform's
+ * Optional auth bundle passed through GitOps.clone, GitOps.fetch, and
+ * GitOps.resolveRemoteRef: the readonly form of the platform's
  * `BuildAuthCallbacksOpts`, which is also the type of
  * `CloneOptions.auth?` / `FetchOptions.auth?`. When undefined, every call
  * site behaves identically to the public-only path.
@@ -142,23 +137,16 @@ export type GitAuthBundle = Readonly<BuildAuthCallbacksOpts>;
 /**
  * D-12, D-13: marketplace orchestrator git surface.
  *
- * Nine primitives. The 5 base primitives (clone / fetch / forceUpdateRef
- * / checkout / resolveRef) cover the standard D-14 sequence. `fetchCommit`
- * (SG-TRN-02) fetches one pinned commit.
- * `currentBranch` (CR-01) exists because the D-14 default-branch tracking
- * path needs to distinguish "what is the symbolic name of the local branch"
- * from "what SHA does HEAD point at". `resolveRef('HEAD')` returns a SHA;
- * using that SHA as the `ref` to forceUpdateRef writes a meaningless
- * `refs/<40-hex>` -- the local branch never advances.
- * `resolveRemoteRef` (D-77-05) lets the plugin clone-cache seam pin an
+ * Nine primitives. `clone` and `resolveRemoteRef` carry D-SG-10's refresh: the
+ * freshness check asks `resolveRemoteRef`, and a stale checkout is cloned
+ * again and swapped in. `fetchCommit` (SG-TRN-02) fetches one pinned commit,
+ * `checkout` checks it out, and `resolveRef` reads a local commit. `fetch`,
+ * `forceUpdateRef`, and `currentBranch` stay bound but no refresh calls them.
+ * `resolveRemoteRef` (D-77-05) also lets the plugin clone-cache seam pin an
  * unpinned source's remote HEAD to a SHA without a full clone at install
  * time. `listRemotes` (D-3-03; MA-12, MA-13) lets the `marketplace add`
  * leftover-clone guard tell its own leftover clone apart from a foreign or
  * unreadable tree.
- *
- * No `pull` -- D-14 requires the three-step force-overwrite path
- * (fetch → forceUpdateRef → checkout) that `pull --ff-only` cannot
- * express because the local branch may diverge from the remote SHA.
  *
  * `clone` and `fetch` each accept an optional `auth` bundle. When
  * provided, `DEFAULT_GIT_OPS` forwards it to `platform/git.ts`: a system-git
@@ -274,151 +262,6 @@ export const DEFAULT_GIT_OPS: GitOps = {
  * background pass without naming `platform/git.ts`.
  */
 export { runWithGitAbortSignal } from "../../platform/git.ts";
-
-/**
- * D-14 follow-upstream-blindly sequence. Three forms:
- *   - storedRef === undefined (default-branch tracking):
- *       fetch + resolveRef('refs/remotes/origin/HEAD') + forceUpdateRef + checkout
- *   - storedRef is a branch on origin (symbolic HEAD):
- *       fetch + resolveRef('refs/remotes/origin/<ref>') + forceUpdateRef + checkout
- *   - storedRef is a tag/SHA (detached HEAD):
- *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> answers
- *       undefined, then checkout throws if the SHA no longer exists).
- *
- * A clone with no `refs/remotes/origin/HEAD` fails the default-branch form
- * with the `local-ref-missing` GitCommandError that names the read.
- *
- * The optional `auth` parameter is forwarded to `gitOps.fetch` so a
- * private-repository refresh reaches the user's credential helper, and on a
- * registry host a credential miss additionally triggers that provider's Device
- * Flow (GAUTH-03). `gitOps.clone` is not called from here (`add.ts` is the only
- * caller of clone); the auth bundle therefore only flows into the fetch
- * primitive within this helper.
- */
-export async function refreshGitHubClone(
-  cloneDir: string,
-  storedRef: string | undefined,
-  gitOps: GitOps,
-  onFetchSucceeded?: () => void,
-  auth?: GitAuthBundle,
-): Promise<void> {
-  await gitOps.fetch({
-    dir: cloneDir,
-    remote: "origin",
-    ...(storedRef !== undefined && { ref: storedRef }),
-    ...(auth !== undefined && { auth }),
-  });
-  onFetchSucceeded?.();
-
-  if (storedRef === undefined) {
-    const remoteSha = await gitOps.resolveRef({
-      dir: cloneDir,
-      ref: "refs/remotes/origin/HEAD",
-    });
-    if (remoteSha === undefined) {
-      throw new GitCommandError({ kind: "local-ref-missing" }, { operation: "rev-parse --verify" });
-    }
-
-    const localBranch = await gitOps.currentBranch({ dir: cloneDir });
-    if (localBranch === undefined) {
-      await gitOps.checkout({ dir: cloneDir, ref: remoteSha });
-      return;
-    }
-
-    await gitOps.forceUpdateRef({
-      dir: cloneDir,
-      ref: `refs/heads/${localBranch}`,
-      value: remoteSha,
-    });
-    await gitOps.checkout({ dir: cloneDir, ref: localBranch });
-    return;
-  }
-
-  // An undefined answer means the fetch brought no branch of that name: the
-  // stored ref is a tag or a SHA, checked out detached (D-14 third form). A
-  // throw (a corrupted git dir, EACCES on .git, a missing git) is a real
-  // failure and propagates, so the caller surfaces the actual cause instead
-  // of falling back to stale local state.
-  const remoteSha = await gitOps.resolveRef({
-    dir: cloneDir,
-    ref: `refs/remotes/origin/${storedRef}`,
-  });
-  if (remoteSha === undefined) {
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  } else {
-    await gitOps.forceUpdateRef({
-      dir: cloneDir,
-      ref: `refs/heads/${storedRef}`,
-      value: remoteSha,
-    });
-    await gitOps.checkout({ dir: cloneDir, ref: storedRef });
-  }
-}
-
-/**
- * MURL-03 url-source refresh via the on-disk `origin` remote (same D-14
- * sequence as github; refreshGitHubClone fetches by remote name, so the
- * original clone URL is irrelevant). GAUTH-03: the host extracted from
- * source.url carries its own auth bundle, so the user's git credential helper
- * is consulted on every host; a registry host adds that provider's Device Flow
- * on a helper miss (PROV-03). Shared by `marketplace update` and the PUP-2
- * sync of `plugin update`, whose run-scoped `authMemo` caps the Device Flow at
- * once per host (D-79-02). `authMemo` is optional: `marketplace update` passes
- * none.
- *
- * D-1-02 / GAUTH-04: an auth failure on a host whose only auth path is a
- * stored credential carries exactly one extra cause line telling the user WHY
- * authentication cannot proceed. Attached as the chain TAIL, which keeps the
- * code-bearing transport error at cause-depth 1 where `transportReason`'s
- * one-level unwrap classifies it as `authentication required`. GAUTH-05: a
- * `device-flow` bundle is excluded -- there the story is a declined or expired
- * Device Flow, and the bare closed-set token is the whole truth. A challenge
- * after a cross-origin redirect keeps its own cause text, because a credential
- * stored for `host` cannot answer it (Q-02). So does a stored credential the
- * host refused, because the helper produced it.
- */
-export async function refreshUrlClone(args: {
-  readonly cloneDir: string;
-  readonly source: UrlSource;
-  readonly gitOps: GitOps;
-  readonly ctx: NotificationContext;
-  readonly run: NotificationRun;
-  readonly credentialOps: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
-  readonly onFetchSucceeded?: () => void;
-}): Promise<void> {
-  const {
-    cloneDir,
-    source,
-    gitOps,
-    ctx,
-    run,
-    credentialOps,
-    deviceFlowHttp,
-    authMemo,
-    onFetchSucceeded,
-  } = args;
-  const host = hostFromCloneUrl(source.url, "url");
-  const auth = buildAuthForHost({
-    host,
-    credentialOps,
-    ctx,
-    run,
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-    ...(authMemo !== undefined && { authMemo }),
-  });
-
-  try {
-    await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
-  } catch (err) {
-    if (lacksStoredCredential(err, auth) && err.cause === undefined) {
-      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
-    }
-
-    throw err;
-  }
-}
 
 /**
  * GAUTH-04: an auth failure that a stored credential could answer, so the

@@ -98,7 +98,6 @@
 //  then, when stale, a re-clone into sources-staging/ and a swap through
 //  sources-backup/. NO `pull`, NO in-place fetch.
 
-import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
@@ -163,7 +162,9 @@ import {
   installedRootsInside,
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
+  MARKETPLACE_MANIFEST_MARKER,
   refreshCloneBySwap,
+  swapCloneUrl,
   type CloneSwapResult,
   type RenameOps,
 } from "./clone-swap.ts";
@@ -483,24 +484,6 @@ function parseBaseline(name: string, text: string | undefined): unknown {
   } catch (cause) {
     throw new MarketplaceBaselineUnreadableError(name, { cause });
   }
-}
-
-/** D-SG-10: the file whose presence makes a marketplace checkout valid. */
-const MARKETPLACE_MANIFEST_MARKER = path.join(".claude-plugin", "marketplace.json");
-
-/**
- * D-SG-10: the URL a refresh clones from: the live checkout's recorded
- * `origin`, which is the URL the checkout was cloned from, or the source's
- * clone URL when the checkout records none. An earlier version recorded some
- * url sources under a URL that is not their clone URL.
- */
-async function swapCloneUrl(
-  liveDir: string,
-  source: GitHubSource | UrlSource,
-  gitOps: GitOps,
-): Promise<string> {
-  const remotes = await gitOps.listRemotes({ dir: liveDir });
-  return remotes.kind === "origin" ? remotes.url : networkCloneUrl(source);
 }
 
 /**

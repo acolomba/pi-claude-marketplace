@@ -8,6 +8,7 @@ import {
   readdir,
   readFile,
   realpath,
+  rename,
   rm,
   stat,
   writeFile,
@@ -55,6 +56,7 @@ import {
 import {
   CleanupContextError,
   DependencyDeclarationsUnreadableError,
+  GitCommandError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
@@ -69,6 +71,7 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -118,6 +121,7 @@ const UPDATE_REMOTE_URLS = [
   "https://github.com/anthropics/test.git",
   "https://github.com/org/repo.git",
   "https://github.com/test/repo.git",
+  "https://github.com/test/mp.git",
   "https://example.com/org/repo",
   "https://example.com/org/repo.git",
   "https://example.com/org/mono",
@@ -174,7 +178,11 @@ function createGitOps(
     readonly remoteRefs?: Readonly<Record<string, string>>;
     readonly remoteResolveMap?: Readonly<Record<string, string>>;
     readonly cloneThrows?: Error;
-    readonly fetchThrows?: Error;
+    /**
+     * D-SG-10: a marketplace sync whose freshness check and re-clone both
+     * fail with this error, so the sync throws it.
+     */
+    readonly syncThrows?: Error;
     readonly checkoutThrows?: Error;
     readonly resolveRemoteRefThrows?: Error;
   } = {},
@@ -182,11 +190,7 @@ function createGitOps(
   readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
   readonly state: {
     readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
-    readonly fetchCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"];
     readonly fetchCommitCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetchCommit"];
-    readonly forceUpdateRefCalls: ReturnType<
-      typeof createGitOpsFake
-    >["state"]["calls"]["forceUpdateRef"];
     readonly checkoutCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["checkout"];
     readonly resolveRefCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["resolveRef"];
     readonly resolveRemoteRefCalls: ReturnType<
@@ -200,24 +204,26 @@ function createGitOps(
     ),
     ...(options.remoteResolveMap ?? {}),
   };
+  // D-SG-10: a checkout whose HEAD is the commit its remote's `main` names is
+  // current, so a marketplace sync of it checks once and clones nothing.
+  const localHead = options.head ?? options.remoteHead ?? remoteRefs["main"];
+  const cloneError = options.cloneThrows ?? options.syncThrows;
+  const resolveRemoteRefError = options.syncThrows ?? options.resolveRemoteRefThrows;
   const fake = createGitOpsFake({
     boundary: "memory",
     allowedRemoteUrls: UPDATE_REMOTE_URLS,
     ...(options.fixtureSourceDir !== undefined && {
       cloneFixture: { boundary: "local" as const, sourceDir: options.fixtureSourceDir },
     }),
-    ...((options.head ?? options.remoteHead) !== undefined && {
-      initialOid: options.head ?? options.remoteHead!,
-      remoteHead: options.remoteHead ?? options.head!,
+    ...(localHead !== undefined && {
+      initialOid: localHead,
+      remoteHead: options.remoteHead ?? localHead,
     }),
     ...(options.localRefs !== undefined && { localRefs: options.localRefs }),
     ...(Object.keys(remoteRefs).length > 0 && { remoteRefs }),
-    ...(options.cloneThrows !== undefined && { cloneError: options.cloneThrows }),
-    ...(options.fetchThrows !== undefined && { fetchError: options.fetchThrows }),
+    ...(cloneError !== undefined && { cloneError }),
     ...(options.checkoutThrows !== undefined && { checkoutError: options.checkoutThrows }),
-    ...(options.resolveRemoteRefThrows !== undefined && {
-      resolveRemoteRefError: options.resolveRemoteRefThrows,
-    }),
+    ...(resolveRemoteRefError !== undefined && { resolveRemoteRefError }),
   });
   const gitOps: typeof fake.gitOps = {
     ...fake.gitOps,
@@ -242,9 +248,7 @@ function createGitOps(
     gitOps,
     state: {
       cloneCalls: fake.state.calls.clone,
-      fetchCalls: fake.state.calls.fetch,
       fetchCommitCalls: fake.state.calls.fetchCommit,
-      forceUpdateRefCalls: fake.state.calls.forceUpdateRef,
       checkoutCalls: fake.state.calls.checkout,
       resolveRefCalls: fake.state.calls.resolveRef,
       resolveRemoteRefCalls: fake.state.calls.resolveRemoteRef,
@@ -1206,8 +1210,6 @@ test("updatePlugins reports the skipped skill preload of the staged agent", asyn
             "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
         },
       ]);
-      assert.deepEqual(git.state.fetchCalls, []);
-      assert.deepEqual(git.state.forceUpdateRefCalls, []);
       assert.deepEqual(git.state.checkoutCalls, []);
       assert.deepEqual(git.state.cloneCalls, []);
       assert.deepEqual(git.state.resolveRefCalls, []);
@@ -1470,7 +1472,7 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
 
 // ─── PUP-2: syncCloneOnce memoization (github-source, gitOps mocked) ───────────
 
-test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch/forceUpdateRef/checkout exactly once", async () => {
+test("PUP-2 / D-SG-10: two plugins in SAME github marketplace -> syncCloneOnce checks the current marketplace once and clones nothing", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup2-");
     try {
@@ -1521,18 +1523,27 @@ test("PUP-2: two plugins in SAME github marketplace -> syncCloneOnce calls fetch
 
       // assert
       // PUP-2: syncCloneOnce memoizes per (scope, marketplace). Even though
-      // two plugins live in `official`, each gitOps primitive fires exactly
-      // once for the marketplace refresh -- not twice.
-      assert.equal(state.fetchCalls.length, 1, "fetch should fire exactly once");
-      assert.equal(state.forceUpdateRefCalls.length, 1, "forceUpdateRef should fire exactly once");
-      assert.equal(state.checkoutCalls.length, 1, "checkout should fire exactly once");
+      // two plugins live in `official`, the marketplace's freshness check
+      // runs once, and a current checkout is not cloned again.
+      assert.deepStrictEqual(
+        {
+          checks: state.resolveRemoteRefCalls.map(({ url, ref }) => ({ url, ref })),
+          clones: state.cloneCalls,
+          checkouts: state.checkoutCalls,
+        },
+        {
+          checks: [{ url: "https://github.com/anthropics/test.git", ref: "main" }],
+          clones: [],
+          checkouts: [],
+        },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the github.com auth bundle and a supplied authMemo", async () => {
+test("PUP-2 / AUTH-02: the github marketplace sync check carries the github.com auth bundle and a supplied authMemo", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-auth-");
     try {
@@ -1560,8 +1571,8 @@ test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the github.com 
       });
 
       // assert
-      assert.equal(state.fetchCalls.length, 1);
-      const auth = state.fetchCalls[0]?.auth;
+      assert.equal(state.resolveRemoteRefCalls.length, 1);
+      const auth = state.resolveRemoteRefCalls[0]?.auth;
       assert.ok(auth?.kind === "device-flow");
       assert.equal(auth.host, "github.com");
       assert.equal(auth.credentialOps, credentialOps);
@@ -1600,7 +1611,7 @@ test("GHB-02: the GitHub marketplace sync under the override binds the override 
 
       // assert
       assert.deepStrictEqual(
-        state.fetchCalls.map(({ auth }) => auth),
+        state.resolveRemoteRefCalls.map(({ auth }) => auth),
         [{ kind: "stored-credential", credentialOps, host: "mirror.example:8443" }],
       );
     } finally {
@@ -1639,7 +1650,7 @@ test("GHB-03: a GitHub marketplace sync on an invalid base fails the update comm
           return true;
         },
       );
-      assert.deepStrictEqual(state.fetchCalls, []);
+      assert.deepStrictEqual(state.resolveRemoteRefCalls, []);
       verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1677,12 +1688,12 @@ test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a suppli
       });
       const gitOps: typeof recordingGitOps = {
         ...recordingGitOps,
-        async fetch(fetchOptions) {
-          if (fetchOptions.auth?.kind === "device-flow") {
-            await fetchOptions.auth.onAuthRequired();
+        async resolveRemoteRef(checkOptions) {
+          if (checkOptions.auth?.kind === "device-flow") {
+            await checkOptions.auth.onAuthRequired();
           }
 
-          await recordingGitOps.fetch(fetchOptions);
+          return recordingGitOps.resolveRemoteRef(checkOptions);
         },
       };
       const deviceFlow = createDeviceFlowFake({
@@ -1706,7 +1717,7 @@ test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a suppli
       });
 
       // assert
-      assert.equal(state.fetchCalls.length, 2, "each marketplace syncs once");
+      assert.equal(state.resolveRemoteRefCalls.length, 2, "each marketplace syncs once");
       assert.equal(deviceFlow.calls.requestCode.length, 1, "the Device Flow runs once per host");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1724,7 +1735,7 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
         code: "HttpError",
         data: { statusCode: 401, statusMessage: "Unauthorized" },
       });
-      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { gitOps } = createGitOps({ syncThrows: unauthorized });
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -1783,8 +1794,10 @@ test("GLK-04: a held scope lock refuses the marketplace sync as lock held before
           severity: "error",
         },
       ]);
-      assert.deepStrictEqual(state.fetchCalls, []);
-      assert.deepStrictEqual(state.forceUpdateRefCalls, []);
+      assert.deepStrictEqual(
+        { checks: state.resolveRemoteRefCalls, clones: state.cloneCalls },
+        { checks: [], clones: [] },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1801,7 +1814,7 @@ test("GLK-04: a scope lock lost during the marketplace sync fails the sync as lo
       const lost = new StateLockCompromisedError("project", locations.stateLockFile, {
         cause: new Error("Unable to update lock within the stale threshold"),
       });
-      const { gitOps } = createGitOps({ fetchThrows: lost });
+      const { gitOps } = createGitOps({ syncThrows: lost });
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -1870,7 +1883,7 @@ for (const { title, seed, marketplace, status, statusMessage, message } of [
           code: "HttpError",
           data: { statusCode: status, statusMessage },
         });
-        const { gitOps } = createGitOps({ fetchThrows: answered });
+        const { gitOps } = createGitOps({ syncThrows: answered });
         const { ctx, run, notifications } = makeCtx();
 
         // act
@@ -1928,7 +1941,7 @@ test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier t
         code: "HttpError",
         data: { statusCode: 401, statusMessage: "Unauthorized" },
       });
-      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { gitOps } = createGitOps({ syncThrows: unauthorized });
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -1991,8 +2004,8 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
       });
 
       // assert
-      assert.equal(state.fetchCalls.length, 0);
-      assert.equal(state.forceUpdateRefCalls.length, 0);
+      assert.equal(state.resolveRemoteRefCalls.length, 0);
+      assert.equal(state.cloneCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
     } finally {
@@ -2031,12 +2044,12 @@ test("GHB-04: a path-only update ignores an invalid override", async (t) => {
       assert.deepStrictEqual(notifications, [{ message: "Plugin update: nothing to update" }]);
       assert.deepStrictEqual(
         {
-          fetch: state.fetchCalls.length,
-          forceUpdateRef: state.forceUpdateRefCalls.length,
+          check: state.resolveRemoteRefCalls.length,
+          clone: state.cloneCalls.length,
           checkout: state.checkoutCalls.length,
           resolveRef: state.resolveRefCalls.length,
         },
-        { fetch: 0, forceUpdateRef: 0, checkout: 0, resolveRef: 0 },
+        { check: 0, clone: 0, checkout: 0, resolveRef: 0 },
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2081,7 +2094,7 @@ async function seedUrlMarketplaceForSync(
   return { manifestPath };
 }
 
-test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync fetch carrying the url host's auth bundle", async () => {
+test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync check carrying the url host's auth bundle", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-url-sync-");
     try {
@@ -2105,15 +2118,19 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync fetch car
       });
 
       // assert
-      assert.equal(state.fetchCalls.length, 1);
-      assert.equal(state.forceUpdateRefCalls.length, 1);
-      assert.equal(state.checkoutCalls.length, 1);
-      assert.deepStrictEqual(state.fetchCalls[0], {
-        dir: await locationsFor("project", cwd).sourceCloneDir("mp"),
-        remote: "origin",
-        ref: "main",
-        auth: { credentialOps, host: "example.com", kind: "stored-credential" },
-      });
+      assert.deepStrictEqual(
+        { checks: state.resolveRemoteRefCalls, clones: state.cloneCalls },
+        {
+          checks: [
+            {
+              url: "https://example.com/org/repo",
+              ref: "main",
+              auth: { credentialOps, host: "example.com", kind: "stored-credential" },
+            },
+          ],
+          clones: [],
+        },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2151,7 +2168,7 @@ test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares a supplied
       });
 
       // assert
-      const auth = state.fetchCalls[0]?.auth;
+      const auth = state.resolveRemoteRefCalls[0]?.auth;
       assert.ok(auth?.kind === "device-flow");
       assert.equal(auth.host, "gitlab.com");
       assert.equal(auth.credentialOps, credentialOps);
@@ -2172,7 +2189,7 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
         code: "HttpError",
         data: { statusCode: 401, statusMessage: "Unauthorized" },
       });
-      const { gitOps } = createGitOps({ fetchThrows: unauthorized });
+      const { gitOps } = createGitOps({ syncThrows: unauthorized });
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -2200,23 +2217,23 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
   });
 });
 
-test("PUP-2: a url marketplace whose remote advanced -> update reads the refreshed manifest", async () => {
+test("PUP-2 / D-SG-10: a url marketplace whose remote advanced -> update re-clones it once and reads the new manifest", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-url-advance-");
     try {
       // arrange
       const { manifestPath } = await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
-      const fake = createGitOps({
-        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      // The re-clone is what brings the new manifest into the checkout.
+      const remoteTree = path.join(cwd, "remote-tree");
+      await cp(path.dirname(path.dirname(manifestPath)), remoteTree, { recursive: true });
+      await rewriteManifest(path.join(remoteTree, ".claude-plugin", "marketplace.json"), "mp", {
+        hello: { version: "1.0.10" },
       });
-      // The fetch is what brings the new manifest into the clone.
-      const gitOps: typeof fake.gitOps = {
-        ...fake.gitOps,
-        async fetch(fetchOptions) {
-          await fake.gitOps.fetch(fetchOptions);
-          await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.10" } });
-        },
-      };
+      const { gitOps, state: gitState } = createGitOps({
+        head: "0000000000000000000000000000000000000001",
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+        fixtureSourceDir: remoteTree,
+      });
       const { ctx, run } = makeCtx();
 
       // act
@@ -2231,8 +2248,345 @@ test("PUP-2: a url marketplace whose remote advanced -> update reads the refresh
       });
 
       // assert
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(
+        {
+          version: state.marketplaces.mp?.plugins.hello?.version,
+          checks: gitState.resolveRemoteRefCalls.length,
+          clones: gitState.cloneCalls.map(({ dir, url }) => ({ parent: path.dirname(dir), url })),
+          backups: await readdir(path.dirname(await locations.sourceBackupDir("mp"))),
+        },
+        {
+          version: "1.0.10",
+          checks: 1,
+          clones: [
+            {
+              parent: path.join(locations.extensionRoot, "sources-staging"),
+              url: "https://example.com/org/repo",
+            },
+          ],
+          backups: [],
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── PUP-2 / D-SG-10 / D-SG-15: the marketplace sync by re-clone and swap ──────
+
+const SYNC_LOCAL_COMMIT = "0000000000000000000000000000000000000001";
+const SYNC_REMOTE_COMMIT = "abcdef0000000000000000000000000000000001";
+
+/**
+ * Seeds a url marketplace whose checkout offers `hello` 1.0.1 over the
+ * installed 1.0.0, so an update that reads the kept checkout moves to 1.0.1.
+ */
+async function seedKeptCatalog(cwd: string): Promise<void> {
+  const { manifestPath } = await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
+  await rewriteManifest(manifestPath, "mp", { hello: { version: "1.0.1" } });
+}
+
+test("PUP-2 / D-SG-10: two plugins of one github marketplace whose remote moved re-clone it once and both read the new catalog", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-github-moved-");
+    try {
+      // arrange
+      const { manifestPath } = await seedUrlMarketplaceForSync(
+        cwd,
+        { a: "1.0.0", b: "1.0.0" },
+        githubSource("https://github.com/org/repo#main"),
+      );
+      const remoteTree = path.join(cwd, "remote-tree");
+      await cp(path.dirname(path.dirname(manifestPath)), remoteTree, { recursive: true });
+      await rewriteManifest(path.join(remoteTree, ".claude-plugin", "marketplace.json"), "mp", {
+        a: { version: "1.0.10" },
+        b: { version: "1.0.10" },
+      });
+      const { gitOps, state: gitState } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        remoteRefs: { "refs/remotes/origin/main": SYNC_REMOTE_COMMIT },
+        fixtureSourceDir: remoteTree,
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
       const state = await loadState(locationsFor("project", cwd).extensionRoot);
-      assert.equal(state.marketplaces.mp?.plugins.hello?.version, "1.0.10");
+      assert.deepStrictEqual(
+        {
+          versions: [
+            state.marketplaces.mp?.plugins.a?.version,
+            state.marketplaces.mp?.plugins.b?.version,
+          ],
+          checks: gitState.resolveRemoteRefCalls.map(({ url, ref }) => ({ url, ref })),
+          clones: gitState.cloneCalls.map(({ url, ref }) => ({ url, ref })),
+        },
+        {
+          versions: ["1.0.10", "1.0.10"],
+          checks: [{ url: "https://github.com/org/repo.git", ref: "main" }],
+          clones: [{ url: "https://github.com/org/repo.git", ref: "main" }],
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-15: with the keep variable, an unreachable marketplace remote keeps its checkout and the update reads the kept catalog", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-kept-stale-");
+    try {
+      // arrange
+      await seedKeptCatalog(cwd);
+      const unreachable = new GitCommandError(
+        { kind: "network" },
+        { operation: "ls-remote", exitCode: 128 },
+      );
+      const { gitOps, state: gitState } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        resolveRemoteRefThrows: unreachable,
+      });
+      const logged = captureDebugLog(t);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+        environment: { CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: "1" },
+      });
+
+      // assert
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.deepStrictEqual(
+        {
+          version: state.marketplaces.mp?.plugins.hello?.version,
+          clones: gitState.cloneCalls,
+          kept: logged.filter((line) => line.includes("kept marketplace")),
+        },
+        {
+          version: "1.0.1",
+          clones: [],
+          kept: [
+            "[git] plugin update kept marketplace mp: remote unreachable, keeping existing clone (CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE): git ls-remote failed: network, exit code 128",
+          ],
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-15: without the keep variable, an unreachable marketplace remote is cloned again and that failure fails the update", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-not-kept-");
+    try {
+      // arrange
+      await seedKeptCatalog(cwd);
+      const unreachable = new GitCommandError(
+        { kind: "network" },
+        { operation: "ls-remote", exitCode: 128 },
+      );
+      const { gitOps, state: gitState } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        resolveRemoteRefThrows: unreachable,
+        cloneThrows: new GitCommandError(
+          { kind: "network" },
+          { operation: "clone --depth", exitCode: 128 },
+        ),
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+        environment: {},
+      });
+
+      // assert
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.deepStrictEqual(
+        {
+          version: state.marketplaces.mp?.plugins.hello?.version,
+          clones: gitState.cloneCalls.length,
+          notifications,
+        },
+        {
+          version: "1.0.0",
+          clones: 1,
+          notifications: [
+            {
+              message:
+                "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {network unreachable}\n    cause: git ls-remote failed: network, exit code 128\n\nPlugin update: 1 failure",
+              severity: "error",
+            },
+          ],
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-10 / D-SG-15: a marketplace checkout that cannot be moved aside is kept and the update reads it", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-kept-in-use-");
+    try {
+      // arrange
+      await seedKeptCatalog(cwd);
+      const locations = locationsFor("project", cwd);
+      const liveDir = await locations.sourceCloneDir("mp");
+      const remoteTree = path.join(cwd, "remote-tree");
+      await cp(liveDir, remoteTree, { recursive: true });
+      const { gitOps } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        remoteRefs: { "refs/remotes/origin/main": SYNC_REMOTE_COMMIT },
+        fixtureSourceDir: remoteTree,
+      });
+      const renameError = Object.assign(new Error("EBUSY: resource busy or locked, rename"), {
+        code: "EBUSY",
+        syscall: "rename",
+      });
+      const logged = captureDebugLog(t);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+        renameOps: {
+          rename: (from, to) => (from === liveDir ? Promise.reject(renameError) : rename(from, to)),
+        },
+      });
+
+      // assert
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(
+        {
+          version: state.marketplaces.mp?.plugins.hello?.version,
+          staging: await readdir(path.join(locations.extensionRoot, "sources-staging")),
+          kept: logged.filter((line) => line.includes("kept marketplace")),
+        },
+        {
+          version: "1.0.1",
+          staging: [],
+          kept: [
+            "[git] plugin update kept marketplace mp: checkout in use, keeping existing clone: EBUSY: resource busy or locked, rename",
+          ],
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-10: a marketplace sync whose new clone moves in carries no kept line", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-replaced-log-");
+    try {
+      // arrange
+      await seedKeptCatalog(cwd);
+      const liveDir = await locationsFor("project", cwd).sourceCloneDir("mp");
+      const remoteTree = path.join(cwd, "remote-tree");
+      await cp(liveDir, remoteTree, { recursive: true });
+      const { gitOps } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        remoteRefs: { "refs/remotes/origin/main": SYNC_REMOTE_COMMIT },
+        fixtureSourceDir: remoteTree,
+      });
+      const logged = captureDebugLog(t);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        logged.filter((line) => line.includes("kept marketplace")),
+        [],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PUP-2 / NFR-5: a hosted marketplace syncs nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-hosted-sync-");
+    try {
+      // arrange
+      const catalogUrl = "https://example.com/catalog.json";
+      await seedKeptCatalog(cwd);
+      const locations = locationsFor("project", cwd);
+      const seeded = await loadState(locations.extensionRoot);
+      const record = seeded.marketplaces.mp;
+      assert.ok(record !== undefined);
+      await saveState(locations.extensionRoot, {
+        ...seeded,
+        marketplaces: {
+          mp: { ...record, source: { kind: "hosted", raw: catalogUrl, url: catalogUrl } },
+        },
+      });
+      const { gitOps, state: gitState } = createGitOps();
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        { checks: gitState.resolveRemoteRefCalls, clones: gitState.cloneCalls },
+        { checks: [], clones: [] },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2273,7 +2627,7 @@ test("NFR-5: a path marketplace edited on disk -> update reads the edit in place
       // assert
       const recorded = await loadState(locationsFor("project", cwd).extensionRoot);
       assert.equal(recorded.marketplaces.mp?.plugins.hello?.version, "1.0.10");
-      assert.equal(state.fetchCalls.length, 0);
+      assert.equal(state.resolveRemoteRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4325,10 +4679,10 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
       });
 
       const { ctx, run, notifications } = makeCtx();
-      // fetchThrows causes refreshGitHubClone -> gitOps.fetch to throw,
-      // which propagates through syncCloneOnce and is caught there.
+      // syncThrows fails the sync's freshness check and its re-clone, which
+      // propagates through syncCloneOnce and is caught there.
       const { gitOps } = createGitOps({
-        fetchThrows: new Error("network: connection refused"),
+        syncThrows: new Error("network: connection refused"),
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
 
@@ -4364,7 +4718,8 @@ test("syncClone-fail: a non-Error injected rejection is a network error at the d
       const rejectNonError = Promise.reject.bind(Promise);
       const gitOps: GitOps = {
         ...baseGitOps,
-        fetch: () => rejectNonError("transport string rejection"),
+        resolveRemoteRef: () => rejectNonError("transport string rejection"),
+        clone: () => rejectNonError("transport string rejection"),
       };
       const { ctx, run, notifications } = makeCtx();
 
@@ -4557,7 +4912,7 @@ for (const { title, makeFailure, reason } of [
         // arrange
         await seedGithubMarketplaceForSync(cwd);
         const { gitOps } = createGitOps({
-          fetchThrows: makeFailure(),
+          syncThrows: makeFailure(),
           remoteRefs: {
             "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001",
           },
@@ -4621,7 +4976,7 @@ for (const { title, makeFailure } of [
         // arrange
         await seedGithubMarketplaceForSync(cwd);
         const { gitOps } = createGitOps({
-          fetchThrows: makeFailure(),
+          syncThrows: makeFailure(),
           remoteRefs: {
             "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001",
           },
@@ -5154,14 +5509,15 @@ test("CR-01: a later marketplace removed during an earlier refresh aborts before
       const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const originalFetch = gitOps.fetch.bind(gitOps);
+      const originalCheck = gitOps.resolveRemoteRef.bind(gitOps);
       const mutatingGitOps: GitOps = {
         ...gitOps,
-        fetch: async (options) => {
-          await originalFetch(options);
+        resolveRemoteRef: async (options) => {
+          const advertised = await originalCheck(options);
           const state = await loadState(locations.extensionRoot);
           delete state.marketplaces["zzz"];
           await saveState(locations.extensionRoot, state);
+          return advertised;
         },
       };
       const { ctx, run, notifications } = makeCtx();
@@ -5245,14 +5601,17 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
       const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const originalFetch = gitOps.fetch.bind(gitOps);
+      const originalCheck = gitOps.resolveRemoteRef.bind(gitOps);
       const mutatingGitOps = {
         ...gitOps,
-        fetch: async (opts: Parameters<typeof gitOps.fetch>[0]): Promise<void> => {
-          await originalFetch(opts);
+        resolveRemoteRef: async (
+          opts: Parameters<typeof gitOps.resolveRemoteRef>[0],
+        ): Promise<string | undefined> => {
+          const advertised = await originalCheck(opts);
           // Synchronously remove the marketplace from state.json so that
           // subsequent loadState calls (preflightUpdate) find no marketplace.
           writeFileSync(stateJsonPath, JSON.stringify({ schemaVersion: 1, marketplaces: {} }));
+          return advertised;
         },
       };
 
@@ -5325,11 +5684,13 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
       const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const originalFetch = gitOps.fetch.bind(gitOps);
+      const originalCheck = gitOps.resolveRemoteRef.bind(gitOps);
       const mutatingGitOps = {
         ...gitOps,
-        fetch: async (opts: Parameters<typeof gitOps.fetch>[0]): Promise<void> => {
-          await originalFetch(opts);
+        resolveRemoteRef: async (
+          opts: Parameters<typeof gitOps.resolveRemoteRef>[0],
+        ): Promise<string | undefined> => {
+          const advertised = await originalCheck(opts);
           // Remove only the "hello" plugin record, keep marketplace intact.
           writeFileSync(
             stateJsonPath,
@@ -5348,6 +5709,7 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
               },
             }),
           );
+          return advertised;
         },
       };
 
@@ -5420,11 +5782,13 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       const { gitOps } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const originalFetch = gitOps.fetch.bind(gitOps);
+      const originalCheck = gitOps.resolveRemoteRef.bind(gitOps);
       const mutatingGitOps = {
         ...gitOps,
-        fetch: async (opts: Parameters<typeof gitOps.fetch>[0]): Promise<void> => {
-          await originalFetch(opts);
+        resolveRemoteRef: async (
+          opts: Parameters<typeof gitOps.resolveRemoteRef>[0],
+        ): Promise<string | undefined> => {
+          const advertised = await originalCheck(opts);
           // Advance hello's version to 0.0.10.
           writeFileSync(
             stateJsonPath,
@@ -5443,6 +5807,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
               },
             }),
           );
+          return advertised;
         },
       };
 
@@ -9126,13 +9491,11 @@ for (const { direction, file, local, reason, cause } of [
         assert.deepEqual(
           {
             clone: gitState.cloneCalls,
-            fetch: gitState.fetchCalls,
             resolveRemoteRef: gitState.resolveRemoteRefCalls,
             credentials: credentials.calls,
           },
           {
             clone: [],
-            fetch: [],
             resolveRemoteRef: [],
             credentials: { fill: [], approve: [], reject: [] },
           },
@@ -10527,18 +10890,20 @@ test("plugin update authentication: a run without a supplied authMemo shares one
           mp: { ...marketplace, source: githubSource("https://github.com/test/mp#main") },
         },
       });
+      // D-SG-10: the github marketplace's checkout, so the sync checks it.
+      await cp(path.join(cwd, "mp-src"), await locations.sourceCloneDir("mp"), { recursive: true });
       const { gitOps: recordingGitOps, state } = createGitOps({
         fixtureSourceDir: path.join(cwd, "repo-fixture"),
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const gitOps: typeof recordingGitOps = {
         ...recordingGitOps,
-        async fetch(fetchOptions) {
-          if (fetchOptions.auth?.kind === "device-flow") {
-            await fetchOptions.auth.onAuthRequired();
+        async resolveRemoteRef(checkOptions) {
+          if (checkOptions.auth?.kind === "device-flow") {
+            await checkOptions.auth.onAuthRequired();
           }
 
-          await recordingGitOps.fetch(fetchOptions);
+          return recordingGitOps.resolveRemoteRef(checkOptions);
         },
       };
       const { seam, captured } = capturingUpdateSeam(gitOps);
@@ -10575,7 +10940,12 @@ test("plugin update authentication: a run without a supplied authMemo shares one
       });
 
       // assert
-      assert.equal(state.fetchCalls.length, 1, "the marketplace syncs once");
+      assert.equal(
+        state.resolveRemoteRefCalls.filter(({ url }) => url === "https://github.com/test/mp.git")
+          .length,
+        1,
+        "the marketplace syncs once",
+      );
       assert.ok(captured.cloneAuth?.kind === "device-flow", "the clone carries the auth bundle");
       assert.equal(
         deviceFlow.calls.requestCode.length,
@@ -14511,7 +14881,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync st
       };
       await saveState(locations.extensionRoot, state);
       const { gitOps } = createGitOps({
-        fetchThrows: new Error("network: connection refused"),
+        syncThrows: new Error("network: connection refused"),
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
       const { ctx, run, notifications } = makeCtx();
