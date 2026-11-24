@@ -37,7 +37,10 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_OWNER = "acme";
 
-// A one-day P-256 certificate for the loopback address the host binds.
+// A one-day P-256 certificate for the loopback address the host binds. It
+// also names `github.com`: a system git that reaches the host through the
+// harness CONNECT proxy keeps `github.com` as its request host inside the
+// tunnel, so it verifies the host under that name (D-SG-14).
 const CERTIFICATE_ARGUMENTS = [
   "req",
   "-x509",
@@ -55,7 +58,7 @@ const CERTIFICATE_ARGUMENTS = [
   "-subj",
   "/CN=127.0.0.1",
   "-addext",
-  "subjectAltName=IP:127.0.0.1",
+  "subjectAltName=IP:127.0.0.1,DNS:github.com",
 ];
 
 const ARMED_STATUSES = [404, 500, 502, 503] as const;
@@ -654,9 +657,12 @@ export class HttpsGitHost {
     res: ServerResponse,
     arm: GitHostArm | undefined,
   ): Promise<void> {
-    // The request answers 500, and the log says so, when the CGI fails or is
-    // killed, or when the CGI prints a status or a header Node cannot send.
-    // Nothing escapes, so no request can crash the worker that hosts the server.
+    // A CGI that printed its header block answers with its own status and
+    // body, also when it then exits non-zero, as upload-pack does after it
+    // refuses a want (SG-HRN-02). The request answers 500, and the log says so,
+    // when the CGI fails before its header block ends or is killed, or when
+    // it prints a status or a header Node cannot send. Nothing escapes, so no
+    // request can crash the worker that hosts the server.
     try {
       const request = {
         method: logged.method,

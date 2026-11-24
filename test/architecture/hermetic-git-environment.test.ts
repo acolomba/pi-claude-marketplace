@@ -6,8 +6,11 @@
  * `GIT_CONFIG_*` family, the git repository, trace, and helper variables,
  * `GIT_SSL_CAINFO`, the ssh variables (`GIT_SSH`, `GIT_SSH_COMMAND`,
  * `GIT_SSH_VARIANT`, `SSH_AUTH_SOCK`, `SSH_ASKPASS`), the proxy variables in
- * both cases, `XDG_CONFIG_HOME`, `GCM_*`, the locale, and
- * `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`, then asserts the exact key set of
+ * both cases, `XDG_CONFIG_HOME`, `GCM_*`, the locale,
+ * `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`, and the two upstream variables that steer
+ * the product's git, `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` (SG-TRN-05) and
+ * `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` (SG-TRN-06), then asserts
+ * the exact key set of
  * `hermeticGitEnvironment` in each form the suites use, `cgiEnvironment`
  * under both SHA-want policies, `uploadPackEnvironment`, `rpcChildEnvironment`,
  * and `ipcChildEnvironment`, so a key a builder inherits fails one case.
@@ -88,6 +91,8 @@ const INHERITED_VARIABLES = {
   GCM_INTERACTIVE: "always",
   GCM_CREDENTIAL_STORE: "plaintext",
   CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1",
+  CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS: "1",
+  CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: "1",
   GIT_WORK_TREE: "/shell/repo",
   GIT_OBJECT_DIRECTORY: "/shell/repo/.git/objects",
   GIT_EXEC_PATH: "/shell/libexec/git-core",

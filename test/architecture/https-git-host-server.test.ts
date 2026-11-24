@@ -2,12 +2,15 @@
  * @fileoverview Checks the https git host's own answers: a request it cannot
  * serve, a body the backend never reads, an armed repository whose name the
  * request percent-encodes, and the catalog files it serves for hosted
- * marketplaces (HOST-01, HOST-03, HOST-04, D-PL5-06). It also checks that a
- * system git client trusts the host through the host's CA file alone and
- * fetches a commit by SHA over protocols v2 and v0 (SG-HRN-02).
+ * marketplaces (HOST-01, HOST-03, HOST-04, D-PL5-06), and the certificate's
+ * `github.com` name (D-SG-14). It also checks that a system git client trusts
+ * the host through the host's CA file alone, fetches a commit by SHA over
+ * protocols v2 and v0, and sees upload-pack's own refusal of a commit the
+ * repository does not have (SG-HRN-02).
  */
 
 import assert from "node:assert/strict";
+import { X509Certificate } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { request } from "node:https";
 import { tmpdir } from "node:os";
@@ -29,6 +32,8 @@ import type { TestContext } from "node:test";
 
 const INFO_REFS = "/acme/tools.git/info/refs?service=git-upload-pack";
 const CATALOG = "/acme/catalog/marketplace.json";
+// A commit no published repository holds.
+const MISSING_SHA = "0123456789abcdef0123456789abcdef01234567";
 
 /** Starts a host in a fresh root that serves the empty repository `acme/tools`. */
 async function startHost(t: TestContext): Promise<HttpsGitHost> {
@@ -346,6 +351,20 @@ describe("HttpsGitHost", () => {
     );
   });
 
+  test("names github.com beside 127.0.0.1 in its certificate, so a tunnel for github.com verifies it (D-SG-14)", async (t) => {
+    // arrange
+    const host = await startHost(t);
+
+    // act
+    const certificate = new X509Certificate(await readFile(host.certificatePath));
+
+    // assert
+    assert.deepStrictEqual(certificate.subjectAltName?.split(", ").sort(), [
+      "DNS:github.com",
+      "IP Address:127.0.0.1",
+    ]);
+  });
+
   test("forgets every served file on reset", async (t) => {
     // arrange
     const host = await startHost(t);
@@ -442,6 +461,29 @@ describe("HttpsGitHost with system git", () => {
     assert.deepStrictEqual(
       distinctRequests(host.requestsSince(window).requests),
       servedUploadPack("published").slice(0, 1),
+    );
+  });
+
+  test("forwards upload-pack's refusal of a commit it does not have, so git reports its own error (SG-HRN-02)", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    await publish(t, host, "published");
+    const client = await gitClient(t, host);
+    await shallowClone(client, host, "published");
+    const window = host.mark();
+
+    // act & assert
+    await assert.rejects(fetchBySha(client, "published", MISSING_SHA), (error: unknown) => {
+      assert.ok(error instanceof SystemGitError);
+      assert.match(
+        error.stderr,
+        new RegExp(`fatal: remote error: upload-pack: not our ref ${MISSING_SHA}`),
+      );
+      return true;
+    });
+    assert.deepStrictEqual(
+      distinctRequests(host.requestsSince(window).requests),
+      servedUploadPack("published"),
     );
   });
 

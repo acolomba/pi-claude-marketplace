@@ -1,18 +1,24 @@
 /**
  * @fileoverview Checks the CGI bridge of the https git host: the parser of the
- * `git http-backend` output, the CGI environment it runs with (HOST-01), and
- * the arguments that carry each SHA-want policy (SG-HRN-02). The CGI
+ * `git http-backend` output, the CGI environment it runs with (HOST-01), the
+ * arguments that carry each SHA-want policy, and which backend exits it
+ * forwards (SG-HRN-02). The CGI
  * environment's exact key set under the runner's planted git and ssh
  * variables is checked in `hermetic-git-environment.test.ts` (SG-HRN-04).
  */
 
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
 
+import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 import {
   cgiEnvironment,
   httpBackendArguments,
   parseCgiResponse,
+  runHttpBackend,
 } from "../../features/lib/https-git-host/cgi.ts";
 
 import type { CgiRequest, CgiResponse } from "../../features/lib/https-git-host/cgi.ts";
@@ -262,6 +268,63 @@ describe("cgiEnvironment", () => {
       HTTP_CONTENT_ENCODING: "gzip",
     });
   });
+});
+
+/**
+ * Returns the arguments of a git that runs `script` through `sh` as the alias
+ * `backend`, a stand-in for `git http-backend` with a chosen output and exit.
+ */
+function scriptedBackend(script: string): string[] {
+  return ["-c", `alias.backend=!${script}`, "backend"];
+}
+
+describe("runHttpBackend", () => {
+  test("resolves with the output of a backend that printed its header block and then exited non-zero (SG-HRN-02)", async (t) => {
+    // arrange
+    const home = await mkdtemp(path.join(tmpdir(), "cgi-backend-"));
+    t.after(() => rm(home, { recursive: true, force: true }));
+    const args = scriptedBackend(
+      String.raw`printf 'Content-Type: text/plain\r\n\r\nnot our ref'; exit 128`,
+    );
+
+    // act
+    const output = await runHttpBackend(
+      args,
+      hermeticGitEnvironment(home),
+      Buffer.alloc(0),
+      () => {},
+    );
+
+    // assert
+    assert.strictEqual(output.toString("latin1"), "Content-Type: text/plain\r\n\r\nnot our ref");
+  });
+
+  for (const { title, script, expectedMessage } of [
+    {
+      title:
+        "rejects a backend that exited non-zero without a header block, with its code and stderr",
+      script: "echo backend failed >&2; exit 3",
+      expectedMessage: "git http-backend exited 3: backend failed\n",
+    },
+    {
+      title: "rejects a backend that exited non-zero before it ended its header block",
+      script: String.raw`printf 'Content-Type: text/plain\r\n'; exit 1`,
+      expectedMessage: "git http-backend exited 1: ",
+    },
+  ]) {
+    test(title, async (t) => {
+      // arrange
+      const home = await mkdtemp(path.join(tmpdir(), "cgi-backend-"));
+      t.after(() => rm(home, { recursive: true, force: true }));
+      const args = scriptedBackend(script);
+
+      // act & assert
+      await assert.rejects(
+        runHttpBackend(args, hermeticGitEnvironment(home), Buffer.alloc(0), () => {}),
+        { name: "Error", message: expectedMessage },
+      );
+    });
+  }
 });
 
 describe("httpBackendArguments", () => {
