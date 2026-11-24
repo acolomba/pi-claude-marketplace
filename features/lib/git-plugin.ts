@@ -5,8 +5,9 @@
  * A plugin repository is a work tree under the sandbox HOME that holds one or
  * more plugins, each at the repository root or at a path inside it, published
  * as a bare repository the git host serves. Stating its plugins again commits
- * and pushes a new revision, as does turning a plugin's manifest into a link. A
- * plugin may also be published with no manifest at all. A marketplace offers a
+ * and pushes a new revision, as does turning a plugin's manifest into a link or
+ * linking a file of its skill to another. A plugin may also be published with
+ * no manifest at all. A marketplace offers a
  * plugin of such a repository as a `github` source, which the GitHub base
  * override sends to the git host, or as a `url` or `git-subdir` source that
  * names the host's loopback address, unpinned or pinned to the repository's
@@ -19,7 +20,12 @@ import path from "node:path";
 
 import { publishGitRepository, pushGitRepository } from "./git-marketplace.ts";
 import { runGit } from "./hermetic-git.ts";
-import { readDependencyCell, requireColumns, writePluginFiles } from "./path-marketplace.ts";
+import {
+  readDependencyCell,
+  requireColumns,
+  writeLinkedSkillFile,
+  writePluginFiles,
+} from "./path-marketplace.ts";
 
 import type { OfferedPlugin, RangedDependency } from "./path-marketplace.ts";
 import type { GitRepositoryHost } from "./published-marketplace.ts";
@@ -258,6 +264,24 @@ export async function pushLinkedManifest(
     ...repository,
     revisions: [...repository.revisions, await runGit(workTree, gitHome, "rev-parse", "HEAD")],
   };
+}
+
+/**
+ * Gives the skill of the plugin `pluginName` of `repository` a file that is a
+ * relative symbolic link to another file of the skill, as
+ * `writeLinkedSkillFile` writes them, and pushes the result as a new revision
+ * (D-SG-11, SG-MIG-01). Returns the repository with that revision appended and
+ * the path of the link in its work tree.
+ */
+export async function pushLinkedSkillFile(
+  repository: GitPluginRepository,
+  pluginName: string,
+): Promise<{ readonly repository: GitPluginRepository; readonly link: string }> {
+  const { workTree, gitHome } = repository;
+  const link = await writeLinkedSkillFile(repositoryPluginRoot(repository, pluginName), pluginName);
+  await pushGitRepository(workTree, gitHome);
+  const revision = await runGit(workTree, gitHome, "rev-parse", "HEAD");
+  return { repository: { ...repository, revisions: [...repository.revisions, revision] }, link };
 }
 
 function parseGitPluginSourceKind(text: string): GitPluginSourceKind {

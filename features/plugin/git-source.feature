@@ -59,6 +59,41 @@ Feature: Plugin git source
       | gits             | project           | subq@gits | subq | installed |         | project | 1.0.0   |
     Then the git host receives no request
 
+  Scenario: A plugin whose commit a mirror an earlier version made already holds installs from a copy of the mirror with its linked skill as a link
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+      | subq | 1.0.0   | plugins/subq |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subp | git-subdir  | mono       | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install subp@gits --scope project"
+    Given the plugin "subq" of the git repository "mono" links a file of its skill to another file of the skill
+    Given the user has run "/claude:plugin fetch subp@gits --scope project"
+    Given the plugin mirror of the git repository "mono" in the project scope has the git settings an earlier version made
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subq | git-subdir  | mono       | false  |
+    When the user runs "/claude:plugin install subq@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | gits             | project           | subq@gits | subq | installed |         | project | 1.0.0   |
+    Then the git host receives these requests:
+      | method | path                                             | status |
+      | GET    | /acme/mono.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/mono.git/git-upload-pack                   | 200    |
+    Then the git-source plugin "subq" installed in the project scope runs revision 2 of its repository
+    Then the staged skill "subq-skill" of the project scope holds these supporting files:
+      | file       | text               |
+      | linked.txt | -> notes.txt       |
+      | notes.txt  | The notes of subq. |
+
   Scenario: Uninstalling one of two plugins pinned to one commit keeps the clone the other still uses
     Given the git repository "mono" holds these plugins:
       | name | version | path         |

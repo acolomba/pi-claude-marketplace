@@ -32,6 +32,7 @@ import {
   offerGitPlugins,
   publishPluginRepository,
   pushLinkedManifest,
+  pushLinkedSkillFile,
   pushPluginRepository,
   readGitPluginOffers,
   readRepositoryPlugins,
@@ -180,6 +181,19 @@ Given(
     this.onRelease(() => rm(directory, { recursive: true, force: true }));
     await mkdir(directory, { recursive: true });
     await pushLinkedManifestRevision(this, name, plugin, path.join(directory, "plugin.json"));
+  },
+);
+
+// D-SG-11, SG-MIG-01: the revision commits the link, so a mirror holds a link
+// that a copy writes as a link, or as a text file when the copy keeps the git
+// settings of a mirror an earlier version made.
+Given(
+  "the plugin {string} of the git repository {string} links a file of its skill to another file of the skill",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const { repository, link } = await pushLinkedSkillFile(this.requireGitRepository(name), plugin);
+    this.recordGitRepository(repository);
+    assert.strictEqual(await readlink(link), LINKED_SKILL_TARGET);
+    await assertPushedLink(repository, link);
   },
 );
 

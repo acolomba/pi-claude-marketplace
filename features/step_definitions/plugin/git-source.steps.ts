@@ -7,7 +7,9 @@
  * named by a hash of the clone URL and the commit, never from the URL-keyed
  * mirror a fetch refreshes (GIT-01). A refresh moves a stale mirror aside to
  * `plugin-clones-backup/` before its new clone moves in (D-SG-10), so the
- * read-only folder steps make that move fail and let it succeed again.
+ * read-only folder steps make that move fail and let it succeed again. The
+ * earlier-version step gives a mirror the git settings of a clone that an
+ * earlier version made with `isomorphic-git` (SG-MIG-01).
  */
 
 import assert from "node:assert/strict";
@@ -17,6 +19,11 @@ import path from "node:path";
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../../lib/field-rows.ts";
+import {
+  EARLIER_VERSION_GIT_SETTINGS,
+  giveEarlierVersionGitSettings,
+  pluginMirrorOf,
+} from "../../lib/git-clones.ts";
 import { pushGitRepository } from "../../lib/git-marketplace.ts";
 import { pushTagOnlyRevision, readRepositoryPlugins } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
@@ -168,6 +175,26 @@ Given(
     this.recordErrorMessage(
       "{read-only plugin mirror folder rename error}",
       await refusalMessage(rename(path.join(folder, mirror), backup), "EACCES", "rename"),
+    );
+  },
+);
+
+// SG-MIG-01, D-SG-11: an `isomorphic-git` clone records `core.symlinks=false`,
+// `core.ignorecase=true`, `core.filemode=false`, and the wildcard fetch refspec
+// `+refs/heads/*:refs/remotes/origin/*`; a per-commit copy copies them with the
+// mirror's `.git`.
+Given(
+  "the plugin mirror of the git repository {string} in the {word} scope has the git settings an earlier version made",
+  async function (this: ScenarioWorld, name: string, scope: string) {
+    const repository = this.requireGitRepository(name);
+    const mirror = await pluginMirrorOf(
+      path.join(this.scopeRoot(scope), "pi-claude-marketplace"),
+      this.gitHost.repositoryUrl(repository.name, repository.owner),
+      repository.gitHome,
+    );
+    assert.deepStrictEqual(
+      await giveEarlierVersionGitSettings(mirror, repository.gitHome),
+      EARLIER_VERSION_GIT_SETTINGS,
     );
   },
 );

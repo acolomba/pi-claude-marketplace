@@ -151,6 +151,26 @@ export async function giveEarlierVersionGitSettings(
 }
 
 /**
+ * Returns the URL-keyed mirror under the extension root `extensionRoot` whose
+ * checkout records the origin `origin`, failing unless exactly one does. Each
+ * git runs with the scratch HOME `gitHome`.
+ */
+export async function pluginMirrorOf(
+  extensionRoot: string,
+  origin: string,
+  gitHome: string,
+): Promise<string> {
+  const clonesDirectory = path.join(extensionRoot, "plugin-clones");
+  const mirrors = (await subdirectories(clonesDirectory))
+    .filter((key) => MIRROR_KEY.test(key))
+    .map((key) => path.join(clonesDirectory, key));
+  const origins = await Promise.all(mirrors.map((mirror) => originUrl(mirror, gitHome)));
+  const matching = mirrors.filter((_mirror, index) => origins[index] === origin);
+  assert.strictEqual(matching.length, 1, `mirrors of ${origin}: ${matching.join(", ")}`);
+  return matching[0] ?? "";
+}
+
+/**
  * Returns the git clones under the extension root `extensionRoot` of a scope:
  * each directory under `plugin-clones/`, which must be named by a clone key,
  * and each directory under `sources/` that holds a `.git` directory. Fails
