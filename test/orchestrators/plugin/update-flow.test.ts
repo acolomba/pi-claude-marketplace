@@ -2270,10 +2270,77 @@ test("PUP-2 / D-SG-10: a url marketplace whose remote advanced -> update re-clon
   });
 });
 
-// ─── PUP-2 / D-SG-10 / D-SG-15: the marketplace sync by re-clone and swap ──────
-
 const SYNC_LOCAL_COMMIT = "0000000000000000000000000000000000000001";
 const SYNC_REMOTE_COMMIT = "abcdef0000000000000000000000000000000001";
+
+test("PUP-2 / D-PL9-10: the sync carries the packages of a plugin the state records once the scope lock is held", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-url-carry-");
+    try {
+      // arrange
+      const { manifestPath } = await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
+      const locations = locationsFor("project", cwd);
+      const liveDir = await locations.sourceCloneDir("mp");
+      const lateRoot = path.join(liveDir, "late-plugin");
+      await mkdir(path.join(lateRoot, "node_modules", "pkg"), { recursive: true });
+      await writeFile(path.join(lateRoot, "node_modules", "pkg", "index.js"), "late package\n");
+      const remoteTree = path.join(cwd, "remote-tree");
+      await cp(path.dirname(path.dirname(manifestPath)), remoteTree, { recursive: true });
+      await rm(path.join(remoteTree, "late-plugin", "node_modules"), { recursive: true });
+      const fake = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        remoteRefs: { "refs/remotes/origin/main": SYNC_REMOTE_COMMIT },
+        fixtureSourceDir: remoteTree,
+      });
+      // The origin read runs under the scope lock, so a plugin recorded here
+      // stands for one that another process installed before the lock.
+      const gitOps: typeof fake.gitOps = {
+        ...fake.gitOps,
+        async listRemotes(listOptions) {
+          const state = await loadState(locations.extensionRoot);
+          const record = state.marketplaces.mp;
+          const hello = record?.plugins.hello;
+          assert.ok(record !== undefined && hello !== undefined);
+          await saveState(locations.extensionRoot, {
+            ...state,
+            marketplaces: {
+              mp: {
+                ...record,
+                plugins: { ...record.plugins, late: { ...hello, resolvedSource: lateRoot } },
+              },
+            },
+          });
+          return fake.gitOps.listRemotes(listOptions);
+        },
+      };
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          clones: fake.state.cloneCalls.length,
+          carried: await readFile(path.join(lateRoot, "node_modules", "pkg", "index.js"), "utf8"),
+        },
+        { clones: 1, carried: "late package\n" },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── PUP-2 / D-SG-10 / D-SG-15: the marketplace sync by re-clone and swap ──────
 
 /**
  * Seeds a url marketplace whose checkout offers `hello` 1.0.1 over the

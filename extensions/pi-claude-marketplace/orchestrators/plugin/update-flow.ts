@@ -146,7 +146,6 @@ import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -277,7 +276,9 @@ function syncAuthFor(
 
 /**
  * PUP-2 / D-SG-10 / D-SG-15: refresh one github or url marketplace checkout by
- * re-clone and swap, as `marketplace update` does. GAUTH-04: a url source's
+ * re-clone and swap, as `marketplace update` does. It runs under the scope
+ * lock, and it reads the plugins whose packages the swap carries from the
+ * state inside that lock (D-PL9-10). GAUTH-04: a url source's
  * auth failure that a stored credential could answer gains the
  * `NO_STORED_CREDENTIAL_CAUSE` line as the chain's tail.
  */
@@ -285,7 +286,6 @@ async function syncMarketplaceBySwap(args: {
   readonly source: GitHubSource | UrlSource;
   readonly mpName: string;
   readonly locations: ScopedLocations;
-  readonly marketplaces: ExtensionState["marketplaces"];
   readonly gitOps: GitOps;
   readonly auth: GitAuthBundle;
   readonly keepOnUnreachable: boolean;
@@ -294,18 +294,22 @@ async function syncMarketplaceBySwap(args: {
   const { source, mpName, locations, gitOps, auth } = args;
   const liveDir = await locations.sourceCloneDir(mpName);
   try {
+    const url = await swapCloneUrl(liveDir, source, gitOps);
+    // D-PL9-10: the caller holds the scope lock, so this read sees every
+    // plugin installed into the checkout before the swap carries packages.
+    const { marketplaces } = await loadState(locations.extensionRoot);
     const swapped = await refreshCloneBySwap({
       locations,
       liveDir,
       backupDir: await locations.sourceBackupDir(mpName),
-      url: await swapCloneUrl(liveDir, source, gitOps),
+      url,
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,
       auth,
       liveMarker: MARKETPLACE_MANIFEST_MARKER,
       keepOnUnreachable: args.keepOnUnreachable,
       ownershipMarker: true,
-      carryOver: installedRootsInside(liveDir, args.marketplaces),
+      carryOver: installedRootsInside(liveDir, marketplaces),
       removalOps: createRemovalOps(),
       renameOps: args.renameOps,
     });
@@ -370,7 +374,6 @@ function makeSyncCloneOnce(
           source,
           mpName,
           locations,
-          marketplaces: state.marketplaces,
           gitOps,
           auth,
           keepOnUnreachable,
