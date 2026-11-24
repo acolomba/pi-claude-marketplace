@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 22
+open_count: 23
 waived_count: 52
 fixed_count: 48
-total_count: 122
-last_updated: 2026-11-24T03:43:08.597Z
+total_count: 123
+last_updated: 2026-11-24T05:05:07.972Z
 ---
 
 # Broken Windows Ledger
@@ -137,6 +137,7 @@ last_updated: 2026-11-24T03:43:08.597Z
 | 120 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-process.ts |  | [system-git] the manual macOS and Windows check of the git process module (02-08 steps 1-10: no-git message, shim and lookup rules, no credential window, no console window, no process left after a hanging helper) is deferred to the pull request | open |  | 2026-11-23T18:29:44.674Z |  |
 | 121 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-neutral-directory.ts |  | [system-git] the Windows branches added by the code-review fixes (neutral directory without owner/mode checks, GIT_ALLOW_PROTOCOL spelling intersection, lookup with unreadable real paths) have fake-host unit cases only; the manual Windows check covers them | open |  | 2026-11-23T20:17:06.190Z |  |
 | 122 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git.ts |  | [system-git] a copy of an old clone checks out with core.symlinks unset, so Git for Windows' system config decides symlinks; the manual Windows check covers it (A9) | open |  | 2026-11-24T03:43:08.597Z |  |
+| 123 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts |  | [system-git] the Device Flow retry's '!'-prefixed one-shot credential helper runs through Git for Windows' sh with a Windows path in single quotes; the manual Windows check covers it (A4) | open |  | 2026-11-24T05:05:07.972Z |  |
 
 ````json
 [
@@ -1667,6 +1668,19 @@ last_updated: 2026-11-24T03:43:08.597Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-24T03:43:08.597Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 123,
+    "kind": "unrun-verify",
+    "phase": "3",
+    "file": "extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts",
+    "line": null,
+    "description": "[system-git] the Device Flow retry's '!'-prefixed one-shot credential helper runs through Git for Windows' sh with a Windows path in single quotes; the manual Windows check covers it (A4)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-24T05:05:07.972Z",
     "resolved_at": null,
     "milestone": null
   }
