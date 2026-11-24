@@ -58,7 +58,7 @@ import {
 } from "./git-test-repository.ts";
 import { hermeticGitProcess, recordingGitProcess, systemGitOps } from "./system-git-ops.ts";
 
-import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type {
   GitProcess,
   GitRequest,

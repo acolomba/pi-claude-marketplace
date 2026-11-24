@@ -22,7 +22,6 @@ import { makePresenceProbe } from "../../../extensions/pi-claude-marketplace/orc
 import { resolveListCandidate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-version.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -150,10 +149,22 @@ function verifyNotifications(boundary: NotificationBoundary): void {
 
 function requiredAuth(auth: GitAuthBundle | undefined): GitAuthBundle {
   if (auth === undefined) {
-    assert.fail("expected git authentication callbacks");
+    assert.fail("expected a git auth bundle");
   }
 
   return auth;
+}
+
+/** Narrows a bundle the case expects to sign in, and fails the case otherwise. */
+function requiredDeviceFlow(
+  auth: GitAuthBundle | undefined,
+): Extract<GitAuthBundle, { kind: "device-flow" }> {
+  const bundle = requiredAuth(auth);
+  if (bundle.kind !== "device-flow") {
+    assert.fail(`expected a device-flow bundle for ${bundle.host}`);
+  }
+
+  return bundle;
 }
 
 function gitBoundary(options: GitBoundaryOptions): GitBoundary {
@@ -189,25 +200,11 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
         await writeFile(path.join(cloneOptions.dir, ".git", "HEAD"), `${git.state.head}\n`);
       }
     },
-    async currentBranch(options) {
-      schedule.push("current-branch");
-      return git.gitOps.currentBranch(options);
-    },
-    async fetch(options) {
-      schedule.push(
-        `fetch remote=${options.remote ?? "-"} ref=${options.ref ?? "-"} auth=${options.auth?.host ?? "-"}`,
-      );
-      await git.gitOps.fetch(options);
-    },
     async fetchCommit(options) {
       schedule.push(
         `fetch-commit ${options.sha} ref=${options.ref ?? "-"} auth=${options.auth?.host ?? "-"}`,
       );
       await git.gitOps.fetchCommit(options);
-    },
-    async forceUpdateRef(options) {
-      schedule.push(`force-update ${options.ref}=${options.value}`);
-      await git.gitOps.forceUpdateRef(options);
     },
     async resolveRef(options) {
       schedule.push(`resolve-local ${options.ref}`);
@@ -756,10 +753,10 @@ test("materializes a cold unpinned GitHub mirror through Device Flow once per ho
     const seam: FetchCloneCacheSeam = {
       ...cache.seam,
       async materializeOrRefreshPluginMirror(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
-        assert.deepStrictEqual(await callbacks.onAuth(networkUrl), {
-          password: "token",
-          username: "x-access-token",
+        // D-SG-14: the retry of a run no helper answered calls onAuthRequired.
+        assert.deepStrictEqual(await requiredDeviceFlow(args.auth).onAuthRequired(), {
+          ok: true,
+          cred: { password: "token", username: "x-access-token" },
         });
         return originalMirror(args);
       },
@@ -792,7 +789,7 @@ test("materializes a cold unpinned GitHub mirror through Device Flow once per ho
           host: "github.com",
         },
       ],
-      fill: [{ host: "github.com" }],
+      fill: [],
       reject: [],
     });
     assert.deepStrictEqual(deviceFlow.calls, {
@@ -842,8 +839,8 @@ test("reuses a stored GitHub credential without Device Flow", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
-        assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), storedCredential);
+        const auth = requiredAuth(args.resolveAuth());
+        assert.deepStrictEqual(await auth.credentialOps.fill(auth.host), storedCredential);
         return path.join(cwd, "not-written");
       },
       resolvePluginPin(args) {
@@ -1879,8 +1876,10 @@ test("classifies a denied Device Flow as authentication required", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
-        assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), { cancel: true });
+        assert.deepStrictEqual(await requiredDeviceFlow(args.resolveAuth()).onAuthRequired(), {
+          ok: false,
+          reason: "User cancelled authorization. Run the command again to retry.",
+        });
         throw Object.assign(new Error("The operation was canceled."), {
           code: "UserCanceledError",
         });
@@ -1916,7 +1915,7 @@ test("classifies a denied Device Flow as authentication required", async () => {
     ]);
     assert.deepStrictEqual(credentials.calls, {
       approve: [],
-      fill: [{ host: "github.com" }],
+      fill: [],
       reject: [],
     });
     assert.deepStrictEqual(deviceFlow.calls, {
@@ -2014,8 +2013,10 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
-        assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), { cancel: true });
+        await assert.rejects(
+          requiredDeviceFlow(args.resolveAuth()).onAuthRequired(),
+          new Error("credential approve failed"),
+        );
         throw Object.assign(new Error("The operation was canceled."), {
           code: "UserCanceledError",
         });
@@ -2056,7 +2057,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
           host: "github.com",
         },
       ],
-      fill: [{ host: "github.com" }],
+      fill: [],
       reject: [],
     });
     assert.strictEqual(credentials.storedCredential("github.com"), null);
@@ -2064,7 +2065,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
   });
 });
 
-test("rejects a stale credential and contains a reject failure", async () => {
+test("D-SG-14: keeps a stale credential the host refused", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://github.com/acme/stale";
@@ -2083,22 +2084,20 @@ test("rejects a stale credential and contains a reject failure", async () => {
     const credentials = createCredentialOpsFake({
       boundary: "memory",
       credentials: [["github.com", staleCredential]],
-      rejectError: new Error("credential reject failed"),
     });
-    const boundary = notificationBoundary("reject failure");
+    const boundary = notificationBoundary("refused credential");
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
       },
-      async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
-        assert.deepStrictEqual(await callbacks.onAuthFailure(`${cloneUrl}.git`, staleCredential), {
-          cancel: true,
-        });
-        throw Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
-          code: "HttpError",
-          data: { statusCode: 401 },
-        });
+      materializePluginClone(args) {
+        assert.strictEqual(requiredAuth(args.resolveAuth()).kind, "device-flow");
+        return Promise.reject(
+          Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+            code: "HttpError",
+            data: { statusCode: 401 },
+          }),
+        );
       },
       resolvePluginPin() {
         return Promise.resolve({ cloneUrl, pin });
@@ -2124,11 +2123,7 @@ test("rejects a stale credential and contains a reject failure", async () => {
         severity: "error",
       },
     ]);
-    assert.deepStrictEqual(credentials.calls, {
-      approve: [],
-      fill: [],
-      reject: [{ credential: staleCredential, host: "github.com" }],
-    });
+    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(credentials.storedCredential("github.com"), staleCredential);
     verifyNotifications(boundary);
   });

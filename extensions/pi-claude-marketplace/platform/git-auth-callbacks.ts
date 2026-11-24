@@ -2,16 +2,14 @@
  * platform/git-auth-callbacks.ts -- the complete git authentication-callback
  * protocol consumed by isomorphic-git's `onAuth` / `onAuthFailure` hooks.
  *
- * This module owns the whole concern: the caller-supplied seam types
- * (`AuthAttemptResult`, `OnAuthRequiredFn`), the input bundle
- * (`BuildAuthCallbacksOpts`), and the fill / Device Flow / reject / cancel
- * state machine itself (`buildAuthCallbacks`). `platform/git.ts` imports the
- * factory and threads the resulting pair into `clone`, `fetch`, and
- * `resolveRemoteRef`; the orchestrators supply the bundle.
+ * This module owns the fill / Device Flow / reject / cancel state machine
+ * (`buildAuthCallbacks`). `platform/git.ts` imports the factory and threads
+ * the resulting pair into its isomorphic-git `fetch`; the orchestrators supply
+ * the bundle.
  *
- * It imports the credential seam (`CredentialOps`) and the credential shape
- * (`GitCredentials`) rather than declaring either, so the keychain protocol
- * stays in `platform/git-credential.ts` and the isomorphic-git-facing
+ * It imports the bundle (`GitAuthBundle`) from `platform/git-credential.ts`
+ * and the credential shape (`GitCredentials`) rather than declaring either, so
+ * the keychain protocol and the bundle stay in the credential module and the
  * credential shape stays on the canonical platform-git surface (D-13).
  */
 
@@ -22,66 +20,18 @@ import {
   StoredCredentialRejectedError,
 } from "../shared/errors.ts";
 
-import type { CredentialOps } from "./git-credential.ts";
+import type { GitAuthBundle } from "./git-credential.ts";
 import type { GitCredentials } from "./git.ts";
 
 /**
- * Discriminated result returned by an `onAuthRequired` closure.
- *
- * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`.
- * Declared LOCALLY in the platform tier so this module honors the
- * platform → domain import prohibition (the `platform` boundary zone in
- * `.fallowrc.json` may import from `shared` only). `orchestrators/auth-host.ts` wraps
- * `initiateDeviceFlow` in a memoizing closure and passes that closure as
- * `onAuthRequired`; TypeScript's structural typing accepts the assignment
- * with no adapter -- no shared type declaration is needed across tiers.
+ * The bundle type under the name `platform/git.ts` still reads. The bundle and
+ * its sign-in types belong to `platform/git-credential.ts`.
  */
-export type AuthAttemptResult = { ok: true; cred: GitCredentials } | { ok: false; reason: string };
-
-/**
- * Caller-supplied closure invoked by `buildAuthCallbacks` when
- * `credentialOps.fill` returns null (no stored credential). The orchestrator
- * binds whatever the Device Flow needs at the call site, so this seam takes no
- * parameters: `orchestrators/auth-host.ts` binds `host`, `credentialOps`, and
- * `onDeviceCode`.
- */
-export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
-
-/**
- * Input bundle for `buildAuthCallbacks`. The same type is used by
- * `CloneOptions.auth?`, `FetchOptions.auth?`, and
- * `ResolveRemoteRefOptions.auth?`, and its readonly form is the
- * orchestrators' `GitAuthBundle`, so a single bundle threads through from
- * the orchestrator into clone/fetch/resolveRemoteRef without re-bundling.
- *
- * `kind` says whether anything can mint a credential for `host`:
- *   - `device-flow`: a helper miss runs `onAuthRequired`, and `onAuthFailure`
- *     evicts a credential the server rejected, because the next miss mints a
- *     replacement (AUTH-07).
- *   - `stored-credential`: the credential in the user's helper is the host's
- *     only source. A helper miss cancels, and a rejected credential stays
- *     stored, because evicting it would destroy a value the user can recover
- *     only by storing it again (GAUTH-04, D-1-01).
- *
- * The orchestrator picks the kind; this module holds no provider knowledge
- * (the `platform` boundary zone in `.fallowrc.json` may import from `shared` only).
- */
-export type BuildAuthCallbacksOpts =
-  | {
-      readonly kind: "device-flow";
-      readonly credentialOps: CredentialOps;
-      readonly host: string;
-      readonly onAuthRequired: OnAuthRequiredFn;
-    }
-  | {
-      readonly kind: "stored-credential";
-      readonly credentialOps: CredentialOps;
-      readonly host: string;
-    };
+export type BuildAuthCallbacksOpts = GitAuthBundle;
 
 /**
  * Build the `{ onAuth, onAuthFailure }` pair consumed by isomorphic-git's
- * `clone` and `fetch`.
+ * `fetch`.
  *
  * Behavior:
  *

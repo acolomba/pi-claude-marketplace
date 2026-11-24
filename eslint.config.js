@@ -76,23 +76,23 @@ const NETWORK_SEAMS = [
   "extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts",
   // D-PL5-07: owns the hosted catalog port and its default download.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts",
-  // D-12 / D-13: owns GitOps, DEFAULT_GIT_OPS, and refreshGitHubClone.
+  // D-12 / D-13: owns GitOps and DEFAULT_GIT_OPS.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
   // NFR-5: updating a git-source marketplace refreshes its clone.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
   // A composer that hands gitOps to the marketplace add it calls.
   "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts",
-  // PURL-02 / PURL-04: clones a git-source plugin on a cache miss.
+  // PURL-02 / PURL-04 / D-SG-10: clones and refreshes plugin mirrors and runs the pin ladder.
   "extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts",
   // D-03-03: lists a constrained dependency's remote tags.
   "extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts",
   // RESV-01: the type-only RemoteTag that the cascade's tag probe returns.
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts",
-  // TAGS-01: reads the marketplace clone's local tags with listTags and resolveTagOid.
+  // D-SG-09: lists a git marketplace's remote tags (ls-remote) and a directory's local tags.
   "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts",
   // D-10-19: the type-only RemoteTag of the constraint gate's tag query.
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts",
-  // PUP-2: syncClone needs gitOps.
+  // PUP-2 / D-SG-10: syncs the marketplace by re-clone and swap (refreshCloneBySwap).
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
   // PUP-2: the preflight threads gitOps and the type-only RemoteTag.
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
@@ -106,7 +106,7 @@ const NETWORK_SEAMS = [
 // download. A network-free module reaches neither through a name the gate
 // does not match.
 const NETWORK_SEAM_NAMES =
-  "gitOps|DEFAULT_GIT_OPS|refreshGitHubClone|refreshCloneBySwap|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
+  "gitOps|DEFAULT_GIT_OPS|refreshCloneBySwap|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
 
 const NETWORK_FREE_SYNTAX_SELECTORS = [
   {
@@ -122,7 +122,7 @@ const NETWORK_FREE_SYNTAX_SELECTORS = [
   {
     selector: `:matches(Identifier, PrivateIdentifier)[name=/^(?:${NETWORK_SEAM_NAMES})$/]`,
     message:
-      "NFR-5 / D-PL5-07: network-free modules must not name the git seam (gitOps, DEFAULT_GIT_OPS, refreshGitHubClone, refreshCloneBySwap) or the hosted catalog download (hostedManifestFetch, HostedManifestFetch, DEFAULT_HOSTED_MANIFEST_FETCH, downloadHostedCatalog, refreshHostedCatalog, fetchHostedManifest). Only the NETWORK_SEAMS files in eslint.config.js may name them.",
+      "NFR-5 / D-PL5-07: network-free modules must not name the git seam (gitOps, DEFAULT_GIT_OPS, refreshCloneBySwap) or the hosted catalog download (hostedManifestFetch, HostedManifestFetch, DEFAULT_HOSTED_MANIFEST_FETCH, downloadHostedCatalog, refreshHostedCatalog, fetchHostedManifest). Only the NETWORK_SEAMS files in eslint.config.js may name them.",
   },
   {
     selector: `Literal[value=/\\b(?:${NETWORK_SEAM_NAMES})\\b/]`,
@@ -286,7 +286,7 @@ const IMPORT_DIRECTION_ZONES = [
     target: PLUGIN_LEDGERS,
     from: MARKETPLACE_LEDGERS,
     message:
-      "D-v1.0-01-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts is reachable from a plugin ledger.",
+      "D-v1.0-01-11: a plugin ledger must not import a marketplace ledger module. Only orchestrators/marketplace/shared.ts and the non-ledger orchestrators/marketplace/clone-swap.ts are reachable from a plugin ledger.",
   },
   {
     target: PLUGIN_LEDGERS,
