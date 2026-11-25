@@ -63,7 +63,10 @@ for (const { note, reason } of [
     reason: "unsupported hooks",
   },
   { note: "contains lspServers", reason: "lsp" },
-  { note: "contains monitors", reason: "unsupported source" },
+  { note: "contains monitors", reason: "unsupported component" },
+  { note: "contains mod", reason: "unsupported component" },
+  { note: "contains hooks", reason: "unsupported hooks" },
+  { note: "contains mcpServers", reason: "unsupported mcp" },
   { note: 'malformed mcp reference: file not found: "x.mcp.json"', reason: "malformed mcp" },
   {
     note: 'malformed mcp reference: invalid JSON in "x.mcp.json": Unexpected token n',
@@ -95,7 +98,7 @@ for (const { note, reason } of [
   },
   {
     note: "required userConfig options have no default: lspServers, source",
-    reason: "unsupported source",
+    reason: "options not set",
   },
   { note: "some other unsupported source detail", reason: "unsupported source" },
   {
@@ -129,6 +132,20 @@ test("keeps structural multi-defect reasons equal on install and read-only surfa
   // assert
   assert.deepStrictEqual(installReasons, ["malformed mcp", "unsupported source"]);
   assert.deepStrictEqual(readOnlyReasons, ["malformed mcp", "unsupported source"]);
+  assert.deepStrictEqual(installReasons, readOnlyReasons);
+});
+
+test("D-90-05: keeps the kind reasons of an unavailable plugin equal on install and read-only surfaces", () => {
+  // arrange
+  const notes = ["contains hooks", "contains lspServers"];
+
+  // act
+  const installReasons = installSurfaceReasons(notes, [], false);
+  const readOnlyReasons = narrowResolverNotes(notes);
+
+  // assert
+  assert.deepStrictEqual(installReasons, ["unsupported hooks", "lsp"]);
+  assert.deepStrictEqual(readOnlyReasons, ["unsupported hooks", "lsp"]);
   assert.deepStrictEqual(installReasons, readOnlyReasons);
 });
 

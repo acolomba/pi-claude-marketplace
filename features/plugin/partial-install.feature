@@ -110,3 +110,29 @@ Feature: Plugin partial install
       | marketplace name | marketplace scope | id             | name  | status      | reasons |
       | fixtures         | project           | clang@fixtures | clang | unavailable | lsp     |
     Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin whose only component is a theme fails as unavailable for an unsupported component
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "paint", "source": "./plugins/paint", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "fixtures" has the file "plugins/paint/themes/dark.json" at its root with this text:
+      """
+      { "name": "dark" }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install paint@fixtures --scope project --partial"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status      | reasons               |
+      | fixtures         | project           | paint@fixtures | paint | unavailable | unsupported component |
+    Then the project scope has no installed plugins

@@ -20,6 +20,7 @@ import {
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import {
   MANIFEST_ESCAPE_NOTE,
+  narrowKindNotes,
   narrowUnsupportedKinds,
   SOURCE_DIR_MISSING_NOTE,
   USER_CONFIG_MALFORMED_NOTE,
@@ -452,12 +453,14 @@ export function classifyEntityShapeError(
 // then checks the remaining token against the set.
 // HOOK-04 / D-58-02: `lspServers` is the SOLE manifest-field
 // carve-out. `hooks` is a supported component kind -- it is not a member
-// of `UNSUPPORTED_COMPONENT_KINDS` -- so the resolver never emits a
-// `"contains hooks"` note here. The `{unsupported hooks}` reason is a
+// of `UNSUPPORTED_COMPONENT_KINDS` -- so the per-stage resolver notes hold no
+// `"contains hooks"` note. The `{unsupported hooks}` reason is a
 // normal 2-word REASON sourced through
 // `shared/probe-classifiers.ts::narrowResolverNotes` against the
 // `parseHooksConfig` prefix tokens, not a manifest-field carve-out
-// emitted here.
+// emitted here. The `contains hooks` and `contains mcpServers` notes that
+// `decideResolution` adds for a plugin unavailable only for its kinds are read
+// by `narrowKindNotes` in `narrowResolverReasons` (D-90-05).
 // New detection tokens added here MUST also have an entry in
 // `MANIFEST_FIELD_TO_REASON` below mapping them to a member of the closed
 // `Reason` set in `shared/notification-types.ts::REASONS` so the renderer accepts them.
@@ -648,16 +651,17 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  *      dependent: on the partially-available arm (`partialable`) it routes its
  *      bare token through the shared `narrowUnsupportedKinds` helper so the
  *      install surface emits the same per-kind `unsupported component` marker
- *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
- *      `unavailable` arm it stays on the source axis as `unsupported source`,
- *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
+ *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the `unavailable`
+ *      arm, beside a structural note, it stays on the source axis as
+ *      `unsupported source`, mirroring `narrowResolverNotes`'s catch-all
+ *      (SURF-01 / WR-01 / D-64-07)
  *   2. the `source dir does not exist` note -> `source missing` (SRC-01);
  *      the `plugin manifest resolves outside the` note -> `unreadable
  *      manifest` (D-PL2-24); the `malformed userConfig` note -> `invalid
  *      manifest` (D-PG10-05); the `required userConfig options have no
  *      default` note -> the `userConfig` kind marker when partialable and
- *      `unsupported source` otherwise (D-PG10-06); any other "source"
- *      substring -> `unsupported source`
+ *      `unsupported source` beside a structural note (D-PG10-06); any other
+ *      "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;
@@ -674,17 +678,28 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  * permissive `unsupported source` fallback fires only when BOTH sources are empty.
  *
  * SURF-01 / WR-01 / D-64-07: `partialable` is the resolver arm discriminant
- * (`err.shape.partialable`). It defaults to the structural `unavailable` arm
- * (`false`) and only affects the non-carve-out `contains <kind>` note handler
- * (step 1b) -- the component-axis `unsupported component` token is emitted for
- * such a note ONLY on the partially-available arm; the structural arm keeps it on
- * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
+ * (`err.shape.partialable`). It defaults to the `unavailable` arm (`false`)
+ * and affects the non-carve-out `contains <kind>` note handler (step 1b) and
+ * the unset-options note (step 2) -- the component-axis token is emitted for
+ * such a note on the partially-available arm; beside a structural note the
+ * `unavailable` arm keeps it on the source axis (`unsupported source`),
+ * agreeing with `narrowResolverNotes`.
+ *
+ * D-90-05: on the `unavailable` arm, when every note names an unsupported
+ * kind, the plugin is unavailable only for its kinds, and the row takes the
+ * kind tokens of `narrowKindNotes` before any step above. `list` and `info`
+ * take theirs from the same function, so the surfaces cannot differ.
  */
 function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
   partialable = false,
 ): readonly ContentReason[] {
+  const kindReasons = partialable ? undefined : narrowKindNotes(reasons);
+  if (kindReasons !== undefined) {
+    return kindReasons;
+  }
+
   const out: ContentReason[] = [...narrowUnsupportedKinds(unsupportedKinds)];
   for (const reason of reasons) {
     out.push(...classifyResolverReason(reason, partialable));

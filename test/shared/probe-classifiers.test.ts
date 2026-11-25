@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { InvalidMarketplaceManifestError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  narrowKindNotes,
   narrowProbeError,
   narrowResolverNotes,
   narrowUnsupportedKinds,
@@ -204,7 +205,7 @@ describe("narrowResolverNotes", () => {
     });
   }
 
-  test("D-PG10-06: classifies an unset userConfig note naming lspServers as unsupported source", () => {
+  test("D-PG10-06: classifies an unset userConfig note naming lspServers as options not set", () => {
     // arrange
     const notes = ["required userConfig options have no default: lspServers, source"];
 
@@ -212,7 +213,43 @@ describe("narrowResolverNotes", () => {
     const reasons = narrowResolverNotes(notes);
 
     // assert
-    assert.deepStrictEqual(reasons, ["unsupported source"]);
+    assert.deepStrictEqual(reasons, ["options not set"]);
+  });
+
+  test("D-PG10-06: classifies an unset userConfig note beside a malformed one on the source axis", () => {
+    // arrange
+    const notes = [
+      'malformed userConfig: userConfig option "mode" is not an object',
+      "required userConfig options have no default: token",
+    ];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["invalid manifest", "unsupported source"]);
+  });
+
+  test("D-90-05: classifies a lone mod kind note as unsupported component", () => {
+    // arrange
+    const notes = ["contains mod"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported component"]);
+  });
+
+  test("SURF-01: classifies a kind note beside a structural note as unsupported source", () => {
+    // arrange
+    const notes = ['malformed mcp reference: file not found: "x.mcp.json"', "contains monitors"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["malformed mcp", "unsupported source"]);
   });
 
   test("classifies an inline malformed mcpServers note as unsupported source", () => {
@@ -316,6 +353,56 @@ describe("narrowResolverNotes", () => {
       "malformed mcp",
     ]);
   });
+});
+
+describe("narrowKindNotes", () => {
+  for (const { notes, reasons } of [
+    { notes: ["contains lspServers"], reasons: ["lsp"] },
+    { notes: ["contains mod"], reasons: ["unsupported component"] },
+    { notes: ["contains themes"], reasons: ["unsupported component"] },
+    { notes: ["contains hooks"], reasons: ["unsupported hooks"] },
+    { notes: ["contains mcpServers"], reasons: ["unsupported mcp"] },
+    {
+      notes: ["required userConfig options have no default: token"],
+      reasons: ["options not set"],
+    },
+    { notes: ["contains hooks", "contains lspServers"], reasons: ["unsupported hooks", "lsp"] },
+    { notes: ["contains monitors", "contains themes"], reasons: ["unsupported component"] },
+  ] satisfies readonly {
+    readonly notes: readonly string[];
+    readonly reasons: readonly UnsupportedReason[];
+  }[]) {
+    test(`D-90-05: maps the kind notes ${notes.join(" and ")} to ${reasons.join(" and ")}`, () => {
+      // arrange
+      const expectedReasons = reasons;
+
+      // act
+      const kindReasons = narrowKindNotes(notes);
+
+      // assert
+      assert.deepStrictEqual(kindReasons, expectedReasons);
+    });
+  }
+
+  for (const { label, notes } of [
+    { label: "no notes", notes: [] },
+    {
+      label: "a kind note beside a structural note",
+      notes: ['malformed mcp reference: file not found: "x.mcp.json"', "contains monitors"],
+    },
+    { label: "a note that only starts like a kind note", notes: ["contains two words"] },
+  ] satisfies readonly { readonly label: string; readonly notes: readonly string[] }[]) {
+    test(`SURF-01: gives no kind reasons for ${label}`, () => {
+      // arrange
+      const expectedReasons = undefined;
+
+      // act
+      const kindReasons = narrowKindNotes(notes);
+
+      // assert
+      assert.strictEqual(kindReasons, expectedReasons);
+    });
+  }
 });
 
 describe("narrowUnsupportedKinds", () => {
