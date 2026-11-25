@@ -26,7 +26,6 @@ import path from "node:path";
 import {
   canonicalCloneUrl,
   gitHubRepositoriesMatch,
-  networkCloneUrl,
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../domain/clone-key.ts";
@@ -55,7 +54,6 @@ import { cloneOverGitHubTransports } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
-  oneAttemptPlans,
   refreshCloneBySwap,
   type CloneSwapArgs,
   type RenameOps,
@@ -119,19 +117,17 @@ async function promoteStagingToClone(
 }
 
 /**
- * D-SG-18: the clone step of a plugin clone into `stagingDir`. With no
- * `transport`, `clone` runs once on `networkUrl` with the auth bundle. With
- * one, the plan is made now, and the step runs over it (`cloneOverGitHubTransports`,
- * the plugin surface): an HTTPS attempt carries the bundle, an SSH attempt
- * none, because no bundle answers an ssh failure. Before a retry the staging
- * directory is removed, so the next attempt starts as the first did. Only
- * the clone step runs here: a later fetch or checkout never retries (upstream
- * `N1t`).
+ * D-SG-18: the clone step of a plugin clone into `stagingDir`. The
+ * transport's plan is made now, and the step runs over it
+ * (`cloneOverGitHubTransports`, the plugin surface): an HTTPS attempt
+ * carries the auth bundle, an SSH attempt none, because no bundle answers an
+ * ssh failure. Before a retry the staging directory is removed, so the next
+ * attempt starts as the first did. Only the clone step runs here: a later
+ * fetch or checkout never retries (upstream `N1t`).
  */
 async function runCloneStep(
   step: {
-    readonly transport: CloneTransport | undefined;
-    readonly networkUrl: string;
+    readonly transport: CloneTransport;
     readonly auth: GitAuthBundle;
     readonly stagingDir: string;
     readonly removalOps: RemovalOps;
@@ -139,11 +135,6 @@ async function runCloneStep(
   clone: (url: string, auth: GitAuthBundle | undefined) => Promise<void>,
 ): Promise<void> {
   const { transport } = step;
-  if (transport === undefined) {
-    await clone(step.networkUrl, step.auth);
-    return;
-  }
-
   await cloneOverGitHubTransports({
     plan: await transport.plan(),
     attempt: (attempt) => clone(attempt.url, attempt.transport === "ssh" ? undefined : step.auth),
@@ -266,25 +257,20 @@ function asPinnedCommitMissing(err: unknown, pin: string): unknown {
  * it reads the GitHub base variable only when the clone reaches the network
  * (NFR-5).
  *
- * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
- * needs `source.raw`, which is not recoverable from `cloneUrl` once the
- * parse-time strip has run.
- *
- * D-SG-18: given a `transport`, the clone step runs over its plan's attempts
- * instead of `networkUrl` (`runCloneStep`); the key still comes from
- * `cloneUrl`, so an SSH clone fills the directory an HTTPS clone of the same
- * source would (SG-SSH-06).
+ * D-SG-18, D-2-03: the clone step runs over the attempts of `transport`'s
+ * plan (`runCloneStep`), each sent to its attempt's wire URL; the key still
+ * comes from the canonical `cloneUrl`, so an SSH clone fills the directory
+ * an HTTPS clone of the same source would (SG-SSH-06).
  */
 export async function materializePluginClone(args: {
   locations: ScopedLocations;
   cloneUrl: string;
-  networkUrl: string;
   pin: string;
   ref?: string;
   gitOps?: GitOps;
   resolveAuth: () => GitAuthBundle;
   onCloneCreated?: (key: string) => void;
-  transport?: CloneTransport;
+  transport: CloneTransport;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -293,9 +279,8 @@ export async function materializePluginClone(args: {
   // cannot go uninjected.
   const removalOps = createRemovalOps();
   const key = pluginCloneKey(args.cloneUrl, args.pin);
-  // D-2-03: the key hashes the canonical identity url; the caller-supplied
-  // wire url is the only thing sent to the remote.
-  const networkUrl = args.networkUrl;
+  // D-2-03: the key hashes the canonical identity url; only the wire urls of
+  // the transport's attempts are sent to the remote.
   const cloneRoot = await args.locations.pluginCloneDir(key);
 
   // PURL-02 / PURL-04: a present key dir is a byte-equivalent warm cache.
@@ -310,7 +295,7 @@ export async function materializePluginClone(args: {
   try {
     await cloneAtPin(
       gitOps,
-      { transport: args.transport, networkUrl, auth: cold.auth, stagingDir, removalOps },
+      { transport: args.transport, auth: cold.auth, stagingDir, removalOps },
       cold,
     );
   } catch (err) {
@@ -412,18 +397,17 @@ async function copyMirrorAtCommit(
  *
  * A present copy is returned as is. Otherwise the URL-keyed mirror, when it
  * holds `sha`, is copied and checked out at `sha` with no network access;
- * failing that, `materializePluginClone` clones the commit, over `transport`
- * when one is given (D-SG-18).
+ * failing that, `materializePluginClone` clones the commit over `transport`
+ * (D-SG-18).
  */
 export async function materializePluginCommitCopy(args: {
   locations: ScopedLocations;
   cloneUrl: string;
-  networkUrl: string;
   sha: string;
   gitOps?: GitOps;
   resolveAuth: () => GitAuthBundle;
   onCloneCreated?: (key: string) => void;
-  transport?: CloneTransport;
+  transport: CloneTransport;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const key = pluginCloneKey(args.cloneUrl, args.sha);
@@ -460,8 +444,8 @@ export interface UnpinnedSourceSteps {
  * The caller holds the scope's state lock around this call (GIT-03), so no
  * `fetch` refreshes the mirror while its commit is read and copied.
  *
- * D-SG-18: a `transport` reaches both steps, so a cold mirror and a copy that
- * must clone both run their clone step over its plan.
+ * D-SG-18: the `transport` reaches both steps, so a cold mirror and a copy
+ * that must clone both run their clone step over its plan.
  */
 export async function materializeUnpinnedSource(
   steps: UnpinnedSourceSteps,
@@ -471,31 +455,27 @@ export async function materializeUnpinnedSource(
     readonly auth: GitAuthBundle;
     readonly refresh?: boolean;
     readonly onCloneCreated?: (key: string) => void;
-    readonly transport?: CloneTransport;
+    readonly transport: CloneTransport;
   },
 ): Promise<GitPluginRootResult> {
-  const { locations, source, auth } = args;
+  const { locations, source, auth, transport } = args;
   const cloneUrl = canonicalCloneUrl(source);
-  const networkUrl = networkCloneUrl(source);
-  const transport = args.transport === undefined ? {} : { transport: args.transport };
   const mirror = await steps.materializeOrRefreshPluginMirror({
     locations,
     cloneUrl,
-    networkUrl,
     ...(source.ref !== undefined && { ref: source.ref }),
     auth,
     ...(args.refresh !== undefined && { refresh: args.refresh }),
     ...(args.onCloneCreated !== undefined && { onCloneCreated: args.onCloneCreated }),
-    ...transport,
+    transport,
   });
   const copyRoot = await steps.materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl,
     sha: mirror.resolvedSha,
     resolveAuth: () => auth,
     ...(args.onCloneCreated !== undefined && { onCloneCreated: args.onCloneCreated }),
-    ...transport,
+    transport,
   });
   return resolveGitPluginRootWithSubdir(source, copyRoot, mirror.resolvedSha);
 }
@@ -559,24 +539,21 @@ export async function materializeUnpinnedSource(
  * DEFAULT_GIT_OPS) stays confined to this file, never surfaced to
  * install/list/info.
  *
- * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
- * needs `source.raw`, which is not recoverable from `cloneUrl` once the
- * parse-time strip has run. A cold clone, the freshness check, and a re-clone
- * all send it. D-SG-18, OQ-4: given a `transport`, a cold clone runs over its
- * plan's attempts instead (`runCloneStep`), and so do a warm refresh's
- * freshness check and re-clone (`mirrorRefreshPlans`).
+ * D-2-03, D-SG-18, OQ-4: a cold clone runs over the attempts of
+ * `transport`'s plan (`runCloneStep`), and so do a warm refresh's freshness
+ * check and re-clone (`mirrorRefreshPlans`); each sends its attempt's wire
+ * URL, never the canonical `cloneUrl` the key hashes.
  */
 export async function materializeOrRefreshPluginMirror(args: {
   locations: ScopedLocations;
   cloneUrl: string;
-  networkUrl: string;
   ref?: string;
   gitOps?: GitOps;
   renameOps?: RenameOps;
   auth: GitAuthBundle;
   refresh?: boolean;
   onCloneCreated?: (key: string) => void;
-  transport?: CloneTransport;
+  transport: CloneTransport;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -587,9 +564,8 @@ export async function materializeOrRefreshPluginMirror(args: {
   const key = pluginMirrorKey(args.cloneUrl);
   const mirrorRoot = await args.locations.pluginCloneDir(key);
   // D-2-03: same split as `materializePluginClone` -- the mirror key hashes the
-  // canonical identity url, and the caller-supplied wire url is what a clone
-  // and the freshness check send.
-  const networkUrl = args.networkUrl;
+  // canonical identity url, and a clone and the freshness check send the wire
+  // urls of the transport's attempts.
 
   // MIRR-01: materialize the mirror on a cold key (no fixed-pin checkout; the
   // mirror tracks a moving ref).
@@ -604,7 +580,7 @@ export async function materializeOrRefreshPluginMirror(args: {
 
     try {
       await runCloneStep(
-        { transport: args.transport, networkUrl, auth: args.auth, stagingDir, removalOps },
+        { transport: args.transport, auth: args.auth, stagingDir, removalOps },
         (url, auth) =>
           cloneIntoStaging(gitOps, stagingDir, url, {
             ...(args.ref !== undefined && { ref: args.ref }),
@@ -680,19 +656,13 @@ async function installedRootsInMirror(
 }
 
 /**
- * OQ-4: the plans of a mirror refresh. With the caller's `transport`, the
- * freshness check and the re-clone both run over its plan, and the re-clone
- * records its note under the transport's subject; without one, each runs once
- * on `networkUrl`.
+ * OQ-4: the plans of a mirror refresh. The freshness check and the re-clone
+ * both run over the caller's `transport`'s plan, and the re-clone records its
+ * note under the transport's subject.
  */
 function mirrorRefreshPlans(
-  transport: CloneTransport | undefined,
-  networkUrl: string,
+  transport: CloneTransport,
 ): Pick<CloneSwapArgs, "freshness" | "reclone" | "notes" | "subject"> {
-  if (transport === undefined) {
-    return oneAttemptPlans(networkUrl);
-  }
-
   return {
     freshness: transport.plan,
     reclone: transport.plan,
@@ -710,7 +680,6 @@ function mirrorRefreshPlans(
  */
 async function refreshMirrorBySwap(args: {
   readonly locations: ScopedLocations;
-  readonly networkUrl: string;
   readonly ref?: string;
   readonly gitOps: GitOps;
   readonly renameOps?: RenameOps;
@@ -718,13 +687,13 @@ async function refreshMirrorBySwap(args: {
   readonly removalOps: RemovalOps;
   readonly key: string;
   readonly mirrorRoot: string;
-  readonly transport?: CloneTransport | undefined;
+  readonly transport: CloneTransport;
 }): Promise<void> {
   const swapped = await refreshCloneBySwap({
     liveDir: args.mirrorRoot,
     backupDir: await args.locations.pluginCloneBackupDir(args.key),
     stagingDir: await args.locations.pluginMirrorStagingDir(args.key),
-    ...mirrorRefreshPlans(args.transport, args.networkUrl),
+    ...mirrorRefreshPlans(args.transport),
     surface: "plugin",
     ...(args.ref !== undefined && { ref: args.ref }),
     gitOps: args.gitOps,
@@ -1036,12 +1005,11 @@ export async function seedSameRepoPluginMirrors(args: {
  *   - else source.ref set: resolveRemoteRef({ url, ref }) (D-77-05).
  *   - else unpinned: resolveRemoteRef({ url }) resolves remote HEAD (D-77-05).
  *
- * With no `transport`, the request goes once to `networkCloneUrl(source)`.
- * OQ-4: with one, it walks the plan of the clone that follows, as that clone
- * does: the first attempt, then the attempt the plan gives after a failure.
- * An HTTPS attempt carries `auth`, an SSH attempt none. A remote that answers
- * without the ref is refused, and the refusal names the URL that attempt sent
- * (GHB-01).
+ * OQ-4: the request walks the `transport`'s plan, the plan of the clone that
+ * follows, as that clone does: the first attempt, then the attempt the plan
+ * gives after a failure. An HTTPS attempt carries `auth`, an SSH attempt
+ * none. A remote that answers without the ref is refused, and the refusal
+ * names the URL that attempt sent (GHB-01). A pinned sha makes no plan.
  *
  * `ref` is returned as the clone's singleBranch fetch hint.
  */
@@ -1049,7 +1017,7 @@ export async function resolvePluginPin(args: {
   source: UrlSource | GitSubdirSource | GitHubSource;
   gitOps?: GitOps;
   auth?: GitAuthBundle;
-  transport?: CloneTransport;
+  transport: CloneTransport;
 }): Promise<{ cloneUrl: string; pin: string; ref?: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const { source } = args;
@@ -1087,12 +1055,9 @@ async function resolveRemotePin(
       ...(withAuth && auth !== undefined && { auth }),
     }),
   });
-  const answer =
-    transport === undefined
-      ? await ask(networkCloneUrl(source), true)
-      : await askOverPlan(await transport.plan(), (attempt) =>
-          ask(attempt.url, attempt.transport === "https"),
-        );
+  const answer = await askOverPlan(await transport.plan(), (attempt) =>
+    ask(attempt.url, attempt.transport === "https"),
+  );
   return requireRemotePin(answer, source.ref);
 }
 

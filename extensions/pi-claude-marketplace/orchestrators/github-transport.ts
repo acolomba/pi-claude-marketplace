@@ -7,6 +7,7 @@
 // command. The module names no git surface: the caller passes the attempt and
 // the port, so it stays outside NETWORK_SEAMS (NFR-5).
 
+import { planPluginClone } from "../domain/github-plugin-transport.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage, GitHubTransportsFailedError } from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost } from "../shared/github-base-url.ts";
@@ -20,6 +21,7 @@ import type {
   TransportForce,
   TransportPlan,
 } from "../domain/github-transport.ts";
+import type { GitBackedSource } from "../domain/source.ts";
 import type { GitHubTransportAttemptFailure } from "../shared/errors.ts";
 import type { CloneNoteKind, CloneTransportNote } from "../shared/notification-types.ts";
 
@@ -263,6 +265,30 @@ export interface CloneTransport {
   readonly notes: GitHubCloneNotes;
   /** The subject of the row that reports the clone, such as `<plugin>@<marketplace>`. */
   readonly subject: string;
+}
+
+/**
+ * D-SG-18, D-SG-19: the clone transport of one plugin `source` under a
+ * command's `context`. The plan reads the context's force, checks, and
+ * platform only when a clone step asks for it, and the clone's note goes to
+ * the context's notes under `subject`, `<plugin>@<marketplace>`.
+ */
+export function pluginCloneTransport(
+  context: PluginTransportContext,
+  source: GitBackedSource,
+  subject: string,
+): CloneTransport {
+  return {
+    plan: () =>
+      planPluginClone({
+        source,
+        force: context.force,
+        checks: context.checks,
+        platform: context.platform,
+      }),
+    notes: context.notes,
+    subject,
+  };
 }
 
 // A function that runs `answer` the first time it is called and gives that

@@ -12,6 +12,7 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -42,6 +43,10 @@ import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type {
+  CloneTransport,
+  PluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { RenameOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts";
 import type {
   GitAuthBundle,
@@ -2885,3 +2890,302 @@ for (const { implementation, inventory, row } of [
     });
   });
 }
+
+// ─── OQ-7, D-SG-19: one GitHub transport context per fetch command ──────────
+
+/**
+ * OQ-7: a transport context whose user has no ssh setting and whose probe
+ * finds no configured ssh, so an `owner/repo` plan clones over HTTPS first.
+ * `probes` counts the probes.
+ */
+function httpsFirstContext(probes: { count: number }): PluginTransportContext {
+  return createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: () => {
+        probes.count += 1;
+        return Promise.resolve("not-configured");
+      },
+      userOverride: () => Promise.resolve(false),
+      urlRewritten: () => Promise.resolve({ rewritten: false, exitCode: 1 }),
+      showsDirectGitHub: () => Promise.resolve({ kind: "ran", direct: true, exitCode: 0 }),
+      showsDirectGitHubThroughGit: () => Promise.resolve(true),
+    },
+  });
+}
+
+/** What one clone-cache call received as its transport. */
+interface SeenTransport {
+  readonly call: string;
+  readonly subject: string | undefined;
+  readonly sharesNotes: boolean;
+  readonly first: string | undefined;
+}
+
+/**
+ * OQ-7: a seam that clones nothing. Each call records the transport it got
+ * and makes its plan, as a clone step would, so the context's checks run.
+ */
+function transportRecordingSeam(
+  cwd: string,
+  contexts: readonly PluginTransportContext[],
+  seen: SeenTransport[],
+): FetchCloneCacheSeam {
+  const record = async (call: string, transport: CloneTransport | undefined): Promise<void> => {
+    seen.push({
+      call,
+      subject: transport?.subject,
+      sharesNotes: transport !== undefined && transport.notes === contexts[0]?.notes,
+      first: transport === undefined ? undefined : (await transport.plan()).first.url,
+    });
+  };
+
+  return {
+    async materializeOrRefreshPluginMirror(args) {
+      await record("mirror", args.transport);
+      return { pluginRoot: path.join(cwd, "not-written"), resolvedSha: "a".repeat(40) };
+    },
+    async materializePluginClone(args) {
+      await record("clone", args.transport);
+      return path.join(cwd, "not-written");
+    },
+    async resolvePluginPin(args) {
+      await record("resolve", args.transport);
+      return { cloneUrl: "https://github.com/acme/pinned", pin: args.source.sha ?? "missing" };
+    },
+  };
+}
+
+test("OQ-7, D-SG-19: a fetch makes one transport context, and every clone-cache call of its sweep plans over it", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        { name: "pinned", source: { source: "github", repo: "acme/pinned", sha: "8".repeat(40) } },
+        { name: "moving", source: { source: "github", repo: "acme/moving" } },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const probes = { count: 0 };
+    const contexts: PluginTransportContext[] = [];
+    const seen: SeenTransport[] = [];
+    const fetchWithContexts = createFetchPlugins(
+      { makePresenceProbe, resolveListCandidate },
+      () => {
+        const context = httpsFirstContext(probes);
+        contexts.push(context);
+        return context;
+      },
+    );
+    const boundary = notificationBoundary("one transport context");
+
+    // act
+    await fetchWithContexts({
+      cloneCacheSeam: transportRecordingSeam(cwd, contexts, seen),
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "marketplace", marketplace: "marketplace" },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { made: contexts.length, probes: probes.count, seen },
+      {
+        made: 1,
+        probes: 1,
+        seen: [
+          {
+            call: "resolve",
+            subject: "pinned@marketplace",
+            sharesNotes: true,
+            first: "https://github.com/acme/pinned.git",
+          },
+          {
+            call: "clone",
+            subject: "pinned@marketplace",
+            sharesNotes: true,
+            first: "https://github.com/acme/pinned.git",
+          },
+          {
+            call: "mirror",
+            subject: "moving@marketplace",
+            sharesNotes: true,
+            first: "https://github.com/acme/moving.git",
+          },
+        ],
+      },
+    );
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message:
+          "● marketplace [project]\n  ◌ pinned (remote)\n  ◌ moving (remote)\n\nPlugin fetch: 2 successes",
+      },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
+test("OQ-7: a fetch given a transport context plans over it and makes none", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "moving", source: { source: "github", repo: "acme/moving" } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const probes = { count: 0 };
+    const given = httpsFirstContext(probes);
+    let made = 0;
+    const seen: SeenTransport[] = [];
+    const fetchWithContexts = createFetchPlugins(
+      { makePresenceProbe, resolveListCandidate },
+      () => {
+        made += 1;
+        return httpsFirstContext(probes);
+      },
+    );
+    const boundary = notificationBoundary("given transport context");
+
+    // act
+    await fetchWithContexts({
+      cloneCacheSeam: transportRecordingSeam(cwd, [given], seen),
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "moving" },
+      transportContext: given,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { made, probes: probes.count, seen },
+      {
+        made: 0,
+        probes: 1,
+        seen: [
+          {
+            call: "mirror",
+            subject: "moving@marketplace",
+            sharesNotes: true,
+            first: "https://github.com/acme/moving.git",
+          },
+        ],
+      },
+    );
+    verifyNotifications(boundary);
+  });
+});
+
+test("D-SG-19: two fetch commands make two transport contexts", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "moving", source: { source: "github", repo: "acme/moving" } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const probes = { count: 0 };
+    const contexts: PluginTransportContext[] = [];
+    const fetchWithContexts = createFetchPlugins(
+      { makePresenceProbe, resolveListCandidate },
+      () => {
+        const context = httpsFirstContext(probes);
+        contexts.push(context);
+        return context;
+      },
+    );
+    const fetchOnce = async (): Promise<void> => {
+      const boundary = notificationBoundary("one of two fetches");
+      await fetchWithContexts({
+        cloneCacheSeam: transportRecordingSeam(cwd, [], []),
+        credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+        ctx: boundary.ctx,
+        cwd,
+        run: boundary.run,
+        scope: "project",
+        target: { kind: "plugin", marketplace: "marketplace", plugin: "moving" },
+      });
+      verifyNotifications(boundary);
+    };
+
+    // act
+    await fetchOnce();
+    await fetchOnce();
+
+    // assert
+    assert.deepStrictEqual(
+      { made: contexts.length, distinct: contexts[0] !== contexts[1], probes: probes.count },
+      { made: 2, distinct: true, probes: 2 },
+    );
+  });
+});
+
+test("NFR-5: a fetch of a pinned github plugin whose clone is warm asks no transport check", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const pin = "9".repeat(40);
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        {
+          name: "warm",
+          source: { source: "github", repo: "acme/warm", sha: pin },
+          version: "1.0.0",
+        },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    await writePluginTree(
+      await locations.pluginCloneDir(pluginCloneKey("https://github.com/acme/warm", pin)),
+      "warm",
+      "1.0.0",
+    );
+    const unasked = (): Promise<never> => Promise.reject(new Error("no plan is made"));
+    const seen: SeenTransport[] = [];
+    const boundary = notificationBoundary("warm pinned github");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: transportRecordingSeam(cwd, [], seen),
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "warm" },
+      transportContext: createPluginTransportContext({
+        env: {},
+        platform: "linux",
+        ssh: {
+          probe: unasked,
+          userOverride: unasked,
+          urlRewritten: unasked,
+          showsDirectGitHub: unasked,
+          showsDirectGitHubThroughGit: unasked,
+        },
+      }),
+    });
+
+    // assert
+    assert.deepStrictEqual(seen, []);
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● marketplace [project]\n  ⊘ warm v1.0.0 (skipped) {up-to-date}" },
+    ]);
+    verifyNotifications(boundary);
+  });
+});

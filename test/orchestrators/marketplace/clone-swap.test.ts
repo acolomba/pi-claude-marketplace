@@ -4,7 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { planMarketplaceClone } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
+import {
+  addressTransport,
+  planMarketplaceClone,
+} from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import {
   githubSource,
   parsePluginSource,
@@ -18,7 +21,6 @@ import {
   keepMarketplaceOnFailure,
   MARKETPLACE_MANIFEST_MARKER,
   marketplaceRefreshPlans,
-  oneAttemptPlans,
   ownershipMarkerPath,
   refreshCloneBySwap,
   type CloneSwapArgs,
@@ -38,6 +40,7 @@ import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shar
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
+import type { TransportPlan } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -130,6 +133,19 @@ function gitAt(options: {
       ? {}
       : { resolveRemoteRefError: options.lsRemoteError }),
   });
+}
+
+/**
+ * OQ-4: the plans of a refresh that lists and clones `url` once, with no
+ * note, over the transport git uses for it.
+ */
+function oneAttemptPlans(url: string): RefreshPlans {
+  const plan = (): Promise<TransportPlan> =>
+    Promise.resolve({
+      first: { transport: addressTransport(url), url },
+      after: () => Promise.resolve(undefined),
+    });
+  return { freshness: plan, reclone: plan };
 }
 
 function swapArgs(

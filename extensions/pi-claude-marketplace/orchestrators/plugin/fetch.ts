@@ -14,6 +14,9 @@
 //   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
 //     `authMemo` so a bulk sweep triggers each host's device flow at most once
 //     (FTCH-06).
+//   - transport: one GitHub transport context per fetch command, made beside
+//     the `authMemo`, so every clone of the sweep plans over it and the
+//     command probes once (OQ-7, D-SG-19).
 //   - classification: the fs-only presence probe (`makePresenceProbe`) for the
 //     no-op gate, and `list`'s own rule (`resolveListCandidate`) for every row
 //     that shows a status or a version, so a fetch row reads as the `list` row
@@ -57,6 +60,8 @@ import {
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import { pluginCloneTransport } from "../github-transport.ts";
+import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import {
   canonicalCloneUrl,
@@ -76,6 +81,7 @@ import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { makePresenceProbe } from "./git-source-probe.ts";
 import type { ListCandidate, resolveListCandidate } from "./list-candidate-version.ts";
 
@@ -131,6 +137,11 @@ export interface FetchPluginsOptions {
   readonly credentialOps?: CredentialOps;
   /** Device Flow HTTP seam; callers can inject a network-free collaborator. */
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  /**
+   * OQ-7, D-SG-19: the command's GitHub transport context. Omitted, the fetch
+   * makes one for the command.
+   */
+  readonly transportContext?: PluginTransportContext;
 }
 
 /**
@@ -141,10 +152,13 @@ export interface FetchPluginsOptions {
  * renders one cascade block per (scope, marketplace). A single authMemo spans
  * the whole sweep (once-per-host). A per-plugin failure is captured as a
  * `(failed)` row, and a manifest-load failure as a per-marketplace `(failed)`
- * block -- neither aborts the sweep.
+ * block -- neither aborts the sweep. OQ-7, D-SG-19: the sweep also shares one
+ * transport context, the caller's or one `newTransportContext` makes, so every
+ * clone of the command plans over the same checks and the command probes once.
  */
 export function createFetchPlugins(
   status: FetchStatus,
+  newTransportContext: () => PluginTransportContext = defaultPluginTransportContext,
 ): (opts: FetchPluginsOptions) => Promise<void> {
   return async function fetchPlugins(opts: FetchPluginsOptions): Promise<void> {
     const { ctx, run } = opts;
@@ -155,6 +169,7 @@ export function createFetchPlugins(
     // N private-host plugins triggers each host's device flow at most once. A
     // per-plugin memo would re-trigger the flow N times.
     const authMemo = new Map<string, AuthAttemptResult>();
+    const transportContext = opts.transportContext ?? newTransportContext();
     const seam = opts.cloneCacheSeam ?? {
       resolvePluginPin,
       materializePluginClone,
@@ -187,6 +202,7 @@ export function createFetchPlugins(
         status,
         credentialOps,
         authMemo,
+        transportContext,
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       });
       pushRow(target.scope, target.marketplace, row);
@@ -337,6 +353,7 @@ interface FetchOneDeps {
   readonly status: FetchStatus;
   readonly credentialOps: CredentialOps;
   readonly authMemo: Map<string, AuthAttemptResult>;
+  readonly transportContext: PluginTransportContext;
   readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 
@@ -385,7 +402,12 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
   const gitSource: GitBackedSource = source;
   let rowRead = false;
   const fetchAndRead = async (): Promise<FetchMsg> => {
-    await materializeThroughSeam(gitSource, deps, locations);
+    const transport = pluginCloneTransport(
+      deps.transportContext,
+      gitSource,
+      `${entry.name}@${target.marketplace}`,
+    );
+    await materializeThroughSeam(gitSource, deps, locations, transport);
     const row = freshRow(entry, await readCandidate(), deps.run.softDeps.mcpImplementation);
     rowRead = true;
     return row;
@@ -421,12 +443,14 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
  * sources refresh the single mutable URL-keyed mirror in place. Both arms thread
  * the host-keyed auth bundle (once-per-host via the shared authMemo). Mirrors
  * install's `makeInstallCloneProbe` structure; fetch reaches the git surface
- * only through the seam.
+ * only through the seam. OQ-7: every call gets `transport`, so the pin's
+ * `ls-remote`, the clone, and a mirror refresh walk one plan.
  */
 async function materializeThroughSeam(
   gitSource: GitBackedSource,
   deps: FetchOneDeps,
   locations: ScopedLocations,
+  transport: CloneTransport,
 ): Promise<void> {
   if (gitSource.sha === undefined) {
     const cloneUrl = canonicalCloneUrl(gitSource);
@@ -434,21 +458,24 @@ async function materializeThroughSeam(
     await deps.seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
-      networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
       auth,
+      transport,
     });
     return;
   }
 
-  const { cloneUrl, pin, ref } = await deps.seam.resolvePluginPin({ source: gitSource });
+  const { cloneUrl, pin, ref } = await deps.seam.resolvePluginPin({
+    source: gitSource,
+    transport,
+  });
   await deps.seam.materializePluginClone({
     locations,
     cloneUrl,
-    networkUrl: networkCloneUrl(gitSource),
     pin,
     ...(ref !== undefined && { ref }),
     resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, deps),
+    transport,
   });
 }
 

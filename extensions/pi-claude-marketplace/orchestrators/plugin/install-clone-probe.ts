@@ -1,7 +1,7 @@
-import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
-import { planPluginClone } from "../../domain/github-plugin-transport.ts";
+import { canonicalCloneUrl } from "../../domain/clone-key.ts";
 import { buildCloneAuth } from "../auth-host.ts";
-import { createGitHubCloneNotes, transportForce } from "../github-transport.ts";
+import { pluginCloneTransport } from "../github-transport.ts";
+import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import {
   materializeOrRefreshPluginMirror,
@@ -43,8 +43,9 @@ export interface InstallCloneProbeOptions {
   };
   /**
    * D-SG-18: the command's transport context, whose checks and notes every
-   * clone of the command shares. Omitted, the clone stays on SSH unless the
-   * environment forces HTTPS.
+   * clone of the command shares. Omitted, the call makes one of its own, so
+   * the clone still follows the install's checks. Every command root passes
+   * one, so only a direct caller of the guard-free ledger omits it.
    */
   readonly transportContext?: PluginTransportContext;
   /** D-SG-22: the subject of the row that reports the clone, `<plugin>@<marketplace>`. */
@@ -59,31 +60,17 @@ const REAL_INSTALL_CLONE_CACHE_SEAM: InstallCloneCacheSeam = {
 };
 
 /**
- * D-SG-18: the clone transport of one install source. With a context, the
- * plan reads its force, its checks, and its platform (SG-SSH-05), and the
- * note goes to its notes. With
- * none, the plan reads the force of this process's environment, as Claude
- * Code reads its HTTPS switch before it looks for a context (upstream `zHi`),
- * and has no checks, so a GitHub clone stays on SSH unless forced; its note
- * goes nowhere.
+ * D-SG-18, D-SG-19: the clone transport of one install source. The plan
+ * reads the context's force, its checks, and its platform (SG-SSH-05), and
+ * the note goes to its notes. With no context, the call makes one, so no
+ * clone stays on SSH for want of a context.
  */
 function installCloneTransport(options: InstallCloneProbeOptions): CloneTransport {
-  const context = options.transportContext;
-  return {
-    plan: () =>
-      planPluginClone(
-        context === undefined
-          ? { source: options.source, force: transportForce(process.env) }
-          : {
-              source: options.source,
-              force: context.force,
-              checks: context.checks,
-              platform: context.platform,
-            },
-      ),
-    notes: context?.notes ?? createGitHubCloneNotes(),
-    subject: options.subject,
-  };
+  return pluginCloneTransport(
+    options.transportContext ?? defaultPluginTransportContext(),
+    options.source,
+    options.subject,
+  );
 }
 
 /**
@@ -123,11 +110,10 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     };
   }
 
-  const pin = await seam.resolvePluginPin({ source });
+  const pin = await seam.resolvePluginPin({ source, transport });
   const cloneRoot = await seam.materializePluginClone({
     locations,
     cloneUrl: pin.cloneUrl,
-    networkUrl: networkCloneUrl(source),
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
     resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),

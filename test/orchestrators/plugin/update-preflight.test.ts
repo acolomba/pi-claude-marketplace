@@ -2200,20 +2200,20 @@ test("UPD-DEP-D1: a candidate at another version than the dependency plan chose 
 test("sends the unpinned mirror the identity url and the typed wire url", async (t) => {
   // arrange
   // D-2-01 / D-2-03: the manifest url carries a `.git`, so the mirror seam's
-  // identity `cloneUrl` and wire `networkUrl` arguments differ.
+  // identity `cloneUrl` and the wire url its transport plans differ.
   const mirrorSha = "3333333333333333333333333333333333333333";
   const seed = await seedUpdate({
     installed: pluginRecord("sha-000000000000"),
     source: { source: "url", url: "https://example.com/mirror.git" },
   });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
-  const mirrorCalls: { readonly cloneUrl: string; readonly networkUrl: string }[] = [];
+  const mirrorCalls: { readonly cloneUrl: string; readonly wireUrl: string }[] = [];
   const cloneCacheSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
-    materializeOrRefreshPluginMirror: ({ cloneUrl, networkUrl }) => {
-      mirrorCalls.push({ cloneUrl, networkUrl });
-      return Promise.resolve({ pluginRoot: seed.pluginRoot, resolvedSha: mirrorSha });
+    materializeOrRefreshPluginMirror: async ({ cloneUrl, transport }) => {
+      mirrorCalls.push({ cloneUrl, wireUrl: (await transport.plan()).first.url });
+      return { pluginRoot: seed.pluginRoot, resolvedSha: mirrorSha };
     },
     materializePluginCommitCopy: () => Promise.resolve(seed.pluginRoot),
   };
@@ -2225,7 +2225,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
   assert.deepStrictEqual(mirrorCalls, [
     {
       cloneUrl: "https://example.com/mirror",
-      networkUrl: "https://example.com/mirror.git",
+      wireUrl: "https://example.com/mirror.git",
     },
   ]);
   assert.ok(!("partition" in prepared));
@@ -3238,8 +3238,12 @@ test("D-SG-19, OQ-4: a pinned github update source resolves its pin and clones o
   });
 });
 
-test("D-SG-19: an update source with no transport context gives no clone step a transport", async (t) => {
+test("D-SG-19: an update source with no transport context plans every clone step over the install's checks", async (t) => {
   // arrange
+  // The run's ssh stand-in finds no configured key and shows a direct hop,
+  // and nothing forces https, so a context made for the preflight lets https
+  // go first.
+  setGitHubBaseUrl(t, undefined);
   const sha = "7777777777777777777777777777777777777777";
   const pinned = await seedUpdate({
     installed: pluginRecord("sha-000000000000"),
@@ -3252,23 +3256,28 @@ test("D-SG-19: an update source with no transport context gives no clone step a 
   t.after(() =>
     Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
   );
-  const carried: boolean[] = [];
+  const planned: unknown[] = [];
+  const record = async (step: string, transport: CloneTransport): Promise<void> => {
+    const plan = await transport.plan();
+    planned.push({ step, first: plan.first.url, note: plan.note, subject: transport.subject });
+  };
+
   const cloneCacheSeam = (root: string): UpdateCloneCacheSeam => ({
-    resolvePluginPin: (options) => {
-      carried.push("transport" in options);
-      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha });
+    resolvePluginPin: async (options) => {
+      await record("pin", options.transport);
+      return { cloneUrl: "https://github.com/org/repo", pin: sha };
     },
-    materializePluginClone: (options) => {
-      carried.push("transport" in options);
-      return Promise.resolve(root);
+    materializePluginClone: async (options) => {
+      await record("clone", options.transport);
+      return root;
     },
-    materializeOrRefreshPluginMirror: (options) => {
-      carried.push("transport" in options);
-      return Promise.resolve({ pluginRoot: root, resolvedSha: sha });
+    materializeOrRefreshPluginMirror: async (options) => {
+      await record("mirror", options.transport);
+      return { pluginRoot: root, resolvedSha: sha };
     },
-    materializePluginCommitCopy: (options) => {
-      carried.push("transport" in options);
-      return Promise.resolve(root);
+    materializePluginCommitCopy: async (options) => {
+      await record("copy", options.transport);
+      return root;
     },
   });
 
@@ -3283,5 +3292,14 @@ test("D-SG-19: an update source with no transport context gives no clone step a 
   });
 
   // assert
-  assert.deepStrictEqual(carried, [false, false, false, false]);
+  const https = "https://github.com/org/repo.git";
+  assert.deepStrictEqual(
+    planned,
+    ["pin", "clone", "mirror", "copy"].map((step) => ({
+      step,
+      first: https,
+      note: "ssh-not-configured",
+      subject: "hello@mp",
+    })),
+  );
 });

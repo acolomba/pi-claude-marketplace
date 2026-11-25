@@ -115,7 +115,12 @@ import {
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
-import { crossScopeFlag, marketplaceNotAddedMessage } from "../marketplace/shared.ts";
+import { pluginCloneTransport } from "../github-transport.ts";
+import {
+  crossScopeFlag,
+  defaultPluginTransportContext,
+  marketplaceNotAddedMessage,
+} from "../marketplace/shared.ts";
 import {
   legacyServersSourceFor,
   readLegacyServers,
@@ -127,7 +132,6 @@ import {
   canonicalCloneUrl,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
-  networkCloneUrl,
   resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
@@ -154,6 +158,7 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { WorkflowNoteScript } from "./discover-names.ts";
 import type { Dirent } from "node:fs";
 
@@ -214,6 +219,11 @@ export interface GetPluginInfoOptions {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   /** FTCH-06 / D-79-02 once-per-host auth memo. */
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * OQ-7, D-SG-19: the command's GitHub transport context for `--fetch`.
+   * Omitted, `info --fetch` makes one for the command.
+   */
+  readonly transportContext?: PluginTransportContext;
 }
 
 /**
@@ -247,9 +257,15 @@ export interface InfoCloneCacheSeam {
  * options. Returns undefined unless `--fetch` was passed (so every row builder
  * stays fs-only for bare info). Production defaults to the real clone-cache
  * imports + `DEFAULT_CREDENTIAL_OPS`; tests inject mock-backed seams. The
- * command-scope auth memo caps a Device Flow at once per host (D-79-02).
+ * command-scope auth memo caps a Device Flow at once per host (D-79-02), and
+ * the command's one transport context, the caller's or one
+ * `newTransportContext` makes, gives every clone of both scopes one probe
+ * (OQ-7, D-SG-19).
  */
-function buildInfoFetchContext(opts: GetPluginInfoOptions): InfoFetchContext | undefined {
+function buildInfoFetchContext(
+  opts: GetPluginInfoOptions,
+  newTransportContext: () => PluginTransportContext,
+): InfoFetchContext | undefined {
   if (opts.fetch !== true) {
     return undefined;
   }
@@ -265,6 +281,8 @@ function buildInfoFetchContext(opts: GetPluginInfoOptions): InfoFetchContext | u
     credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
+    transportContext: opts.transportContext ?? newTransportContext(),
+    subject: `${opts.plugin}@${opts.marketplace}`,
   };
 }
 
@@ -2469,6 +2487,10 @@ interface InfoFetchContext {
   readonly credentialOps: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /** OQ-7: the command's transport context, shared by both scopes' clones. */
+  readonly transportContext: PluginTransportContext;
+  /** D-SG-22: the subject the clones note under, `<plugin>@<marketplace>`. */
+  readonly subject: string;
 }
 
 /**
@@ -2491,9 +2513,13 @@ type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
  * `install-clone-probe.ts::probeInstallClone`; the pinned/unpinned fork lives inside the
  * callback so info still names no git surface (it reaches the seam only by name).
  * The probe takes no lock itself: the row builders run it and the row read in
- * one locked body (`runFetchLocked`, GLK-05).
+ * one locked body (`runFetchLocked`, GLK-05). OQ-7: every clone-cache call
+ * gets a transport over the command's context, the pin's `ls-remote` included.
  */
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
+  const transportOf = (gitSource: GitBackedSource): CloneTransport =>
+    pluginCloneTransport(fetchCtx.transportContext, gitSource, fetchCtx.subject);
+
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
@@ -2501,22 +2527,26 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
       await fetchCtx.seam.materializeOrRefreshPluginMirror({
         locations,
         cloneUrl,
-        networkUrl: networkCloneUrl(gitSource),
         ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
         auth: authBundle,
+        transport: transportOf(gitSource),
       });
     return resolveGitPluginRootWithSubdir(gitSource, mirrorRoot, resolvedSha);
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
-    const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
+    const transport = transportOf(gitSource);
+    const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({
+      source: gitSource,
+      transport,
+    });
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
       locations,
       cloneUrl,
-      networkUrl: networkCloneUrl(gitSource),
       pin,
       ...(ref !== undefined && { ref }),
       resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx),
+      transport,
     });
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   }
@@ -3641,6 +3671,7 @@ async function readProjectInstallRecord(
 async function getPluginInfoWithReader(
   reader: PluginInfoReader,
   env: ClaudeEnv,
+  newTransportContext: () => PluginTransportContext,
   opts: GetPluginInfoOptions,
 ): Promise<void> {
   // INFO-03 iteration order: project-first per MSG-GR-3 when both
@@ -3652,7 +3683,7 @@ async function getPluginInfoWithReader(
   // miss when pinned, on the mirror refresh when unpinned -- MIRR-02) before
   // resolving. Omitted `fetch` leaves it undefined -> every row builder stays
   // on the fs-only presence probe (bare info is network-free).
-  const fetchCtx = buildInfoFetchContext(opts);
+  const fetchCtx = buildInfoFetchContext(opts, newTransportContext);
 
   // Collect (scope, record) tuples so the fan-out renderer preserves the
   // outer-loop iteration order. The fan-out itself is shared with the
@@ -3802,11 +3833,13 @@ async function getPluginInfoWithReader(
  * Creates the plugin-info command with an explicit read-only filesystem
  * capability. `env` is the environment the MCP server variable lists are
  * computed from (AVAR-04, AVAR-05); production passes Pi's process
- * environment.
+ * environment. `newTransportContext` makes the one transport context of an
+ * `info --fetch` command whose caller gives none (OQ-7, D-SG-19).
  */
 export function createGetPluginInfo(
   reader: PluginInfoReader,
   env: ClaudeEnv = process.env,
+  newTransportContext: () => PluginTransportContext = defaultPluginTransportContext,
 ): (opts: GetPluginInfoOptions) => Promise<void> {
-  return (opts) => getPluginInfoWithReader(reader, env, opts);
+  return (opts) => getPluginInfoWithReader(reader, env, newTransportContext, opts);
 }

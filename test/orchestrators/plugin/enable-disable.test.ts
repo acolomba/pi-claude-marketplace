@@ -22,6 +22,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { createSetPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
@@ -56,6 +57,7 @@ import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type { PluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type {
   EnableDisableTransaction,
   EnableDisablePluginOptions,
@@ -9830,5 +9832,183 @@ test("D-PL1-12: an orchestrated enable whose save fails after the root's ledger 
       cause: "state save denied",
     });
     assert.deepStrictEqual(notifications, []);
+  });
+});
+
+// ─── D-SG-19: one GitHub transport context per enable command ───────────────
+
+/** D-SG-19: a transport context whose checks must not run, for a case that clones nothing. */
+function unplannedTransportContext(): PluginTransportContext {
+  const unasked = (): Promise<never> => Promise.reject(new Error("no plan is made"));
+  return createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: unasked,
+      userOverride: unasked,
+      urlRewritten: unasked,
+      showsDirectGitHub: unasked,
+      showsDirectGitHubThroughGit: unasked,
+    },
+  });
+}
+
+/**
+ * D-SG-19: a transaction whose install ledger records, per plugin, the
+ * transport context its options carry, then runs the real ledger.
+ */
+function contextRecordingTransaction(
+  received: Array<{ readonly plugin: string; readonly context: unknown }>,
+): EnableDisableTransaction {
+  return {
+    ...REAL_ENABLE_DISABLE_TRANSACTION,
+    runInstallLedger(state, locations, options, capture) {
+      received.push({ plugin: options.plugin, context: options.transportContext });
+      return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
+    },
+  };
+}
+
+test("D-SG-19: an enable makes one transport context and gives it to the root's and every re-enabled member's ledger", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const made: PluginTransportContext[] = [];
+    const received: Array<{ readonly plugin: string; readonly context: unknown }> = [];
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      contextRecordingTransaction(received),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      process.env,
+      () => {
+        const context = unplannedTransportContext();
+        made.push(context);
+        return context;
+      },
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(made.length, 1);
+    assert.deepStrictEqual(
+      received.map(({ plugin, context }) => ({ plugin, shared: context === made[0] })),
+      [
+        { plugin: "b", shared: true },
+        { plugin: "a", shared: true },
+      ],
+    );
+  });
+});
+
+test("D-SG-19: an enable given a transport context passes it to every ledger and makes none", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const given = unplannedTransportContext();
+    let made = 0;
+    const received: Array<{ readonly plugin: string; readonly context: unknown }> = [];
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      contextRecordingTransaction(received),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      process.env,
+      () => {
+        made += 1;
+        return unplannedTransportContext();
+      },
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+      transportContext: given,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        made,
+        received: received.map(({ plugin, context }) => ({ plugin, given: context === given })),
+      },
+      {
+        made: 0,
+        received: [
+          { plugin: "b", given: true },
+          { plugin: "a", given: true },
+        ],
+      },
+    );
+  });
+});
+
+test("D-SG-19: two enable commands make two transport contexts", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const made: PluginTransportContext[] = [];
+    const received: Array<{ readonly plugin: string; readonly context: unknown }> = [];
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      contextRecordingTransaction(received),
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      process.env,
+      () => {
+        const context = unplannedTransportContext();
+        made.push(context);
+        return context;
+      },
+    );
+    const enable = async (plugin: string): Promise<void> => {
+      const { ctx } = makeCtx(cwd);
+      await setPluginEnabledForOwner({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "official",
+        plugin,
+        enable: true,
+        scope: "user",
+      });
+    };
+
+    // act
+    await enable("a");
+    await enable("b");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        made: made.length,
+        plugins: received.map(({ plugin }) => plugin),
+        firstOwn: received[0]?.context === made[0],
+        secondOwn: received[1]?.context === made[1],
+        distinct: made[0] !== made[1],
+      },
+      { made: 2, plugins: ["a", "b"], firstOwn: true, secondOwn: true, distinct: true },
+    );
   });
 });

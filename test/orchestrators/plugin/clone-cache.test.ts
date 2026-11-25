@@ -19,6 +19,7 @@ import {
   pluginCloneKey,
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { addressTransport } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import {
   githubSource,
   pathSource,
@@ -32,6 +33,7 @@ import {
   materializePluginClone,
   materializePluginCommitCopy,
   materializeUnpinnedSource,
+  networkCloneUrl,
   resolveGitPluginRootWithSubdir,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -81,6 +83,27 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+
+/**
+ * OQ-4: a clone transport of one attempt of `url` as written, over the
+ * transport git uses for it, with no retry.
+ */
+function oneAttempt(url: string): CloneTransport {
+  return {
+    plan: () =>
+      Promise.resolve({
+        first: { transport: addressTransport(url), url },
+        after: () => Promise.resolve(undefined),
+      }),
+    notes: createGitHubCloneNotes(),
+    subject: "repo@gits",
+  };
+}
+
+/** OQ-4: the one-attempt transport of `source`'s wire url, as written. */
+function asWritten(source: GitBackedSource): CloneTransport {
+  return oneAttempt(networkCloneUrl(source));
+}
 
 const PIN_40 = "1234567890abcdef1234567890abcdef12345678";
 const PIN2_40 = "abcdef1234567890abcdef1234567890abcdef12";
@@ -240,7 +263,7 @@ void test("PURL-02: a warm cache uses the default git surface without making a g
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     pin: PIN_40,
   });
 
@@ -259,7 +282,7 @@ void test("D-77-04: a pinned source uses the default git surface without remote 
   };
 
   // act
-  const resolved = await resolvePluginPin({ source });
+  const resolved = await resolvePluginPin({ source, transport: asWritten(source) });
 
   // assert
   assert.deepEqual(resolved, {
@@ -277,7 +300,7 @@ void test("PURL-02/04: materializePluginClone clones into staging, checks out th
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin: PIN_40,
     gitOps,
     onCloneCreated: (key) => created.push(key),
@@ -307,7 +330,7 @@ void test("PURL-04: a second materialize of the same url+sha triggers zero addit
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin: PIN_40,
     gitOps,
   });
@@ -315,7 +338,7 @@ void test("PURL-04: a second materialize of the same url+sha triggers zero addit
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin: PIN_40,
     gitOps,
   });
@@ -344,7 +367,7 @@ void test("PURL-02: a warm cache returns offline even when gitOps.clone throws",
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin: PIN_40,
     gitOps,
   });
@@ -366,7 +389,7 @@ void test("NFR-5: a warm cache returns without building the auth bundle", async 
     },
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin: PIN_40,
     gitOps,
   });
@@ -390,7 +413,7 @@ void test("a cold key whose auth bundle cannot be built fails before any clone",
       },
       locations,
       cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
+      transport: oneAttempt("https://example.com/repo"),
       pin: PIN_40,
       gitOps,
     }),
@@ -407,7 +430,7 @@ void test("C5: sha wins over ref -- the clone names no branch, the commit fetch 
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin: PIN_40,
     ref: "v2.0.0",
     gitOps,
@@ -474,7 +497,7 @@ function materializeExamplePin(
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin,
     ...(ref !== undefined && { ref }),
     gitOps,
@@ -657,7 +680,7 @@ void test("PROV-03: the commit fetch threads the auth bundle so a private pin au
   await materializePluginClone({
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
-    networkUrl: "https://gitlab.example.com/o/r",
+    transport: oneAttempt("https://gitlab.example.com/o/r"),
     pin: PIN_40,
     gitOps,
     resolveAuth: () => auth,
@@ -700,7 +723,7 @@ async function materializeOnSystemGit(
       resolveAuth: publicCloneAuth,
       locations,
       cloneUrl: args.url,
-      networkUrl: args.url,
+      transport: oneAttempt(args.url),
       pin: args.pin,
       ...(args.ref !== undefined && { ref: args.ref }),
       gitOps: systemGitOps(recorded.gitProcess),
@@ -828,7 +851,7 @@ void test("PROV-03: materializePluginClone with an auth bundle threads it to git
   await materializePluginClone({
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
-    networkUrl: "https://gitlab.example.com/o/r",
+    transport: oneAttempt("https://gitlab.example.com/o/r"),
     pin: PIN_40,
     gitOps,
     resolveAuth: () => auth,
@@ -865,7 +888,7 @@ void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)"
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     pin: PIN_40,
     gitOps: racingGitOps,
   });
@@ -892,7 +915,7 @@ void test("MA-9: a non-race promotion failure cleans staging and preserves the r
       resolveAuth: publicCloneAuth,
       locations,
       cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
+      transport: oneAttempt("https://example.com/repo"),
       pin: PIN_40,
       gitOps,
     });
@@ -916,7 +939,7 @@ void test("MA-9: a clone failure cleans staging and rethrows with the leak suffi
         resolveAuth: publicCloneAuth,
         locations,
         cloneUrl: "https://example.com/repo",
-        networkUrl: "https://example.com/repo",
+        transport: oneAttempt("https://example.com/repo"),
         pin: PIN_40,
         gitOps,
       }),
@@ -940,7 +963,7 @@ void test("D-77-05: resolvePluginPin resolves an unpinned source's remote HEAD t
     url: "https://example.com/repo",
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(resolved.cloneUrl, "https://example.com/repo");
   assert.equal(resolved.pin, HEAD, "unpinned pin = remote HEAD");
@@ -970,7 +993,7 @@ void test("PROV-03 (Q1): resolvePluginPin forwards an auth bundle into resolveRe
     url: "https://gitlab.example.com/o/r",
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps, auth });
+  const resolved = await resolvePluginPin({ source, gitOps, auth, transport: asWritten(source) });
 
   assert.equal(resolved.pin, HEAD);
   assert.equal(state.resolveRemoteRefCalls.length, 1);
@@ -989,7 +1012,7 @@ void test("PROV-02: resolvePluginPin with NO auth records a bare resolveRemoteRe
     url: "https://example.com/repo",
   };
 
-  await resolvePluginPin({ source, gitOps });
+  await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(state.resolveRemoteRefCalls.length, 1, "MURL-09: exactly one attempt");
   assert.deepEqual(state.resolveRemoteRefCalls, [{ url: "https://example.com/repo" }]);
@@ -1006,7 +1029,7 @@ void test("Pitfall: resolvePluginPin does NOT call resolveRemoteRef when a sha i
     sha: PIN2_40,
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(resolved.pin, PIN2_40, "pin = the source sha");
   assert.equal(state.resolveRemoteRefCalls.length, 0, "no remote resolution when sha is pinned");
@@ -1025,7 +1048,7 @@ void test("D-77-05: resolvePluginPin resolves a ref (no sha) to its remote sha",
     ref: "v1.0.0",
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(resolved.pin, TAG, "pin = the ref's resolved sha");
   assert.equal(resolved.ref, "v1.0.0", "ref returned as the fetch hint");
@@ -1055,7 +1078,7 @@ void test("PROV-03: resolvePluginPin forwards auth while resolving a named priva
   };
 
   // act
-  const resolved = await resolvePluginPin({ source, gitOps, auth });
+  const resolved = await resolvePluginPin({ source, gitOps, auth, transport: asWritten(source) });
 
   // assert
   assert.deepEqual(resolved, {
@@ -1072,7 +1095,7 @@ void test("D-77-06: resolvePluginPin reconstructs the canonical github url", asy
   const { gitOps } = createGitOps({ remoteHead: PIN_40 });
   const source = githubSource("owner/repo");
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(resolved.cloneUrl, "https://github.com/owner/repo");
   assert.equal(resolved.pin, PIN_40);
@@ -1087,7 +1110,7 @@ void test("D-77-04: resolvePluginPin returns the git-subdir url verbatim as the 
     path: "packages/plugin-a",
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   // The clone url is the repo root; the subdir path is resolved later by the
   // resolver (git-subdir pluginRoot = cloneRoot + path).
@@ -1103,7 +1126,7 @@ void test("MURL-08 / PURL-09: resolvePluginPin sends the url as typed and still 
     url: "https://gitlab.example.com/o/r",
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(
     state.resolveRemoteRefCalls[0]?.url,
@@ -1126,7 +1149,7 @@ void test("MURL-08 / PURL-04: resolvePluginPin sends the git-subdir url to the w
     path: "packages/plugin-a",
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://example.com/mono.git");
   assert.equal(resolved.cloneUrl, "https://example.com/mono.git");
@@ -1136,7 +1159,7 @@ void test("MURL-01 / PURL-09: resolvePluginPin sends the suffixed github url and
   const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
   const source = githubSource("owner/repo");
 
-  const resolved = await resolvePluginPin({ source, gitOps });
+  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
 
   assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://github.com/owner/repo.git");
   assert.equal(resolved.cloneUrl, "https://github.com/owner/repo");
@@ -1155,7 +1178,7 @@ void test("MURL-09: resolvePluginPin makes exactly one resolveRemoteRef attempt 
   };
 
   await assert.rejects(
-    () => resolvePluginPin({ source, gitOps }),
+    () => resolvePluginPin({ source, gitOps, transport: asWritten(source) }),
     (error: unknown) => error === notFound,
   );
   assert.equal(state.resolveRemoteRefCalls.length, 1, "no retry after the 404");
@@ -1173,7 +1196,7 @@ void test("D-77-05: resolvePluginPin refuses a ref the remote does not advertise
   };
 
   // act & assert
-  await assert.rejects(() => resolvePluginPin({ source, gitOps }), {
+  await assert.rejects(() => resolvePluginPin({ source, gitOps, transport: asWritten(source) }), {
     name: "Error",
     message: 'remote https://example.com/repo has no ref "dev"',
   });
@@ -1190,7 +1213,7 @@ void test("D-77-05: resolvePluginPin refuses a remote that advertises no HEAD", 
   };
 
   // act & assert
-  await assert.rejects(() => resolvePluginPin({ source, gitOps }), {
+  await assert.rejects(() => resolvePluginPin({ source, gitOps, transport: asWritten(source) }), {
     name: "Error",
     message: "remote https://example.com/repo advertised no HEAD ref",
   });
@@ -1203,10 +1226,18 @@ void test("GHB-01: resolvePluginPin names the base URL when the base advertises 
   const gitOps: GitOps = { ...baseGitOps, resolveRemoteRef: () => Promise.resolve(undefined) };
 
   // act & assert
-  await assert.rejects(() => resolvePluginPin({ source: githubSource("owner/repo"), gitOps }), {
-    name: "Error",
-    message: "remote https://git.example.invalid/owner/repo.git advertised no HEAD ref",
-  });
+  await assert.rejects(
+    () =>
+      resolvePluginPin({
+        source: githubSource("owner/repo"),
+        gitOps,
+        transport: asWritten(githubSource("owner/repo")),
+      }),
+    {
+      name: "Error",
+      message: "remote https://git.example.invalid/owner/repo.git advertised no HEAD ref",
+    },
+  );
 });
 
 void test("MURL-08 / PURL-04: materializePluginClone forwards the caller's wire url and keys the dir off the identity url", async (t) => {
@@ -1219,7 +1250,7 @@ void test("MURL-08 / PURL-04: materializePluginClone forwards the caller's wire 
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl,
-    networkUrl: wireUrl,
+    transport: oneAttempt(wireUrl),
     pin: PIN_40,
     gitOps,
   });
@@ -1246,7 +1277,7 @@ void test("MURL-09: materializePluginClone makes exactly one clone attempt and a
         resolveAuth: publicCloneAuth,
         locations,
         cloneUrl: "https://example.com/repo",
-        networkUrl: "https://example.com/repo",
+        transport: oneAttempt("https://example.com/repo"),
         pin: PIN_40,
         gitOps,
       }),
@@ -1278,7 +1309,7 @@ void test("MIRR-01: mirror ABSENT materializes into staging then renames to plug
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
     onCloneCreated: (key) => created.push(key),
   });
@@ -1320,7 +1351,7 @@ void test("D-SG-10 / NFR-3: a cold mirror clone removes the staging directory an
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
   });
 
@@ -1351,7 +1382,7 @@ void test("MURL-08 / PURL-04: materializeOrRefreshPluginMirror forwards the call
     auth: publicCloneAuth(),
     locations,
     cloneUrl,
-    networkUrl: wireUrl,
+    transport: oneAttempt(wireUrl),
     gitOps,
   });
 
@@ -1377,7 +1408,7 @@ void test("MURL-09: materializeOrRefreshPluginMirror makes exactly one clone att
         auth: publicCloneAuth(),
         locations,
         cloneUrl: "https://example.com/repo",
-        networkUrl: "https://example.com/repo",
+        transport: oneAttempt("https://example.com/repo"),
         gitOps,
       }),
     (error: unknown) => error === notFound,
@@ -1389,6 +1420,20 @@ void test("MURL-09: materializeOrRefreshPluginMirror makes exactly one clone att
 const GITHUB_CLONE_URL = "https://github.com/owner/repo";
 const GITHUB_HTTPS = { transport: "https", url: "https://github.com/owner/repo.git" } as const;
 const GITHUB_SSH = { transport: "ssh", url: "git@github.com:owner/repo.git" } as const;
+
+// T-04-57: every clone-cache entry point requires a transport, so no clone
+// path falls back to one unplanned attempt. Making the field optional again
+// turns each directive below into an unused one (TS2578).
+// @ts-expect-error materializePluginClone requires a transport
+void ({} satisfies Pick<Parameters<typeof materializePluginClone>[0], "transport">);
+// @ts-expect-error materializeOrRefreshPluginMirror requires a transport
+void ({} satisfies Pick<Parameters<typeof materializeOrRefreshPluginMirror>[0], "transport">);
+// @ts-expect-error materializePluginCommitCopy requires a transport
+void ({} satisfies Pick<Parameters<typeof materializePluginCommitCopy>[0], "transport">);
+// @ts-expect-error materializeUnpinnedSource requires a transport
+void ({} satisfies Pick<Parameters<typeof materializeUnpinnedSource>[1], "transport">);
+// @ts-expect-error resolvePluginPin requires a transport
+void ({} satisfies Pick<Parameters<typeof resolvePluginPin>[0], "transport">);
 
 /**
  * D-SG-18: a clone transport whose plan starts with `first` and, when `then`
@@ -1457,7 +1502,6 @@ void test("D-SG-18: a pinned clone over an https-first transport clears the fail
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: GITHUB_CLONE_URL,
-    networkUrl: GITHUB_HTTPS.url,
     pin: PIN_40,
     gitOps,
     transport,
@@ -1487,7 +1531,6 @@ void test("SG-SSH-06: an ssh clone fills the directory an https clone of the sam
     resolveAuth: publicCloneAuth,
     locations: overSsh,
     cloneUrl: GITHUB_CLONE_URL,
-    networkUrl: GITHUB_HTTPS.url,
     pin: PIN_40,
     gitOps: createGitOps().gitOps,
     transport: cloneTransport(GITHUB_SSH).transport,
@@ -1496,7 +1539,7 @@ void test("SG-SSH-06: an ssh clone fills the directory an https clone of the sam
     resolveAuth: publicCloneAuth,
     locations: overHttps,
     cloneUrl: GITHUB_CLONE_URL,
-    networkUrl: GITHUB_HTTPS.url,
+    transport: oneAttempt(GITHUB_HTTPS.url),
     pin: PIN_40,
     gitOps: createGitOps().gitOps,
   });
@@ -1525,7 +1568,6 @@ void test("D-SG-18, upstream N1t: a commit fetch that fails after the clone is n
       resolveAuth: publicCloneAuth,
       locations,
       cloneUrl: GITHUB_CLONE_URL,
-      networkUrl: GITHUB_HTTPS.url,
       pin: PIN_40,
       gitOps,
       transport: cloneTransport(GITHUB_HTTPS, GITHUB_SSH).transport,
@@ -1547,7 +1589,6 @@ void test("D-SG-18: a pinned clone that fails over both transports reports both 
       resolveAuth: publicCloneAuth,
       locations,
       cloneUrl: GITHUB_CLONE_URL,
-      networkUrl: GITHUB_HTTPS.url,
       pin: PIN_40,
       gitOps,
       transport: cloneTransport(GITHUB_HTTPS, GITHUB_SSH).transport,
@@ -1574,7 +1615,6 @@ void test("D-SG-18: a cold mirror over an ssh-only transport clones the ssh url 
     auth: publicCloneAuth(),
     locations,
     cloneUrl: GITHUB_CLONE_URL,
-    networkUrl: GITHUB_HTTPS.url,
     gitOps,
     transport,
   });
@@ -1596,7 +1636,6 @@ void test("D-SG-18: a cold mirror over an https-first transport removes the fail
     auth: publicCloneAuth(),
     locations,
     cloneUrl: GITHUB_CLONE_URL,
-    networkUrl: GITHUB_HTTPS.url,
     ref: "main",
     gitOps,
     transport: cloneTransport(GITHUB_HTTPS, GITHUB_SSH).transport,
@@ -1653,7 +1692,7 @@ void test("MIRR-02 / D-SG-10: a warm mirror at the remote's commit is checked wi
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
   };
   await materializeOrRefreshPluginMirror(mirrorArgs);
@@ -1740,7 +1779,7 @@ function warmMirrorArgs(
     auth: publicCloneAuth(),
     locations: mirror.locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps: mirror.git.gitOps,
     ...overrides,
   };
@@ -1953,7 +1992,7 @@ void test("D-SG-10: an unreachable remote re-clones the mirror, and that clone's
       auth: publicCloneAuth(),
       locations,
       cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
+      transport: oneAttempt("https://example.com/repo"),
       gitOps: git.gitOps,
     }),
     (error: unknown) => error === unreachable,
@@ -2132,7 +2171,7 @@ void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
   });
   const clonesAfterFirst = state.cloneCalls.length;
@@ -2142,7 +2181,7 @@ void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
     refresh: false,
   });
@@ -2184,7 +2223,7 @@ void test("D-18-04 / REI-04: refresh: false answers the declared ref's last fetc
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     ref: "release",
     gitOps,
     refresh: false,
@@ -2230,7 +2269,7 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
     auth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     ref: "dev",
     gitOps,
     refresh: false,
@@ -2263,7 +2302,7 @@ void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mir
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     ref: "v2.0.0",
     gitOps,
     refresh: false,
@@ -2307,7 +2346,7 @@ void test("GLK-08 / D-PL7-10: refresh: false refreshes a declared ref the mirror
     auth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     ref: "v2.0.0",
     gitOps,
     refresh: false,
@@ -2348,7 +2387,7 @@ void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fa
       auth: publicCloneAuth(),
       locations,
       cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
+      transport: oneAttempt("https://example.com/repo"),
       ref: "v2.0.0",
       gitOps,
       refresh: false,
@@ -2388,7 +2427,7 @@ void test("GLK-08 / D-PL7-10: refresh: false with no declared ref and no default
     auth,
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
     refresh: false,
   });
@@ -2420,7 +2459,7 @@ void test("D-18-04: refresh: false propagates a mirror ref read that fails for a
       auth: publicCloneAuth(),
       locations,
       cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
+      transport: oneAttempt("https://example.com/repo"),
       gitOps,
       refresh: false,
     }),
@@ -2448,7 +2487,7 @@ void test("SG-TRN-01: a mirror whose HEAD names no commit fails as a missing loc
       auth: publicCloneAuth(),
       locations,
       cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
+      transport: oneAttempt("https://example.com/repo"),
       gitOps,
     }),
     (error: unknown) => {
@@ -2470,14 +2509,14 @@ void test("MIRR-02: two successive calls both succeed; the second refreshes rath
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
   });
   const second = await materializeOrRefreshPluginMirror({
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps,
   });
 
@@ -2498,7 +2537,7 @@ void test("MIRR-01: ref-set mirror clones singleBranch with the ref hint and tra
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     ref: "v2.0.0",
     gitOps,
   });
@@ -2529,7 +2568,7 @@ void test("PROV-03: a private mirror forwards auth through its clone and its fre
   const mirrorArgs = {
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
-    networkUrl: "https://gitlab.example.com/o/r",
+    transport: oneAttempt("https://gitlab.example.com/o/r"),
     gitOps,
     auth,
   };
@@ -2562,7 +2601,7 @@ void test("MIRR-02 / D-SG-10: the default git surface re-clones a warm mirror it
       auth: publicCloneAuth(),
       locations,
       cloneUrl: unreachableUrl,
-      networkUrl: unreachableUrl,
+      transport: oneAttempt(unreachableUrl),
     });
   } catch (error) {
     refreshError = error;
@@ -2605,7 +2644,7 @@ void test("MIRR-03: a concurrent create losing the rename race treats the winner
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
+    transport: oneAttempt("https://example.com/repo"),
     gitOps: racingGitOps,
   });
 
@@ -2628,7 +2667,7 @@ void test("MIRR-01/03: a clone failure cleans staging and rethrows the original 
         auth: publicCloneAuth(),
         locations,
         cloneUrl: "https://example.com/repo",
-        networkUrl: "https://example.com/repo",
+        transport: oneAttempt("https://example.com/repo"),
         gitOps,
       }),
     /mirror clone boom/,
@@ -2650,7 +2689,7 @@ void test("D-SG-10 / D-18-04: real git moves a warm mirror to its branch's new c
     auth: publicCloneAuth(),
     locations,
     cloneUrl: remote.url,
-    networkUrl: remote.url,
+    transport: oneAttempt(remote.url),
     ref: "dev",
     gitOps: systemGitOps(recorded.gitProcess),
   };
@@ -3844,7 +3883,7 @@ void test("GIT-01: a present per-commit copy uses the default git surface withou
   const result = await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha: PIN_40,
     resolveAuth: () => assert.fail("a present copy never builds clone auth"),
   });
@@ -3865,7 +3904,7 @@ void test("GIT-01: a per-commit copy checks the commit out of the mirror's .git 
   const result = await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha: PIN_40,
     gitOps,
     resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
@@ -3908,7 +3947,7 @@ void test("GIT-01: a real per-commit copy holds the commit's tree with relative 
   const result = await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha,
     resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
   });
@@ -3966,7 +4005,7 @@ void test("SG-MIG-01: a per-commit copy of an old clone unsets its clone keys an
   const copyRoot = await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha,
     resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
   });
@@ -3990,7 +4029,7 @@ void test("SG-MIG-01: a per-commit copy of a clone without the clone keys checks
   const copyRoot = await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha,
     resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
   });
@@ -4014,7 +4053,7 @@ void test("GIT-01: a mirror that lacks the named ref falls back to a clone of it
   const result = await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha: PIN_40,
     gitOps,
     resolveAuth: publicCloneAuth,
@@ -4037,7 +4076,7 @@ void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", 
   await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha: PIN_40,
     gitOps,
     resolveAuth: publicCloneAuth,
@@ -4060,7 +4099,7 @@ void test("GIT-01: any other checkout failure propagates without a clone", async
     materializePluginCommitCopy({
       locations,
       cloneUrl,
-      networkUrl: cloneUrl,
+      transport: oneAttempt(cloneUrl),
       sha: PIN_40,
       gitOps,
       resolveAuth: publicCloneAuth,
@@ -4081,7 +4120,7 @@ void test("GIT-01: with no mirror the per-commit copy is cloned at the commit", 
   const result = await materializePluginCommitCopy({
     locations,
     cloneUrl,
-    networkUrl: cloneUrl,
+    transport: oneAttempt(cloneUrl),
     sha: PIN_40,
     gitOps,
     resolveAuth: publicCloneAuth,
@@ -4109,7 +4148,7 @@ void test("GIT-01: a mirror that cannot be copied fails the copy and leaves no s
     materializePluginCommitCopy({
       locations,
       cloneUrl,
-      networkUrl: cloneUrl,
+      transport: oneAttempt(cloneUrl),
       sha: PIN_40,
       gitOps,
       resolveAuth: publicCloneAuth,
@@ -4183,7 +4222,13 @@ void test("GIT-04: an unpinned source copies the mirror's commit and anchors its
       return Promise.resolve(copyRoot);
     },
   };
-  await materializeUnpinnedSource(steps, { locations, source, auth, refresh: false });
+  await materializeUnpinnedSource(steps, {
+    locations,
+    source,
+    auth,
+    refresh: false,
+    transport: asWritten(source),
+  });
   calls.splice(0);
 
   // act
@@ -4193,6 +4238,7 @@ void test("GIT-04: an unpinned source copies the mirror's commit and anchors its
     auth,
     refresh: false,
     onCloneCreated: (key) => created.push(key),
+    transport: asWritten(source),
   });
 
   // assert

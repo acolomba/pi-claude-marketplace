@@ -58,10 +58,10 @@ export interface PluginClonePlanInput {
   readonly source: GitBackedSource;
   readonly force?: TransportForce | undefined;
   /**
-   * The checks of the command's transport context. A clone with none stays
-   * on SSH, unless forced.
+   * The checks of the command's transport context. Every plan takes them,
+   * and only a plan that needs an answer calls one.
    */
-  readonly checks?: PluginSshChecks | undefined;
+  readonly checks: PluginSshChecks;
   /**
    * SG-SSH-05: the platform the clone runs on. `win32` takes the Windows
    * plan; omitted, the plan is the one off Windows.
@@ -206,16 +206,16 @@ function windowsPlan(
 // The plan of a GitHub source spelled `owner/repo`.
 async function ownerRepoPlan(
   source: GitHubSource,
-  checks: PluginSshChecks | undefined,
+  checks: PluginSshChecks,
   platform: NodeJS.Platform | undefined,
 ): Promise<TransportPlan> {
   const attempts = gitHubAttempts(source);
   const { ssh, https } = attempts;
-  if (checks !== undefined && platform === "win32") {
+  if (platform === "win32") {
     return windowsPlan(attempts, checks);
   }
 
-  if (checks === undefined || !(await httpsMayGoFirst(checks, ssh.url))) {
+  if (!(await httpsMayGoFirst(checks, ssh.url))) {
     return only(ssh);
   }
 
@@ -239,9 +239,9 @@ async function ownerRepoPlan(
  *   written as a URL. An `owner/repo` source walks the checks: when each one
  *   lets HTTPS go first, the plan clones over HTTPS first with the
  *   `ssh-not-configured` note and retries over SSH once after an HTTPS
- *   failure; otherwise, and with no checks, it clones over SSH only. On
- *   Windows, with checks, it clones over SSH first and gives HTTPS, then SSH,
- *   only after a key failure with the Windows checks passing (SG-SSH-05).
+ *   failure; otherwise it clones over SSH only. On Windows it clones over SSH
+ *   first and gives HTTPS, then SSH, only after a key failure with the
+ *   Windows checks passing (SG-SSH-05).
  */
 export async function planPluginClone(input: PluginClonePlanInput): Promise<TransportPlan> {
   const { source, force } = input;
