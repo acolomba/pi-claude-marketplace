@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { planMarketplaceClone } from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
+import {
+  planMarketplaceClone,
+  tagReadUrl,
+} from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import {
   DeviceFlowUnavailableError,
   GitCommandError,
@@ -13,6 +16,7 @@ import type {
   TransportPlan,
 } from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import type {
+  GitBackedSource,
   GitHubSource,
   UrlSource,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -376,4 +380,98 @@ for (const { name, source, force } of [
     // assert
     assert.deepStrictEqual(tried, [plan.first]);
   });
+}
+
+const GIT_SUBDIR_SHORTHAND = {
+  kind: "git-subdir",
+  raw: "acme/ghd",
+  url: "acme/ghd",
+  path: "plugins/ghd",
+} satisfies GitBackedSource;
+
+for (const { name, source, url } of [
+  {
+    name: "an owner/repo github source",
+    source: { kind: "github", raw: "acme/ghd", owner: "acme", repo: "ghd" },
+    url: "git@github.com:acme/ghd.git",
+  },
+  {
+    name: "an owner/repo github source with a ref",
+    source: { kind: "github", raw: "acme/ghd#v1", owner: "acme", repo: "ghd", ref: "v1" },
+    url: "git@github.com:acme/ghd.git",
+  },
+  {
+    name: "a github source spelled as an https URL",
+    source: { kind: "github", raw: "https://github.com/acme/ghd", owner: "acme", repo: "ghd" },
+    url: "https://github.com/acme/ghd.git",
+  },
+  {
+    name: "a url source",
+    source: { kind: "url", raw: "https://example.com/ghd", url: "https://example.com/ghd" },
+    url: "https://example.com/ghd",
+  },
+  {
+    name: "an scp url source",
+    source: {
+      kind: "url",
+      raw: "git@github.com:acme/ghd.git",
+      url: "git@github.com:acme/ghd.git",
+    },
+    url: "git@github.com:acme/ghd.git",
+  },
+  {
+    name: "a git-subdir url",
+    source: {
+      kind: "git-subdir",
+      raw: "https://example.com/mono.git",
+      url: "https://example.com/mono.git",
+      path: "plugins/ghd",
+    },
+    url: "https://example.com/mono.git",
+  },
+  {
+    name: "a git-subdir owner/repo shorthand",
+    source: GIT_SUBDIR_SHORTHAND,
+    url: "git@github.com:acme/ghd.git",
+  },
+] satisfies readonly { name: string; source: GitBackedSource; url: string }[]) {
+  test(`D-SG-20: lists the release tags of ${name} at ${url} when nothing forces https`, () => {
+    // act
+    const listed = tagReadUrl(source, undefined);
+
+    // assert
+    assert.strictEqual(listed, url);
+  });
+}
+
+for (const force of ["prefer-https", "base-override"] as const) {
+  for (const { name, source, url } of [
+    {
+      name: "an owner/repo github source",
+      source: { kind: "github", raw: "acme/ghd", owner: "acme", repo: "ghd" },
+      url: "https://github.com/acme/ghd.git",
+    },
+    {
+      name: "a git-subdir owner/repo shorthand",
+      source: GIT_SUBDIR_SHORTHAND,
+      url: "https://github.com/acme/ghd.git",
+    },
+    {
+      name: "an scp url source",
+      source: {
+        kind: "url",
+        raw: "git@github.com:acme/ghd.git",
+        url: "git@github.com:acme/ghd.git",
+      },
+      url: "git@github.com:acme/ghd.git",
+    },
+  ] satisfies readonly { name: string; source: GitBackedSource; url: string }[]) {
+    test(`D-SG-20, D-SG-21: lists the release tags of ${name} at ${url} when ${force} forces https`, () => {
+      // act
+      const listed = tagReadUrl(source, force);
+
+      // assert
+      assert.strictEqual(listed, url);
+    });
+  }
 }

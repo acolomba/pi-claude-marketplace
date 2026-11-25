@@ -12,19 +12,43 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { setGitHubBaseUrl, setPreferHttps } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
-import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type {
+  GitBackedSource,
+  GitHubSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TestContext } from "node:test";
 
 // D-2-01: a url source is queried at the URL as typed, with no `.git` added.
 const PLUGIN_REPO_URL = "https://example.com/formatter";
 
+const GITHUB_DEPENDENCY = {
+  kind: "github",
+  raw: "acme/ghd",
+  owner: "acme",
+  repo: "ghd",
+} satisfies GitHubSource;
+
+// D-SG-20: the two addresses a github owner/repo dependency's tags are listed at.
+const GHD_SSH_URL = "git@github.com:acme/ghd.git";
+const GHD_HTTPS_URL = "https://github.com/acme/ghd.git";
+
+/** Clears both triggers that force https, so a case reads the default transport. */
+function unforced(t: TestContext): void {
+  setGitHubBaseUrl(t, undefined);
+  setPreferHttps(t, undefined);
+}
+
 for (const mode of ["json", "rpc"]) {
-  test(`delivers constrained tag authentication through the parent run in ${mode}`, async () => {
+  test(`delivers constrained tag authentication through the parent run in ${mode}`, async (t) => {
     // arrange
+    setGitHubBaseUrl(t, undefined);
+    setPreferHttps(t, "1");
     const capture = createJsonCapture();
     const ctx = {
       mode,
@@ -450,8 +474,10 @@ test("wraps a listing throw that is not an Error before carrying it on the failu
   });
 });
 
-test("threads the host credential bundle into the listing for a private source", async () => {
+test("threads the host credential bundle into the listing for a private source", async (t) => {
   // arrange
+  setGitHubBaseUrl(t, undefined);
+  setPreferHttps(t, "1");
   const queried: string[] = [];
   let bundled: boolean | undefined;
   const seam: DependencyTagListingSeam = {
@@ -568,3 +594,276 @@ test("a failed listing is never memoized, so a later attempt re-queries instead 
   assert.deepStrictEqual(second, first);
   assert.deepStrictEqual(queried, [PLUGIN_REPO_URL, PLUGIN_REPO_URL]);
 });
+
+test("D-SG-20: lists a github owner/repo dependency's tags over ssh and memoizes them under that address", async (t) => {
+  // arrange
+  unforced(t);
+  const queried: string[] = [];
+  const seam = advertising([{ name: "ghd--v1.0.0", oid: "aaa1" }], queried);
+  const tagMemo = new Map<string, readonly RemoteTag[]>();
+
+  // act
+  const outcome = await probeDependencyTags({
+    pluginName: "ghd",
+    source: GITHUB_DEPENDENCY,
+    range: "^1.0.0",
+    seam,
+    tagMemo,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, queried, memo: [...tagMemo.keys()] },
+    {
+      outcome: { kind: "pinned", tag: "ghd--v1.0.0", oid: "aaa1", version: "1.0.0" },
+      queried: [GHD_SSH_URL],
+      memo: [GHD_SSH_URL],
+    },
+  );
+});
+
+test("D-SG-20: serves a github owner/repo dependency from a listing memoized under its ssh address", async (t) => {
+  // arrange
+  unforced(t);
+  const queried: string[] = [];
+  const seam = advertising([], queried);
+  const tagMemo = new Map<string, readonly RemoteTag[]>([
+    [GHD_SSH_URL, [{ name: "ghd--v1.2.0", oid: "bbb2" }]],
+    [GHD_HTTPS_URL, [{ name: "ghd--v1.0.0", oid: "aaa1" }]],
+  ]);
+
+  // act
+  const outcome = await probeDependencyTags({
+    pluginName: "ghd",
+    source: GITHUB_DEPENDENCY,
+    range: "^1.0.0",
+    seam,
+    tagMemo,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, queried },
+    { outcome: { kind: "pinned", tag: "ghd--v1.2.0", oid: "bbb2", version: "1.2.0" }, queried: [] },
+  );
+});
+
+/** A listing seam that answers each address with its own tags or failure. */
+function answeringPerUrl(
+  answers: ReadonlyMap<string, readonly RemoteTag[] | Error>,
+  queried: string[],
+): DependencyTagListingSeam {
+  return {
+    listRemoteTags(options) {
+      queried.push(options.url);
+      const answer = answers.get(options.url);
+      return Promise.resolve().then(() => {
+        if (answer === undefined || answer instanceof Error) {
+          throw answer ?? new Error(`no answer for ${options.url}`);
+        }
+
+        return [...answer];
+      });
+    },
+  };
+}
+
+const SSH_DENIED = new GitCommandError(
+  { kind: "ssh-auth", detail: "publickey" },
+  { operation: "ls-remote", exitCode: 128 },
+);
+
+test("D-SG-20: retries a github dependency's failed ssh listing once over https and memoizes only the https listing", async (t) => {
+  // arrange
+  unforced(t);
+  const queried: string[] = [];
+  const seam = answeringPerUrl(
+    new Map<string, readonly RemoteTag[] | Error>([
+      [GHD_SSH_URL, SSH_DENIED],
+      [GHD_HTTPS_URL, [{ name: "ghd--v1.0.0", oid: "aaa1" }]],
+    ]),
+    queried,
+  );
+  const tagMemo = new Map<string, readonly RemoteTag[]>();
+
+  // act
+  const outcome = await probeDependencyTags({
+    pluginName: "ghd",
+    source: GITHUB_DEPENDENCY,
+    range: "^1.0.0",
+    seam,
+    tagMemo,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, queried, memo: [...tagMemo.keys()] },
+    {
+      outcome: { kind: "pinned", tag: "ghd--v1.0.0", oid: "aaa1", version: "1.0.0" },
+      queried: [GHD_SSH_URL, GHD_HTTPS_URL],
+      memo: [GHD_HTTPS_URL],
+    },
+  );
+});
+
+test("D-SG-20: reports the https attempt's cause and classification when a github dependency's listing fails over both", async (t) => {
+  // arrange
+  unforced(t);
+  const queried: string[] = [];
+  const unreachable = new GitCommandError(
+    { kind: "network", curlCode: 6 },
+    { operation: "ls-remote", exitCode: 128 },
+  );
+  const seam = answeringPerUrl(
+    new Map<string, readonly RemoteTag[] | Error>([
+      [GHD_SSH_URL, SSH_DENIED],
+      [GHD_HTTPS_URL, unreachable],
+    ]),
+    queried,
+  );
+  const tagMemo = new Map<string, readonly RemoteTag[]>();
+
+  // act
+  const outcome = await probeDependencyTags({
+    pluginName: "ghd",
+    source: GITHUB_DEPENDENCY,
+    range: "^1.0.0",
+    seam,
+    tagMemo,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, queried, memo: [...tagMemo] },
+    {
+      outcome: {
+        kind: "tag-listing-failed",
+        cause: unreachable,
+        classification: "network unreachable",
+      },
+      queried: [GHD_SSH_URL, GHD_HTTPS_URL],
+      memo: [],
+    },
+  );
+});
+
+for (const { trigger, force } of [
+  {
+    trigger: "CLAUDE_CODE_PLUGIN_PREFER_HTTPS",
+    force: (t: TestContext) => {
+      setPreferHttps(t, "1");
+    },
+  },
+  {
+    trigger: "the github base override",
+    force: (t: TestContext) => {
+      setGitHubBaseUrl(t, "https://mirror.example/base");
+    },
+  },
+]) {
+  test(`D-SG-20, D-SG-21: lists a github dependency once over https with no ssh attempt under ${trigger}`, async (t) => {
+    // arrange
+    unforced(t);
+    force(t);
+    const queried: string[] = [];
+    const seam = failingWith(SSH_DENIED, queried);
+
+    // act
+    const outcome = await probeDependencyTags({
+      pluginName: "ghd",
+      source: GITHUB_DEPENDENCY,
+      range: "^1.0.0",
+      seam,
+      auth: auth(),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { outcome, queried },
+      {
+        outcome: {
+          kind: "tag-listing-failed",
+          cause: SSH_DENIED,
+          classification: "authentication required",
+        },
+        queried: [GHD_HTTPS_URL],
+      },
+    );
+  });
+}
+
+for (const failure of [
+  new GitCommandError({ kind: "git-missing", detail: "not-found" }, { operation: "lookup" }),
+  new GitCommandError({ kind: "aborted" }, { operation: "ls-remote" }),
+]) {
+  test(`D-SG-20: does not retry a github dependency's ssh listing that failed as ${failure.kind}`, async (t) => {
+    // arrange
+    unforced(t);
+    const queried: string[] = [];
+    const seam = failingWith(failure, queried);
+
+    // act
+    const outcome = await probeDependencyTags({
+      pluginName: "ghd",
+      source: GITHUB_DEPENDENCY,
+      range: "^1.0.0",
+      seam,
+      auth: auth(),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { cause: outcome.kind === "tag-listing-failed" ? outcome.cause : outcome, queried },
+      { cause: failure, queried: [GHD_SSH_URL] },
+    );
+  });
+}
+
+for (const { name, source, url } of [
+  {
+    name: "a github source spelled as an https URL",
+    source: { kind: "github", raw: "https://github.com/acme/ghd", owner: "acme", repo: "ghd" },
+    url: GHD_HTTPS_URL,
+  },
+  {
+    name: "a url source",
+    source: { kind: "url", raw: GHD_SSH_URL, url: GHD_SSH_URL },
+    url: GHD_SSH_URL,
+  },
+  {
+    name: "a git-subdir url",
+    source: { kind: "git-subdir", raw: GHD_SSH_URL, url: GHD_SSH_URL, path: "plugins/ghd" },
+    url: GHD_SSH_URL,
+  },
+  {
+    name: "a git-subdir owner/repo shorthand",
+    source: { kind: "git-subdir", raw: "acme/ghd", url: "acme/ghd", path: "plugins/ghd" },
+    url: GHD_SSH_URL,
+  },
+] satisfies readonly { name: string; source: GitBackedSource; url: string }[]) {
+  test(`D-SG-20: lists ${name} once at ${url} and does not retry its failure`, async (t) => {
+    // arrange
+    unforced(t);
+    const queried: string[] = [];
+    const seam = failingWith(SSH_DENIED, queried);
+
+    // act
+    const outcome = await probeDependencyTags({
+      pluginName: "ghd",
+      source,
+      range: "^1.0.0",
+      seam,
+      auth: auth(),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { kind: outcome.kind, queried },
+      { kind: "tag-listing-failed", queried: [url] },
+    );
+  });
+}

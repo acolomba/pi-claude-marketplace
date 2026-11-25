@@ -24,16 +24,25 @@
 // constrained dependency with no satisfying tag fails, and under D-03-07 that
 // fails the whole cascade.
 //
+// D-SG-20: a GitHub `owner/repo` source lists its tags over SSH unless HTTPS
+// is forced, as Claude Code's `zmt` does. As amended on 2026-11-25, a failed
+// SSH listing of a `github` source lists once more over HTTPS before it counts
+// as failed, a small divergence from `zmt`. The retry runs only here, inside
+// an install or update that already lists this dependency's tags (the D-03-03
+// read above), so it adds no network use to any other command.
+//
 // AUTH-09: a credential bundle is composed here and threaded into the listing
 // call, and no credential value is read, stored, or placed on a returned arm.
 // The failure arm carries the classified transport cause only.
 
-import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl } from "../../domain/clone-key.ts";
+import { stopsTheClone, tagReadUrl } from "../../domain/github-transport.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
 import { listRemoteTags } from "../../platform/git.ts";
 import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { buildCloneAuth } from "../auth-host.ts";
+import { transportForce } from "../github-transport.ts";
 
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { RemoteTag } from "../../platform/git.ts";
@@ -142,13 +151,38 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
 }
 
 /**
+ * D-SG-20 as amended on 2026-11-25: the address a `github`-source
+ * dependency's failed listing at `listedAt` is listed again at, or undefined
+ * when the listing stops at its failure. Only an SSH listing retries, once,
+ * at the HTTPS address a forced listing sends, so a user with no SSH key still
+ * pins the release tag; a listing that was HTTPS already, any other source
+ * kind, and a failure after which no transport can list (git missing, or the
+ * command aborted) do not.
+ */
+function httpsRetryOf(
+  source: GitBackedSource,
+  listedAt: string,
+  failure: Error,
+): string | undefined {
+  const https = tagReadUrl(source, "prefer-https");
+  return source.kind === "github" && listedAt !== https && !stopsTheClone(failure)
+    ? https
+    : undefined;
+}
+
+/**
  * Resolves a constrained dependency to the highest release tag on its source
  * repository that satisfies the constraint.
  *
- * The query URL is the wire form `networkCloneUrl` derives, the same URL a
- * clone of this source sends (D-2-03), and the credential bundle is the host
- * bundle every other clone path already builds -- this adds no second
- * credential acquisition path.
+ * D-SG-20: the query URL, and the memo key of its listing, is `tagReadUrl`'s
+ * answer for the command's transport force: a GitHub `owner/repo` source
+ * lists over SSH unless HTTPS is forced, and every other source lists at the
+ * wire form a clone of it sends (D-2-03). A failed SSH listing of a `github`
+ * source lists once more over HTTPS (`httpsRetryOf`), and when that fails too
+ * the failure arm carries the HTTPS attempt's cause and classification. Each
+ * attempt reads and writes the memo under the URL it sends. The credential
+ * bundle is the host bundle every other clone path already builds, which an
+ * SSH listing never sends -- this adds no second credential acquisition path.
  */
 export async function probeDependencyTags(
   options: DependencyTagProbeOptions,
@@ -157,13 +191,24 @@ export async function probeDependencyTags(
   const { source, pluginName, range } = options;
   const cloneUrl = canonicalCloneUrl(source);
   const auth = buildCloneAuth(cloneUrl, source.kind, options.auth);
+  const listAt = (url: string): Promise<TagListingOutcome> =>
+    listCandidateTags({
+      seam,
+      url,
+      auth,
+      ...(options.tagMemo !== undefined && { memo: options.tagMemo }),
+    });
 
-  const listing = await listCandidateTags({
-    seam,
-    url: networkCloneUrl(source),
-    auth,
-    ...(options.tagMemo !== undefined && { memo: options.tagMemo }),
-  });
+  const listedAt = tagReadUrl(source, transportForce(process.env));
+  let listing = await listAt(listedAt);
+  const retryAt =
+    listing.kind === "tag-listing-failed"
+      ? httpsRetryOf(source, listedAt, listing.cause)
+      : undefined;
+  if (retryAt !== undefined) {
+    listing = await listAt(retryAt);
+  }
+
   if (listing.kind === "tag-listing-failed") {
     return listing;
   }

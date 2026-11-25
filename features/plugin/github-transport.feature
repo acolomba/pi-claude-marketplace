@@ -227,3 +227,184 @@ Feature: Plugin github transport
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: A constrained github dependency lists its release tags over ssh
+    Given the git repository "ghd" holds these plugins:
+      | name | version | path |
+      | ghd  | 1.0.0   |      |
+    Given the git repository "ghd" has a revision only the tag "ghd--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | ghd  | 2.0.0   |      |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned | dependencies |
+      | ghp  | github      | ghp        | false  | ghd@^2.0.0   |
+      | ghd  | github      | ghd        | false  |              |
+    Given the user's ssh authenticates to "github.com" as "acme"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                |
+      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} |
+      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghp.git' |
+    Then the git host receives no request
+    Then the installation record of the project scope holds these plugins:
+      | id       | version                | enabled |
+      | ghd@gits | 2.0.0-{ghd revision 2} | true    |
+      | ghp@gits | 1.0.0                  | true    |
+
+  Scenario: A path-source dependency of a github marketplace reads the marketplace's tags over ssh
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
+      | app       | 1.0.0   | formatter@^1.0.0 |
+      | formatter | 1.0.0   |                  |
+    Given the marketplace "tools" tags its current commit "formatter--v1.0.0"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
+      | app       | 1.1.0   | formatter@^1.0.0 |
+      | formatter | 2.0.0   |                  |
+    Given the user's ssh authenticates to "github.com" as "acme"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name            | status    | reasons | scope   | version                                  |
+      | tools            | project           | app@tools       | app             | installed |         | project | 1.1.0                                    |
+      | tools            | project           | formatter@tools | formatter@tools | installed |         | project | 1.0.0-{tools revision formatter--v1.0.0} |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
+    Then the git host receives no request
+
+  Scenario: For a user with no ssh key, a constrained path-source dependency of a github marketplace installs the current copy
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
+      | app       | 1.0.0   | formatter@^1.0.0 |
+      | formatter | 1.0.0   |                  |
+    Given the marketplace "tools" tags its current commit "formatter--v1.0.0"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
+      | app       | 1.1.0   | formatter@^1.0.0 |
+      | formatter | 2.0.0   |                  |
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name            | status    | reasons                 | scope   | version |
+      | tools            | project           | app@tools       | app             | installed |                         | project | 1.1.0   |
+      | tools            | project           | formatter@tools | formatter@tools | installed | dependency current copy | project | 2.0.0   |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
+    Then the git host receives no request
+
+  Scenario: For a user with no ssh key, a constrained github dependency still installs at its release tag
+    Given the git repository "ghd" holds these plugins:
+      | name | version | path |
+      | ghd  | 1.0.0   |      |
+    Given the git repository "ghd" has a revision only the tag "ghd--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | ghd  | 2.0.0   |      |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned | dependencies |
+      | ghp  | github      | ghp        | false  | ghd@^2.0.0   |
+      | ghd  | github      | ghd        | false  |              |
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                |
+      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} |
+      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
+      | -G git@github.com                                                                                                   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghd.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghd.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghd.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version                | enabled |
+      | ghd@gits | 2.0.0-{ghd revision 2} | true    |
+      | ghp@gits | 1.0.0                  | true    |
+
+  Scenario: With CLAUDE_CODE_PLUGIN_PREFER_HTTPS set, a constrained github dependency lists its tags over https
+    Given the git repository "ghd" holds these plugins:
+      | name | version | path |
+      | ghd  | 1.0.0   |      |
+    Given the git repository "ghd" has a revision only the tag "ghd--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | ghd  | 2.0.0   |      |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned | dependencies |
+      | ghp  | github      | ghp        | false  | ghd@^2.0.0   |
+      | ghd  | github      | ghd        | false  |              |
+    Given the user's ssh authenticates to "github.com" as "acme"
+    Given pi runs with github's requests routed to the git host and the environment variable "CLAUDE_CODE_PLUGIN_PREFER_HTTPS" set to "1"
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                |
+      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} |
+      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  |
+    Then the user's ssh receives no launch
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghd.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghd.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghd.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghd.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version                | enabled |
+      | ghd@gits | 2.0.0-{ghd revision 2} | true    |
+      | ghp@gits | 1.0.0                  | true    |

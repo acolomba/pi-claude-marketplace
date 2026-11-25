@@ -13,6 +13,9 @@
 // The module is pure: the probe is a function the caller passes, called at
 // most once, and only when the plan needs its answer.
 //
+// D-SG-20: a release-tag listing runs no probe. It reads a GitHub
+// `owner/repo` source over SSH unless a transport is forced (`tagReadUrl`).
+//
 // A plan with two attempts gives the other one once after the first fails,
 // as Claude Code's marketplace clone retries on any error. Pi gives none
 // after git is missing or the command was aborted: no transport can clone
@@ -26,10 +29,10 @@ import { GITHUB_HOST, gitHubAddressOf } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
 import { isScpGitAddress } from "./git-url.ts";
-import { ensureGitSuffix } from "./source.ts";
+import { ensureGitSuffix, isGitSubdirShorthand } from "./source.ts";
 
 import type { CloneNoteKind } from "../shared/notification-types.ts";
-import type { GitHubSource, UrlSource } from "./source.ts";
+import type { GitBackedSource, GitHubSource, UrlSource } from "./source.ts";
 
 /** The two transports a GitHub clone can use. */
 export type GitHubTransport = "ssh" | "https";
@@ -94,6 +97,25 @@ function isOwnerRepoSpelling(source: GitHubSource): boolean {
 /** Claude Code's SSH clone URL of a GitHub source: `git@github.com:<owner>/<repo>.git`. */
 export function gitHubSshCloneUrl(source: GitHubSource): string {
   return ensureGitSuffix(`git@${GITHUB_HOST}:${source.owner}/${source.repo}`);
+}
+
+/**
+ * D-SG-20, upstream `zmt`: the address a release-tag listing of `source`
+ * reads, with no probe. A GitHub source spelled `owner/repo` lists over SSH
+ * (`gitHubSshCloneUrl`), or at its HTTPS wire form when a transport is forced
+ * (D-SG-21, D-SG-24). A git-subdir `owner/repo` shorthand lists as the GitHub
+ * source it names (upstream `KHi`). A GitHub URL, a url source, and any other
+ * git-subdir url list at the wire form `networkCloneUrl` gives.
+ */
+export function tagReadUrl(source: GitBackedSource, force: TransportForce | undefined): string {
+  if (source.kind === "git-subdir" && isGitSubdirShorthand(source.url)) {
+    const [owner = "", repo = ""] = source.url.split("/");
+    return tagReadUrl({ kind: "github", raw: source.url, owner, repo }, force);
+  }
+
+  return source.kind === "github" && force === undefined && isOwnerRepoSpelling(source)
+    ? gitHubSshCloneUrl(source)
+    : networkCloneUrl(source);
 }
 
 // The `after` of a plan with one attempt.
