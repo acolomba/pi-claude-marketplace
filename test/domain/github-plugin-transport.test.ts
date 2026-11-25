@@ -525,3 +525,71 @@ test("SG-SSH-05: on Windows keeps ssh after a key failure when -G through git sh
   assert.deepStrictEqual(attempts, [SSH_ATTEMPT]);
   assert.deepStrictEqual(calls, WINDOWS_CHECK_CALLS);
 });
+
+for (const { label, answers, calls } of [
+  {
+    label:
+      "the user chose the ssh command (GIT_SSH_COMMAND or GIT_SSH in any spelling, empty included, or core.sshCommand)",
+    answers: { userOverride: true },
+    calls: ["userOverride"],
+  },
+  {
+    label: "the user's git config rewrites the ssh url",
+    answers: { userOverride: false, urlRewritten: true },
+    calls: ["userOverride", "urlRewritten git@github.com:acme/ghp.git"],
+  },
+  {
+    label: "-G through git timed out or showed a proxy",
+    answers: { ...WINDOWS_CHECKS_PASS, showsDirectGitHubThroughGit: false },
+    calls: WINDOWS_CHECK_CALLS,
+  },
+] satisfies ReadonlyArray<{ label: string; answers: CheckAnswers; calls: readonly string[] }>) {
+  test(`SG-SSH-05: on Windows gives nothing after a key failure when ${label}`, async () => {
+    // arrange
+    const { checks, calls: made } = checksAnswering(answers);
+    const plan = await planPluginClone({ source: OWNER_REPO, checks, platform: "win32" });
+
+    // act
+    const next = await plan.after(PUBLICKEY_FAILURE, SSH_ATTEMPT);
+
+    // assert
+    assert.strictEqual(next, undefined);
+    assert.deepStrictEqual(made, calls);
+  });
+}
+
+test("SG-SSH-05, D-SG-24: on Windows clones once over https and runs no check when CLAUDE_CODE_PLUGIN_PREFER_HTTPS is set", async () => {
+  // arrange
+  const { checks, calls } = checksAnswering({});
+
+  // act
+  const plan = await planPluginClone({
+    source: OWNER_REPO,
+    force: "prefer-https",
+    checks,
+    platform: "win32",
+  });
+
+  // assert
+  assert.deepStrictEqual(orderOf(plan), { first: HTTPS_ATTEMPT, note: "via-https" });
+  assert.deepStrictEqual(await attemptsAfter(plan, PUBLICKEY_FAILURE), [HTTPS_ATTEMPT]);
+  assert.deepStrictEqual(calls, []);
+});
+
+test("SG-SSH-05, OQ-1: on Windows clones an ssh url source once as written and runs no check", async () => {
+  // arrange
+  const { checks, calls } = checksAnswering({});
+  const source: GitBackedSource = {
+    kind: "url",
+    raw: "git@github.com:acme/ghp.git",
+    url: "git@github.com:acme/ghp",
+  };
+
+  // act
+  const plan = await planPluginClone({ source, checks, platform: "win32" });
+
+  // assert
+  assert.deepStrictEqual(orderOf(plan), { first: SSH_ATTEMPT, note: "via-ssh" });
+  assert.deepStrictEqual(await attemptsAfter(plan, PUBLICKEY_FAILURE), [SSH_ATTEMPT]);
+  assert.deepStrictEqual(calls, []);
+});

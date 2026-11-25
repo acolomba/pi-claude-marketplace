@@ -3216,6 +3216,38 @@ describe("createGitProcess ssh", () => {
     );
   });
 
+  test("SG-SSH-05: adds the -G tail after a GIT_SSH program the user set in another case on Windows", async () => {
+    // arrange
+    const base = { Path: String.raw`C:\Git\cmd`, Git_Ssh: String.raw`C:\OpenSSH\ssh.exe` };
+    const request: GitRequest = { ...SSH_LIST, sshTail: "print-config" };
+
+    // act
+    const launches = await runAfterSshRead(base, NO_SSH_CONFIG, request, {
+      platform: "win32",
+      files: [String.raw`C:\Git\cmd\git.exe`],
+      cwd: String.raw`C:\work\project`,
+      neutral: String.raw`C:\Temp`,
+    });
+
+    // assert
+    const env = launches[1]?.[2].env ?? {};
+    assert.deepStrictEqual(
+      Object.entries(env)
+        .filter(([key]) => key.toUpperCase().startsWith("GIT_SSH"))
+        .sort(([left], [right]) => left.localeCompare(right)),
+      [
+        [
+          "GIT_SSH_COMMAND",
+          fromNeutral(
+            String.raw`'C:\OpenSSH\ssh.exe' ${BATCH_OPTIONS} -G >&2`,
+            String.raw`C:\Temp`,
+          ),
+        ],
+        ["GIT_SSH_VARIANT", "ssh"],
+      ],
+    );
+  });
+
   for (const { label, request } of [
     {
       label: "a local-lane ls-remote",
