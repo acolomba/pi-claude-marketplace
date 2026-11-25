@@ -9,6 +9,7 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeLatestVersion,
   recordCandidate,
@@ -24,6 +25,7 @@ import { discoveryWarning } from "../../../extensions/pi-claude-marketplace/shar
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { CloneTransport } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { CandidateReport } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
 import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
@@ -1017,3 +1019,65 @@ for (const { verb, policy, offered, installs, runs } of [
     );
   });
 }
+
+test("D-SG-19: the runner clones the candidate over the transport context its caller carries", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const sha = "8888888888888888888888888888888888888888";
+  const state = await loadState(base.locations.extensionRoot);
+  const manifestPath = state.marketplaces.mp?.manifestPath;
+  assert.ok(manifestPath !== undefined);
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [{ name: "hello", source: { source: "github", repo: "org/repo", sha } }],
+    }),
+  );
+  const unasked = (): Promise<never> => Promise.reject(new Error("no plan is made"));
+  const transportContext = createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: unasked,
+      userOverride: unasked,
+      urlRewritten: unasked,
+      showsDirectGitHub: unasked,
+      showsDirectGitHubThroughGit: unasked,
+    },
+  });
+  const transports: Array<CloneTransport | undefined> = [];
+  const refuse = (): Promise<never> => Promise.reject(new Error("unexpected clone step"));
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      transportContext,
+      cloneCacheSeam: {
+        resolvePluginPin: (args) => {
+          transports.push(args.transport);
+          return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha });
+        },
+        materializePluginClone: (args) => {
+          transports.push(args.transport);
+          return Promise.reject(new Error("the clone stops here"));
+        },
+        materializeOrRefreshPluginMirror: refuse,
+        materializePluginCommitCopy: refuse,
+      },
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.strictEqual(outcome.partition, "failed");
+  assert.deepStrictEqual(
+    transports.map((transport) => transport && [transport.notes, transport.subject]),
+    [
+      [transportContext.notes, "hello@mp"],
+      [transportContext.notes, "hello@mp"],
+    ],
+  );
+});

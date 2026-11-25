@@ -25,6 +25,7 @@ import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { DiscoveryWarning, StagingWarning } from "../shared/staging-warnings.ts";
 import type { Scope } from "../shared/types.ts";
 import type { RollbackPartial } from "../transaction/phase-ledger.ts";
+import type { PluginTransportContext } from "./github-transport.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
 export interface ReinstallOutcomeBase {
@@ -741,6 +742,12 @@ export interface PluginConvergeTarget {
    * runner's own collector applies when absent.
    */
   readonly cleanupClones?: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * D-SG-19: the GitHub transport context of the command that runs the move,
+   * so every move of one run follows one probe. Absent, the converge entry
+   * makes one for the call.
+   */
+  readonly transportContext?: PluginTransportContext;
 }
 
 /**

@@ -962,11 +962,16 @@ async function updateSinglePluginWith(
  * cascade mode builds stored credentials only and starts no Device Flow
  * (D-3-04), and the converge policy lists no tag (D-23), so no tag memo is
  * allocated. The scope's locations come from the target's own `cwd`.
+ *
+ * D-SG-19: the move clones over the target's transport context, the one of
+ * the command that runs it; a target with none gets one of its own from
+ * `newTransportContext`.
  */
 function convergePluginWith(
   bindings: UpdateBindings,
   runPluginConverge: UpdatePluginRunner,
   target: PluginConvergeTarget,
+  newTransportContext: () => PluginTransportContext,
 ): Promise<PluginUpdateOutcome> {
   return runCascadeTarget(runPluginConverge, {
     plugin: target.plugin,
@@ -983,6 +988,7 @@ function convergePluginWith(
     // and set `partial` from the record's view under it.
     mcpImplementation: target.mcpImplementation,
     cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
+    transportContext: target.transportContext ?? newTransportContext(),
   });
 }
 
@@ -1718,7 +1724,12 @@ export function createPluginUpdateOperations(
   };
 
   const convergePlugin: PluginConvergeFn = (target) =>
-    convergePluginWith(bindings, target.rematerialize ? rematerialize : converge, target);
+    convergePluginWith(
+      bindings,
+      target.rematerialize ? rematerialize : converge,
+      target,
+      newTransportContext,
+    );
 
   return { updatePlugins, beginPluginUpdateRun, convergePlugin };
 }

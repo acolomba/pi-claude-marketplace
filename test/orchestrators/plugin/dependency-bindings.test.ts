@@ -9,6 +9,7 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   INSTALL_MOVE_MATERIALIZATION,
   RECONCILE_MOVE_MATERIALIZATION,
@@ -39,6 +40,22 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
 const CTX: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
+
+/** D-SG-19: a command's transport context, whose checks must not run here. */
+function transportContext() {
+  const unasked = (): Promise<never> => Promise.reject(new Error("no plan is made"));
+  return createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: unasked,
+      userOverride: unasked,
+      urlRewritten: unasked,
+      showsDirectGitHub: unasked,
+      showsDirectGitHubThroughGit: unasked,
+    },
+  });
+}
 
 /** The command's authentication collaborators, network disabled. */
 function auth() {
@@ -129,12 +146,14 @@ describe("dependencyMoveContext", () => {
     const cloneCandidates = new Set<string>();
     const authMemo = new Map<string, AuthAttemptResult>();
     const commandAuth = auth();
+    const commandTransport = transportContext();
     const caller: DependencyCaller = {
       ctx: CTX,
       run,
       partial: true,
       mapModel: false,
       authMemo,
+      transportContext: commandTransport,
       ...commandAuth,
     };
 
@@ -159,6 +178,7 @@ describe("dependencyMoveContext", () => {
       partial: true,
       mapModel: false,
       authMemo,
+      transportContext: commandTransport,
       ...commandAuth,
       ...memos,
       cloneCandidates,
@@ -268,6 +288,7 @@ describe("updateCaller", () => {
     const run = runWithNothingLoaded();
     const authMemo = new Map<string, AuthAttemptResult>();
     const commandAuth = auth();
+    const commandTransport = transportContext();
 
     // act
     const caller = updateCaller(
@@ -285,6 +306,7 @@ describe("updateCaller", () => {
         mapModel: true,
         partial: true,
         authMemo,
+        transportContext: commandTransport,
         ...commandAuth,
         cascade: false,
         ctx: CTX,
@@ -302,6 +324,7 @@ describe("updateCaller", () => {
       mapModel: true,
       partial: true,
       authMemo,
+      transportContext: commandTransport,
       ...commandAuth,
     });
   });

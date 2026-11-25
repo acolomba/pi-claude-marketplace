@@ -78,6 +78,8 @@ export interface DependencyMoveContext {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /** D-SG-19: the operation's GitHub transport context, so a move clones as the command does. */
+  readonly transportContext?: NonNullable<PreparePluginUpdateOptions["transportContext"]>;
   readonly cloneCacheSeam?: PreparePluginUpdateOptions["cloneCacheSeam"];
   readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
   /** D-10-18: one memo pair per operation, so the judge and the move list a source once. */
@@ -184,6 +186,7 @@ function moveArgs(
     ...(context.credentialOps !== undefined && { credentialOps: context.credentialOps }),
     ...(context.deviceFlowHttp !== undefined && { deviceFlowHttp: context.deviceFlowHttp }),
     ...(context.authMemo !== undefined && { authMemo: context.authMemo }),
+    ...(context.transportContext !== undefined && { transportContext: context.transportContext }),
     ...(context.cloneCacheSeam !== undefined && { cloneCacheSeam: context.cloneCacheSeam }),
     ...(context.constraintGate !== undefined && { constraintGate: context.constraintGate }),
     ...(context.stateTransaction !== undefined && { stateTransaction: context.stateTransaction }),

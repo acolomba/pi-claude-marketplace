@@ -98,7 +98,10 @@ import type {
   UpdateCloneCacheSeam,
   UpdatePluginsOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
-import type { PluginUpdateFn } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  PluginConvergeTarget,
+  PluginUpdateFn,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
@@ -15981,5 +15984,71 @@ test("D-SG-19: one autoupdate run gives its plugin updates one transport context
       { madeByFirstRun, made, probes: probes.count },
       { madeByFirstRun: 1, made: 2, probes: 2 },
     );
+  });
+});
+
+/** The converge target of the unpinned github plugin `gp@mp` in the project scope of `cwd`. */
+function gitHubConvergeTarget(cwd: string): PluginConvergeTarget {
+  return {
+    plugin: "gp",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    partial: false,
+    mcpImplementation: "none",
+    rematerialize: false,
+  };
+}
+
+test("D-SG-19: a converge move with no transport context makes one and clones over it", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-transport-converge-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedUnpinnedGitHubPlugin(cwd);
+    const probes = { count: 0 };
+    let made = 0;
+    const operations = transportUpdateOperations(() => {
+      made += 1;
+      return probeRefusingContext(probes);
+    });
+
+    // act
+    const outcome = await operations.convergePlugin(gitHubConvergeTarget(cwd));
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.partition === "failed" ? outcome.notes.join(" ") : outcome.partition,
+      PROBE_REFUSED,
+    );
+    assert.deepStrictEqual({ made, probes: probes.count }, { made: 1, probes: 1 });
+  });
+});
+
+test("D-SG-19: a converge move clones over the transport context its target carries and makes none", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-transport-converge-given-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedUnpinnedGitHubPlugin(cwd);
+    const probes = { count: 0 };
+    const operations = transportUpdateOperations(() => {
+      throw new Error("a target's context leaves the factory unused");
+    });
+
+    // act
+    const outcome = await operations.convergePlugin({
+      ...gitHubConvergeTarget(cwd),
+      transportContext: probeRefusingContext(probes),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.partition === "failed" ? outcome.notes.join(" ") : outcome.partition,
+      PROBE_REFUSED,
+    );
+    assert.strictEqual(probes.count, 1);
   });
 });

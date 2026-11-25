@@ -57,6 +57,7 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
+import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import { collectPluginClonesLocked } from "./clone-gc.ts";
 import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
@@ -91,6 +92,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
@@ -138,6 +140,12 @@ export interface ReinstallPluginOptions {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
+   * D-SG-19: the command's GitHub transport context, which the shared runner
+   * gives every clone of this reinstall. The bulk reinstall makes one for the
+   * whole command.
+   */
+  readonly transportContext?: PluginTransportContext;
+  /**
    * State I/O for this reinstall's state read and the shared swap's
    * intent-mark and finalize guards. Production callers leave this undefined
    * and get the real state I/O.
@@ -168,6 +176,11 @@ export interface ReinstallPluginsOptions {
   readonly local?: boolean;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
+  /**
+   * D-SG-19: the command's GitHub transport context, forwarded to every
+   * per-plugin reinstall; the bulk reinstall makes one when it is absent.
+   */
+  readonly transportContext?: PluginTransportContext;
   /**
    * State I/O seam, forwarded unchanged to every per-plugin reinstall in the
    * cascade. Production callers leave this undefined.
@@ -546,8 +559,10 @@ async function reinstallPluginsWith(
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
   // D-79-02: ONE once-per-host memo spans the whole bulk loop so a cold-cache
   // sweep over several private plugins on the same host runs the device flow
-  // at most once (the same bulk-storm guard install/update use).
+  // at most once (the same bulk-storm guard install/update use). D-SG-19:
+  // beside it, ONE transport context, so the command probes once.
   const authMemo = new Map<string, AuthAttemptResult>();
+  const transportContext = opts.transportContext ?? defaultPluginTransportContext();
   for (const target of targets) {
     outcomes.push(
       // eslint-disable-next-line no-await-in-loop -- each reinstall locks the scope (retries: 0)
@@ -564,6 +579,7 @@ async function reinstallPluginsWith(
         ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         authMemo,
+        transportContext,
         ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
         ...(opts.removeDataDir !== undefined && { removeDataDir: opts.removeDataDir }),
         ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
