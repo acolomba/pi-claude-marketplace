@@ -204,7 +204,19 @@ const CORPUS: readonly CorpusRow[] = [
     label: "a refused ssh key",
     exitCode: 128,
     stderr: `git@stand-in.test: Permission denied (publickey).\n${READ_FAILED_BLOCK}`,
-    failure: { kind: "ssh-auth" },
+    failure: { kind: "ssh-auth", detail: "publickey" },
+  },
+  {
+    label: "E-R1: GitHub refusing every ssh key, with git's read-failed block after it",
+    exitCode: 128,
+    stderr: `git@github.com: Permission denied (publickey).\n${READ_FAILED_BLOCK}`,
+    failure: { kind: "ssh-auth", detail: "publickey" },
+  },
+  {
+    label: "E-R3: no ssh under the neutral-directory wrapper, then git's read-failed block",
+    exitCode: 128,
+    stderr: `CDPATH= cd -- '/tmp/neutral' 2>/dev/null || cd / || exit 1; ssh -o BatchMode=yes -o StrictHostKeyChecking=yes: 1: ssh: not found\n${READ_FAILED_BLOCK}`,
+    failure: { kind: "ssh-auth", detail: "unconfirmed" },
   },
   {
     label: "an unknown ssh host key",
@@ -305,7 +317,7 @@ const CORPUS: readonly CorpusRow[] = [
     label: "the read-failed block alone",
     exitCode: 128,
     stderr: READ_FAILED_BLOCK,
-    failure: { kind: "ssh-auth" },
+    failure: { kind: "ssh-auth", detail: "unconfirmed" },
   },
   {
     label: "a progress line that ends in CR before the failure",
@@ -443,7 +455,7 @@ const CORPUS: readonly CorpusRow[] = [
     label: "an ssh server's xcrun line before git's read-failed block",
     exitCode: 128,
     stderr: `xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools)\n${READ_FAILED_BLOCK}`,
-    failure: { kind: "ssh-auth" },
+    failure: { kind: "ssh-auth", detail: "unconfirmed" },
   },
   {
     label: "an HTTP 403 after a remote line that names a curl failure",

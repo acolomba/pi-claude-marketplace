@@ -1288,7 +1288,8 @@ export class PluginMirrorInUseError extends Error {
  *
  * `git-missing` records how the lookup failed (D-SG-04): no git on PATH, the
  * macOS xcrun shim in its place, or only a batch launcher. `https-auth`
- * records which authentication failure git reported (D-SG-14, GAUTH-04).
+ * records which authentication failure git reported (D-SG-14, GAUTH-04), and
+ * `ssh-auth` whether ssh confirmed a key refusal.
  */
 export type GitFailure =
   | {
@@ -1310,10 +1311,20 @@ export type GitFailure =
       readonly detail: "no-credential" | "rejected";
     }
   | {
+      readonly kind: "ssh-auth";
+      /**
+       * Whether ssh printed its `Permission denied (publickey` line, so the
+       * host refused every key (`publickey`), or git printed only its
+       * `Could not read from remote repository` line, which also follows a
+       * missing ssh or any other ssh failure (`unconfirmed`). The transport
+       * retry rules read this detail, never stderr text (D-SG-22, SG-SSH-05).
+       */
+      readonly detail: "publickey" | "unconfirmed";
+    }
+  | {
       readonly kind:
         | "git-too-old"
         | "aborted"
-        | "ssh-auth"
         | "ssh-host-key-unknown"
         | "ssh-host-key-changed"
         | "proxy-refused"

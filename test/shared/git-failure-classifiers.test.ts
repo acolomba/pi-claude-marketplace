@@ -249,7 +249,14 @@ describe("classifyGitFailure", () => {
           failure: { kind: "https-auth", detail: "no-credential" },
         },
         { label: "an https-auth rejected", failure: { kind: "https-auth", detail: "rejected" } },
-        { label: "an ssh-auth", failure: { kind: "ssh-auth" } },
+        {
+          label: "an ssh-auth publickey",
+          failure: { kind: "ssh-auth", detail: "publickey" },
+        },
+        {
+          label: "an ssh-auth unconfirmed",
+          failure: { kind: "ssh-auth", detail: "unconfirmed" },
+        },
         { label: "an ssh-host-key-unknown", failure: { kind: "ssh-host-key-unknown" } },
         { label: "an ssh-host-key-changed", failure: { kind: "ssh-host-key-changed" } },
       ] satisfies ReadonlyArray<{ label: string; failure: GitFailure }>
