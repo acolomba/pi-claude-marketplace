@@ -102,6 +102,7 @@ import {
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { composeLeftoverRemovalAdvisories } from "../../shared/notification-summary.ts";
 import {
+  type CloneTransportNote,
   type ContentReason,
   type PluginFailedMessage,
   type Reason,
@@ -905,6 +906,11 @@ export async function addMarketplaceToState(args: {
   readonly gitOps?: GitOps | undefined;
   /** SG-SSH-02: the ssh probe of a GitHub clone. Defaults to DEFAULT_GITHUB_SSH_OPS. */
   readonly gitHubSsh?: GitHubSshOps | undefined;
+  /**
+   * D-SG-22: the collector the clone's note goes to, so a caller that reports
+   * the add can read it after a failure too. Omitted, the body makes its own.
+   */
+  readonly cloneNotes?: GitHubCloneNotes | undefined;
   /** D-PL5-07: downloads a hosted catalog. Defaults to DEFAULT_HOSTED_MANIFEST_FETCH. */
   readonly hostedManifestFetch?: HostedManifestFetch | undefined;
   /**
@@ -999,7 +1005,7 @@ function gitStagingSteps(
   args: AddToStateArgs,
 ): StagingSteps {
   const { deviceFlowHttp, authMemo, removalOps } = args;
-  const cloneNotes = createGitHubCloneNotes();
+  const cloneNotes = args.cloneNotes ?? createGitHubCloneNotes();
   const gitHubSsh = args.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
   const auth = cloneAuthFor(source, {
     credentialOps: args.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
@@ -1200,8 +1206,9 @@ async function runAddInGuard<U>(args: {
   removalOps: RemovalOps;
   locations: ScopedLocations;
   recordedSource: RecordedSourceStep<U> | undefined;
+  cloneNotes: GitHubCloneNotes;
 }): Promise<U | AddedMarketplace> {
-  const { opts, locations, recordedSource, removalOps } = args;
+  const { opts, locations, recordedSource, removalOps, cloneNotes } = args;
   const source = parseAddableSource(opts.rawSource, addSourceForm(opts));
 
   // WB-01: target-path selection happens ONCE before the lock so
@@ -1246,6 +1253,7 @@ async function runAddInGuard<U>(args: {
       deviceFlowHttp: opts.deviceFlowHttp,
       gitOps: opts.gitOps,
       gitHubSsh: opts.gitHubSsh,
+      cloneNotes,
       hostedManifestFetch: opts.hostedManifestFetch,
       previous: action?.record,
     };
@@ -1451,6 +1459,10 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  *
  * SG-TRN-02: so does a ref that looks like a commit id with capital letters,
  * so the cause line names the ref and says to write it in lower case.
+ *
+ * D-SG-22: either shape carries the note of the clone the add ran, with each
+ * retry, so a failure after the clone or over both transports names the
+ * attempts it made.
  */
 function failedAddRow(
   subject: string,
@@ -1458,6 +1470,7 @@ function failedAddRow(
   reason: ContentReason,
   error: Error,
   hostFrame: string | undefined,
+  cloneNote: CloneTransportNote | undefined,
 ): MarketplaceRows<PluginFailedMessage> {
   const cause = hostFrame === undefined ? error : new Error(hostFrame, { cause: error });
   const unwrapped = unwrapAddError(error);
@@ -1469,6 +1482,7 @@ function failedAddRow(
       status: "failed",
       reasons: [reason],
       severity: "error",
+      ...(cloneNote !== undefined && { clone: cloneNote }),
       plugins: [],
     };
   }
@@ -1483,7 +1497,14 @@ function failedAddRow(
     severity: "error",
     needsReload: false,
   };
-  return { name: subject, scope, status: "failed", severity: "error", plugins: [fetchedRow] };
+  return {
+    name: subject,
+    scope,
+    status: "failed",
+    severity: "error",
+    ...(cloneNote !== undefined && { clone: cloneNote }),
+    plugins: [fetchedRow],
+  };
 }
 
 /**
@@ -1604,6 +1625,7 @@ function handleAddFailure(
   opts: AddMarketplaceOptions,
   err: unknown,
   orchestrated: boolean,
+  cloneNote?: CloneTransportNote,
 ): AddMarketplaceOutcome {
   if (err instanceof StateLockHeldError) {
     return surfaceLockHeldAdd(opts, err, orchestrated);
@@ -1639,6 +1661,7 @@ function handleAddFailure(
         reason,
         wrapped,
         hostErrorFrame(err, opts, reason),
+        cloneNote,
       ),
     ];
     const advisories = removalAdvisories(err);
@@ -1719,6 +1742,7 @@ async function runAddOutcome<U extends UnchangedAdd>(
   // to fall back to and no way for a new cleanup site to go uninjected.
   const removalOps = createRemovalOps();
   const locations = locationsFor(opts.scope, opts.cwd);
+  const clone = createAddCloneNotes();
 
   // ATTR-07: route every enumerated precondition failure through notify as a
   // structured `⊘ <subject> [<scope>] (failed) {<reason>}` row on the
@@ -1729,7 +1753,13 @@ async function runAddOutcome<U extends UnchangedAdd>(
   // sees the already-cleaned error, so no staging dir leaks.
   let recorded: U | AddedMarketplace;
   try {
-    recorded = await runAddInGuard({ opts, locations, removalOps, recordedSource });
+    recorded = await runAddInGuard({
+      opts,
+      locations,
+      removalOps,
+      recordedSource,
+      cloneNotes: clone.notes,
+    });
   } catch (err) {
     // rethrowPreconditionErrors short-circuits BEFORE the mode branch so the
     // bootstrap composer contract is preserved in BOTH standalone and
@@ -1741,7 +1771,7 @@ async function runAddOutcome<U extends UnchangedAdd>(
       throw err;
     }
 
-    return handleAddFailure(opts, err, orchestrated);
+    return handleAddFailure(opts, err, orchestrated, clone.note());
   }
 
   const recordedName = recorded.name;
@@ -1776,10 +1806,36 @@ async function runAddOutcome<U extends UnchangedAdd>(
   });
 
   if (!orchestrated) {
-    await notifyAdded(opts, recordedName);
+    await notifyAdded(opts, recordedName, clone.note());
   }
 
   return { status: "added", name: recordedName };
+}
+
+/**
+ * D-SG-22: the clone notes of one add, and the note of its clone. An add
+ * clones at most one source, and the runner keeps that clone's note under the
+ * source it cloned: the typed one, or the recorded one for a repair
+ * (D-PL5-17). So the add's note is the one kept for the subject recorded last.
+ * A reused record, a path source, a hosted catalog, and a clone of a host that
+ * is not GitHub record none.
+ */
+function createAddCloneNotes(): {
+  readonly notes: GitHubCloneNotes;
+  readonly note: () => CloneTransportNote | undefined;
+} {
+  const notes = createGitHubCloneNotes();
+  let subject: string | undefined;
+  return {
+    notes: {
+      record: (recorded, note) => {
+        subject = recorded;
+        notes.record(recorded, note);
+      },
+      noteFor: notes.noteFor,
+    },
+    note: () => (subject === undefined ? undefined : notes.noteFor(subject)),
+  };
 }
 
 const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = {
@@ -1793,9 +1849,14 @@ const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = {
  * step runs first, outside the add's lock (CR-01), in the add's scope and
  * only for dependencies the added marketplace offers (SC-1, D-29), and its
  * rows render under the `(added)` header. A step that throws still lets the
- * committed add report before the throw reaches the caller.
+ * committed add report before the throw reaches the caller. The block carries
+ * the note of the add's clone (D-SG-22).
  */
-async function notifyAdded(opts: AddMarketplaceOptions, recordedName: string): Promise<void> {
+async function notifyAdded(
+  opts: AddMarketplaceOptions,
+  recordedName: string,
+  cloneNote: CloneTransportNote | undefined,
+): Promise<void> {
   let installs = NO_DEPENDENCY_INSTALLS;
   try {
     installs =
@@ -1817,6 +1878,7 @@ async function notifyAdded(opts: AddMarketplaceOptions, recordedName: string): P
         name: recordedName,
         scope: opts.scope,
         status: "added",
+        ...(cloneNote !== undefined && { clone: cloneNote }),
         plugins: installs.rows,
       },
     ];

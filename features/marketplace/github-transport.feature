@@ -13,8 +13,8 @@ Feature: Marketplace github transport
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope | status |
-      | tools | user  | added  |
+      | name  | scope | status | clone note | clone url                     |
+      | tools | user  | added  | via-ssh    | git@github.com:acme/tools.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                 |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
@@ -31,8 +31,8 @@ Feature: Marketplace github transport
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope | status |
-      | tools | user  | added  |
+      | name  | scope | status | clone note         | clone url                         |
+      | tools | user  | added  | ssh-not-configured | https://github.com/acme/tools.git |
     Then the user's ssh receives these launches:
       | argv                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
@@ -58,8 +58,8 @@ Feature: Marketplace github transport
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope | status |
-      | tools | user  | added  |
+      | name  | scope | status | clone note | clone url                     | clone retries                     |
+      | tools | user  | added  | via-ssh    | git@github.com:acme/tools.git | https://github.com/acme/tools.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                 |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
@@ -80,8 +80,8 @@ Feature: Marketplace github transport
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope | status |
-      | tools | user  | added  |
+      | name  | scope | status | clone note | clone url                         |
+      | tools | user  | added  | via-https  | https://github.com/acme/tools.git |
     Then the user's ssh receives no launch
     Then the git host receives these requests:
       | method | path                                              | status |
@@ -99,8 +99,8 @@ Feature: Marketplace github transport
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope | status |
-      | tools | user  | added  |
+      | name  | scope | status | clone note | clone url                     |
+      | tools | user  | added  | via-ssh    | git@github.com:acme/tools.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                 |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
@@ -118,8 +118,8 @@ Feature: Marketplace github transport
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope | status |
-      | tools | user  | added  |
+      | name  | scope | status | clone note         | clone url                         | clone retries                 |
+      | tools | user  | added  | ssh-not-configured | https://github.com/acme/tools.git | git@github.com:acme/tools.git |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
@@ -140,8 +140,8 @@ Feature: Marketplace github transport
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                         | cause truncated |
-      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: repository-not-found, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           |
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                         | cause truncated | marketplace clone note | marketplace clone url             | marketplace clone retries     |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: repository-not-found, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           | ssh-not-configured     | https://github.com/acme/tools.git | git@github.com:acme/tools.git |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
