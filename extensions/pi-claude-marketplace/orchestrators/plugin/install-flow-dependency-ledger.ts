@@ -67,6 +67,7 @@ import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyCaller, DependencyTarget } from "./dependency-bindings.ts";
@@ -138,6 +139,11 @@ export interface InstallMissingDependencyOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-SG-18: the command's GitHub transport context, shared by the dependency
+   * and its closure, as on `InstallPluginOptions`.
+   */
+  readonly transportContext?: PluginTransportContext;
   /** LAYER-07: the `marketplace add` seam, as on `InstallPluginOptions`. */
   readonly marketplaceAdd?: InstallLedgerOptions["marketplaceAdd"];
 }

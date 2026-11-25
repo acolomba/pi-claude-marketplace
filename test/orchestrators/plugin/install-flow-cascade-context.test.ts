@@ -196,6 +196,37 @@ test("D-P3-11, D-SG-18: builds member ledger options from shared and member inpu
   assert.strictEqual(options.transportContext, transportContext);
 });
 
+test("D-SG-18: gives every member of one cascade the caller's one transport context", () => {
+  // arrange
+  const { ctx, run } = makeCtx();
+  const transportContext = defaultPluginTransportContext({});
+  const addedMarketplaces: AddedMarketplaces = [];
+  const member = (plugin: string) =>
+    buildInstallLedgerOptions(
+      { ctx, run, transportContext },
+      {},
+      {
+        scope: "project",
+        cwd: "/project",
+        marketplace: "mp",
+        plugin,
+        provenance: plugin === "app" ? "explicit" : "dependency",
+        marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
+        addedMarketplaces,
+      },
+      REMOVAL_OPS,
+    );
+
+  // act
+  const contexts = ["app", "lib", "util"].map((plugin) => member(plugin).transportContext);
+
+  // assert
+  assert.deepStrictEqual(
+    contexts.map((context) => context === transportContext),
+    [true, true, true],
+  );
+});
+
 test("builds member ledger options with only the required inputs", () => {
   // arrange
   const { ctx, run } = makeCtx();

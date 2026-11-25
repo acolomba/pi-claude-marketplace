@@ -191,6 +191,66 @@ test("D-SG-18: an install given a transport context clones under it and makes no
   });
 });
 
+for (const given of [undefined, inertTransportContext()]) {
+  test(`D-SG-18: a missing-dependency install clones under ${given === undefined ? "a new" : "the given"} transport context`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const made: PluginTransportContext[] = [];
+      const installMissingDependency = createInstallMissingDependency(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+        {},
+        () => {
+          const context = inertTransportContext();
+          made.push(context);
+          return context;
+        },
+      );
+      const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {});
+      const repository = await offerGitPlugin(marketplaceRoot, "app");
+      const inner = seamWith(
+        createGitOps({
+          fixtureSourceDir: repository,
+          head: INSTALL_HOST_HEAD,
+          localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+          remoteRefs: { "refs/remotes/origin/main": INSTALL_HOST_HEAD },
+        }).gitOps,
+      );
+      const transports: Array<CloneTransport | undefined> = [];
+      const { ctx, run } = makeCtx();
+
+      // act
+      await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        ranges: [],
+        requiredBy: "lib@mp",
+        ...(given !== undefined && { transportContext: given }),
+        cloneCacheSeam: {
+          ...inner,
+          materializeOrRefreshPluginMirror: (args) => {
+            transports.push(args.transport);
+            return inner.materializeOrRefreshPluginMirror(args);
+          },
+        },
+      });
+
+      // assert
+      const expected = given ?? made[0];
+      assert.strictEqual(made.length, given === undefined ? 1 : 0);
+      assert.deepStrictEqual(
+        transports.map((transport) => transport?.notes === expected?.notes),
+        [true],
+      );
+    });
+  });
+}
+
 test("composes an explicit environment through dependency planning and ledger persistence", async () => {
   await withHermeticHome(async (owner) => {
     // arrange

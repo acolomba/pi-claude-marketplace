@@ -54,6 +54,18 @@ const INSTALL_PLANNING = createInstallPlanning(
 );
 
 /**
+ * D-SG-18: `run` with the caller's transport context, or with a new one from
+ * `newTransportContext` when the caller brings none.
+ */
+function withTransportContext<O extends { readonly transportContext?: PluginTransportContext }, R>(
+  run: (opts: O) => Promise<R>,
+  newTransportContext: () => PluginTransportContext,
+): (opts: O) => Promise<R> {
+  return (opts) =>
+    run({ ...opts, transportContext: opts.transportContext ?? newTransportContext() });
+}
+
+/**
  * Binds install orchestration to one required semantic transaction owner.
  *
  * D-SG-18: each install call that brings no transport context gets a new one
@@ -76,27 +88,29 @@ export function createInstallPlugin(
     INSTALL_FILE_CAPABILITIES,
     env,
   );
-  return (opts) =>
-    install({
-      ...opts,
-      transportContext: opts.transportContext ?? newTransportContext(),
-    });
+  return withTransportContext(install, newTransportContext);
 }
 
-/** Binds the missing-dependency install to the install transaction owner. */
+/**
+ * Binds the missing-dependency install to the install transaction owner.
+ * D-SG-18: like an install, a call that brings no transport context gets a
+ * new one from `newTransportContext`, which its closure shares.
+ */
 export function createInstallMissingDependency(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
   env: ClaudeEnv = process.env,
+  newTransportContext: () => PluginTransportContext = defaultPluginTransportContext,
 ): (opts: InstallMissingDependencyOptions) => Promise<InstallMissingDependencyOutcome> {
-  return createInstallMissingDependencyLedger(
+  const install = createInstallMissingDependencyLedger(
     transaction,
     hooksRouting,
     completionCache,
     INSTALL_FILE_CAPABILITIES,
     env,
   );
+  return withTransportContext(install, newTransportContext);
 }
 
 /** Binds update dependency settlement to the install transaction owner. */
