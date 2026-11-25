@@ -91,6 +91,8 @@ function inertTransportContext(): PluginTransportContext {
       userOverride: () => Promise.reject(new Error("no check runs for a url source")),
       urlRewritten: () => Promise.reject(new Error("no check runs for a url source")),
       probe: () => Promise.reject(new Error("no check runs for a url source")),
+      sshPresent: () => Promise.reject(new Error("no check runs for a url source")),
+      showsDirectGitHub: () => Promise.reject(new Error("no check runs for a url source")),
     },
     notes: createGitHubCloneNotes(),
   };

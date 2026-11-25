@@ -103,6 +103,14 @@ export interface RpcGitEnvironment {
    */
   readonly CLAUDE_CODE_REMOTE?: string;
   /**
+   * The user's ssh command, set only for a scenario's own Pi, and only to the
+   * ssh stand-in's name or the empty string (D-SG-18). The run's shared Pi
+   * never sets it, and the shell's value never reaches a child.
+   */
+  readonly GIT_SSH_COMMAND?: string;
+  /** The user's ssh program, under the same rule as `GIT_SSH_COMMAND` (D-SG-18). */
+  readonly GIT_SSH?: string;
+  /**
    * The harness CONNECT proxy, set only for the Device Flow profile, so a
    * system git request of that Pi reaches `github.com` through the git host
    * or is refused and logged (D-SG-14). Lowercase, the spelling git and curl
@@ -247,6 +255,8 @@ const OPTIONAL_GIT_VARIABLES = [
   "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE",
   "CLAUDE_CODE_PLUGIN_PREFER_HTTPS",
   "CLAUDE_CODE_REMOTE",
+  "GIT_SSH_COMMAND",
+  "GIT_SSH",
   "https_proxy",
   "no_proxy",
 ] as const satisfies ReadonlyArray<keyof RpcGitEnvironment>;

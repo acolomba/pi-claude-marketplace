@@ -639,6 +639,7 @@ function contextWithOverride(override: boolean): PluginTransportContext {
       probe: () => Promise.reject(new Error("the override keeps the probe from running")),
       userOverride: () => Promise.resolve(override),
       urlRewritten: () => Promise.reject(new Error("the override keeps the url check")),
+      showsDirectGitHub: () => Promise.reject(new Error("the override keeps ssh -G")),
     },
   });
 }

@@ -3859,6 +3859,68 @@ describe("createGitProcess ssh launches", () => {
     ]);
   });
 
+  test("D-SG-18: runs ssh -G git@github.com with the user's environment in the neutral directory with stdin closed", async () => {
+    // arrange
+    const env: NodeJS.ProcessEnv = { PATH: "/usr/bin", SSH_AUTH_SOCK: "/run/agent.sock" };
+    const { git, control, started } = createFakeGit(env, {
+      files: ["/usr/bin/ssh"],
+      neutral: "/private/tmp",
+    });
+
+    // act
+    const pending = git.ssh("github-config");
+    await started;
+    control.writeStdout("host github.com\nhostname github.com\n");
+    control.close(0);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      kind: "ran",
+      exitCode: 0,
+      output: "host github.com\nhostname github.com\n\n",
+      timedOut: false,
+    });
+    assert.deepStrictEqual(control.launches(), [
+      [
+        "/usr/bin/ssh",
+        ["-G", "git@github.com"],
+        {
+          cwd: "/private/tmp",
+          env: { PATH: "/usr/bin", SSH_AUTH_SOCK: "/run/agent.sock" },
+          shell: false,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+          windowsHide: true,
+        },
+      ],
+    ]);
+  });
+
+  test("D-SG-18, T-04-21: stops ssh -G's process tree at its 5000 ms limit", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { git, started, host } = createFakeGit({ PATH: "/usr/bin" }, { files: ["/usr/bin/ssh"] });
+
+    // act
+    const pending = git.ssh("github-config");
+    await started;
+    t.mock.timers.tick(4_999);
+    const signalsBeforeLimit = [...host.groupSignals];
+    t.mock.timers.tick(1);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, { kind: "ran", exitCode: null, output: "\n", timedOut: true });
+    assert.deepStrictEqual(signalsBeforeLimit, []);
+    assert.deepStrictEqual(host.groupSignals, [
+      [4242, "SIGTERM"],
+      [4242, "SIGKILL"],
+    ]);
+  });
+
   test("SG-SSH-02: rejects with the start error of an ssh that cannot start", async () => {
     // arrange
     const startError = Object.assign(new Error("spawn /usr/bin/ssh EACCES"), { code: "EACCES" });

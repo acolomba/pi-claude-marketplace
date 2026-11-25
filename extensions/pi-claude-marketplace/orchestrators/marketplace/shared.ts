@@ -265,6 +265,7 @@ export const DEFAULT_GITHUB_SSH_OPS: GitHubPluginSshOps = {
   probe: () => defaultGit.probeGitHubSsh(),
   userOverride: () => defaultGit.userSshOverride({ env: process.env }),
   urlRewritten: (sshUrl) => defaultGit.sshUrlRewritten(sshUrl),
+  showsDirectGitHub: () => defaultGit.sshShowsDirectGitHub(),
 };
 
 /**

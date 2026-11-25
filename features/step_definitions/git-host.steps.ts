@@ -330,6 +330,34 @@ Given(
   },
 );
 
+// D-SG-18: the settings of the user's own git config that keep a github
+// plugin install on ssh, each with the one value a scenario may give it: an
+// ssh command that names the ssh stand-in, or a rewrite of GitHub's ssh
+// address to https.
+const USER_GIT_SETTINGS: ReadonlyMap<string, string> = new Map([
+  ["core.sshCommand", "ssh"],
+  ["url.https://github.com/.insteadOf", "git@github.com:"],
+]);
+
+// D-SG-18: Pi's git reads the sandbox HOME's git config as the user's global
+// config (DRV-03), so the setting reaches every git command of the scenario
+// and no config of the user's own.
+Given(
+  "the user's git config sets {string} to {string}",
+  async function (this: ScenarioWorld, key: string, value: string): Promise<void> {
+    assert.strictEqual(
+      USER_GIT_SETTINGS.get(key),
+      value,
+      `a scenario may set ${key} only to ${USER_GIT_SETTINGS.get(key) ?? "nothing"}`,
+    );
+    const { home } = this.tokens;
+    const config = path.join(home, ".gitconfig");
+    await runGit(home, home, "config", "--file", config, key, value);
+    this.onRelease(() => rm(config, { force: true }));
+    assert.strictEqual(await runGit(home, home, "config", "--file", config, "--get", key), value);
+  },
+);
+
 // The credential store lies in the sandbox HOME, so the token the product
 // stores after a sign-in never reaches the user's own store.
 Given(
@@ -406,8 +434,21 @@ Given(
   },
 );
 
-/** D-SG-24: the one upstream variable `name` set to `value`, for a profile Pi. */
+// D-SG-18: the user's ssh variables. Their value names the ssh stand-in, the
+// `ssh` first on Pi's path, or is empty, so git never runs another program.
+const SSH_VARIABLES: ReadonlySet<string> = new Set(["GIT_SSH_COMMAND", "GIT_SSH"]);
+const SSH_VARIABLE_VALUES: ReadonlySet<string> = new Set(["ssh", ""]);
+
+/** D-SG-24, D-SG-18: the one upstream or ssh variable `name` set to `value`, for a profile Pi. */
 function profilePiVariable(name: string, value: string): ProfilePiVariables {
+  if (SSH_VARIABLES.has(name)) {
+    if (!SSH_VARIABLE_VALUES.has(value)) {
+      assert.fail(`${name} must name the ssh stand-in "ssh" or be empty, not ${value}`);
+    }
+
+    return { [name]: value };
+  }
+
   if (name !== "CLAUDE_CODE_PLUGIN_PREFER_HTTPS" && name !== "CLAUDE_CODE_REMOTE") {
     assert.fail(`a profile pi takes no variable ${name}`);
   }
@@ -416,8 +457,10 @@ function profilePiVariable(name: string, value: string): ProfilePiVariables {
 }
 
 // D-SG-24: upstream's switch to https, or its remote-session marker, which the
-// product does not read. A Pi reads its environment when it starts, and the
-// run's Pi never sets either, so the scenario gets a Pi of its own.
+// product does not read. D-SG-18: the user's ssh command or program, which
+// keeps a github plugin install on ssh. A Pi reads its environment when it
+// starts, and the run's Pi never sets any of them, so the scenario gets a Pi
+// of its own.
 Given(
   "pi runs with github's requests routed to the git host and the environment variable {string} set to {string}",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },

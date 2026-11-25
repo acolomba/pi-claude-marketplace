@@ -2,6 +2,7 @@ import {
   causeChainTrailer,
   CleanupLeakError,
   errorMessage,
+  GitHubTransportsFailedError,
   InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
@@ -172,10 +173,16 @@ function runtimeFailureReasons(
 /**
  * The runtime row keeps its cause chain, except the bare auth row (amended
  * D-79-03). A cleanup leak keeps it even then, because the cause carries the
- * manual-cleanup hint (MA-9, INR-02).
+ * manual-cleanup hint (MA-9, INR-02). So does a clone that failed over both
+ * GitHub transports, because its cause holds both attempts' failures and
+ * Claude Code's advice (D-SG-18, upstream `zHi`).
  */
 function keepsRuntimeCause(err: unknown, gitReason: ContentReason | undefined): boolean {
-  return gitReason !== "authentication required" || err instanceof CleanupLeakError;
+  return (
+    gitReason !== "authentication required" ||
+    err instanceof CleanupLeakError ||
+    err instanceof GitHubTransportsFailedError
+  );
 }
 
 export function composeInstallFailureMessage(args: {

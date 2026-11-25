@@ -11,7 +11,8 @@
  * launch the way GitHub refuses an unknown key, and puts `<root>/bin` first on
  * `PATH`. So a test that reaches the product's ssh probe without a fake gets
  * `not-configured`, and no test runs the machine's own ssh against
- * github.com. A case that needs another ssh puts its own first on the PATH
+ * github.com. Its `ssh -G` shows a direct hop to github.com, as a stock
+ * OpenSSH does (D-SG-18). A case that needs another ssh puts its own first on the PATH
  * of the processes it starts.
  *
  * D-SG-18: it also removes the shell's `GIT_CONFIG_COUNT`,
@@ -32,8 +33,14 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// The answer GitHub's ssh gives a key it does not know.
+// The answer GitHub's ssh gives a key it does not know. D-SG-18: `ssh -G`
+// prints the config of a stock OpenSSH, which reaches github.com straight, so
+// the run's user is one with no GitHub key and no ssh setting.
 const REFUSING_SSH = `#!/bin/sh
+if [ "$1" = "-G" ]; then
+  printf 'host github.com\\nuser git\\nhostname github.com\\nport 22\\n'
+  exit 0
+fi
 echo 'git@github.com: Permission denied (publickey).' >&2
 exit 255
 `;

@@ -223,9 +223,11 @@ export interface GitProcess {
 
 /**
  * SG-SSH-02: the ssh launches the module runs. `github-probe` is Claude Code's
- * check of whether the user's ssh authenticates to GitHub.
+ * check of whether the user's ssh authenticates to GitHub. D-SG-18:
+ * `github-config` is its `ssh -G` read of the config the user's ssh resolves
+ * for GitHub, which prints that config and connects to nothing.
  */
-export type SshLaunch = "github-probe";
+export type SshLaunch = "github-probe" | "github-config";
 
 /**
  * What one ssh launch did. `output` is stdout, a newline, and stderr, as
@@ -687,6 +689,7 @@ const SSH_LAUNCHES: Readonly<Record<SshLaunch, SshLaunchSpec>> = {
     ],
     timeoutMs: 3_000,
   },
+  "github-config": { args: ["-G", `git@${GITHUB_HOST}`], timeoutMs: 5_000 },
 };
 
 // The answer of a probe is a line or two; the tail keeps ssh's last words.

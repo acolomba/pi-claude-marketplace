@@ -27,6 +27,7 @@ import {
   resolveRef,
   resolveRemoteRef,
   runWithGitAbortSignal,
+  sshShowsDirectGitHub,
   sshUrlRewritten,
   userSshOverride,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -2595,6 +2596,87 @@ describe("sshUrlRewritten", () => {
 
     // assert
     assert.deepStrictEqual(checked, { rewritten: true, exitCode: null });
+  });
+});
+
+describe("sshShowsDirectGitHub", () => {
+  const DIRECT = "host github.com\nuser git\nhostname github.com\nport 22\n";
+
+  for (const { label, run, direct } of [
+    { label: "a direct hop", run: { exitCode: 0, output: `${DIRECT}\n` }, direct: true },
+    {
+      label: "a hostname line in another case with spaces around it",
+      run: { exitCode: 0, output: "  HostName GitHub.com  \n" },
+      direct: true,
+    },
+    {
+      label: "a proxycommand line",
+      run: { exitCode: 0, output: `${DIRECT}proxycommand nc %h %p\n` },
+      direct: false,
+    },
+    {
+      label: "a proxyjump line",
+      run: { exitCode: 0, output: `${DIRECT}ProxyJump bastion\n` },
+      direct: false,
+    },
+    {
+      label: "proxycommand none",
+      run: { exitCode: 0, output: `${DIRECT}proxycommand none\n` },
+      direct: true,
+    },
+    {
+      label: "proxyjump none",
+      run: { exitCode: 0, output: `${DIRECT}proxyjump none\n` },
+      direct: true,
+    },
+    {
+      label: "another hostname",
+      run: { exitCode: 0, output: "hostname ssh.github.com\n" },
+      direct: false,
+    },
+    { label: "a failed ssh -G", run: { exitCode: 255, output: DIRECT }, direct: false },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    run: { exitCode: number; output: string };
+    direct: boolean;
+  }>) {
+    test(`D-SG-18: reads ${label} as ${direct ? "direct" : "not direct"}`, async () => {
+      // arrange
+      const { gitProcess, launches } = sshAnsweringGitProcess(() =>
+        Promise.resolve({ kind: "ran", ...run, timedOut: false }),
+      );
+
+      // act
+      const checked = await sshShowsDirectGitHub(gitProcess);
+
+      // assert
+      assert.deepStrictEqual(checked, { kind: "ran", direct, exitCode: run.exitCode });
+      assert.deepStrictEqual(launches, ["github-config"]);
+    });
+  }
+
+  test("D-SG-18: reads a missing ssh as missing", async () => {
+    // arrange
+    const { gitProcess } = sshAnsweringGitProcess(() => Promise.resolve({ kind: "missing" }));
+
+    // act
+    const checked = await sshShowsDirectGitHub(gitProcess);
+
+    // assert
+    assert.deepStrictEqual(checked, { kind: "missing" });
+  });
+
+  test("D-SG-18: reads a launch that throws as not direct with no exit code", async () => {
+    // arrange
+    const { gitProcess } = sshAnsweringGitProcess(() =>
+      Promise.reject(new Error("spawn ssh EACCES")),
+    );
+
+    // act
+    const checked = await sshShowsDirectGitHub(gitProcess);
+
+    // assert
+    assert.deepStrictEqual(checked, { kind: "ran", direct: false, exitCode: null });
   });
 });
 

@@ -160,6 +160,17 @@ function failedRun(error: unknown): { readonly exitCode: unknown; readonly stder
   return { exitCode, stderr };
 }
 
+test("D-SG-18: the run's refusing ssh shows a direct hop to github.com for ssh -G", async () => {
+  // arrange
+  const refusingSsh = path.join(path.dirname(os.homedir()), "bin", "ssh");
+
+  // act
+  const { stdout } = await promisify(execFile)(refusingSsh, ["-G", "git@github.com"]);
+
+  // assert
+  assert.strictEqual(stdout, "host github.com\nuser git\nhostname github.com\nport 22\n");
+});
+
 test("D-SG-18: this test process holds no git config variable of the shell that runs it", () => {
   // act
   const names = Object.keys(process.env).filter((name) =>

@@ -36,6 +36,10 @@ export interface PluginSshChecks {
   readonly urlRewritten: (sshUrl: string) => Promise<boolean>;
   /** Claude Code's ssh probe of GitHub. */
   readonly probe: () => Promise<"configured" | "not-configured" | "unknown">;
+  /** Whether an ssh can be found at all. */
+  readonly sshPresent: () => Promise<boolean>;
+  /** Whether `ssh -G git@github.com` shows a direct hop to github.com, with no proxy. */
+  readonly showsDirectGitHub: () => Promise<boolean>;
 }
 
 /** The inputs of `planPluginClone`. */
@@ -95,8 +99,11 @@ function gitHubAttempts(source: GitHubSource): {
 
 /**
  * Upstream `Qmt`, off Windows: whether every check that keeps a GitHub clone
- * on SSH passes, in Claude Code's order. The first check that fails stops the
- * walk, so no later check runs.
+ * on SSH passes, in Claude Code's order: no ssh choice of the user, no
+ * rewrite of the ssh URL, a probe that found no configured ssh (Pitfall 8:
+ * an unknown answer keeps SSH), and then no ssh at all or an `ssh -G` that
+ * shows a direct hop. The first check that decides stops the walk, so no
+ * later check runs.
  */
 async function httpsMayGoFirst(checks: PluginSshChecks, sshUrl: string): Promise<boolean> {
   if (await checks.userOverride()) {
@@ -107,7 +114,11 @@ async function httpsMayGoFirst(checks: PluginSshChecks, sshUrl: string): Promise
     return false;
   }
 
-  return (await checks.probe()) === "not-configured";
+  if ((await checks.probe()) !== "not-configured") {
+    return false;
+  }
+
+  return !(await checks.sshPresent()) || checks.showsDirectGitHub();
 }
 
 // The plan of a GitHub source spelled `owner/repo`.

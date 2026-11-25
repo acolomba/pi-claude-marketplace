@@ -68,6 +68,8 @@ interface CheckAnswers {
   readonly userOverride?: boolean;
   readonly urlRewritten?: boolean;
   readonly probe?: ProbeAnswer;
+  readonly sshPresent?: boolean;
+  readonly showsDirectGitHub?: boolean;
 }
 
 /**
@@ -92,6 +94,8 @@ function checksAnswering(answers: CheckAnswers): {
       userOverride: () => answered("userOverride", answers.userOverride),
       urlRewritten: (sshUrl) => answered(`urlRewritten ${sshUrl}`, answers.urlRewritten),
       probe: () => answered("probe", answers.probe),
+      sshPresent: () => answered("sshPresent", answers.sshPresent),
+      showsDirectGitHub: () => answered("showsDirectGitHub", answers.showsDirectGitHub),
     },
   };
 }
@@ -152,6 +156,8 @@ test("D-SG-18: goes https first and retries over ssh once when every check passe
     userOverride: false,
     urlRewritten: false,
     probe: "not-configured",
+    sshPresent: true,
+    showsDirectGitHub: true,
   });
 
   // act
@@ -160,6 +166,53 @@ test("D-SG-18: goes https first and retries over ssh once when every check passe
   // assert
   assert.deepStrictEqual(orderOf(plan), { first: HTTPS_ATTEMPT, note: "ssh-not-configured" });
   assert.deepStrictEqual(await attemptsAfter(plan, CLONE_FAILURE), [HTTPS_ATTEMPT, SSH_ATTEMPT]);
+});
+
+test("D-SG-18: goes https first without ssh -G when no ssh can be found", async () => {
+  // arrange
+  const { checks, calls } = checksAnswering({
+    userOverride: false,
+    urlRewritten: false,
+    probe: "not-configured",
+    sshPresent: false,
+  });
+
+  // act
+  const plan = await planPluginClone({ source: OWNER_REPO, checks });
+
+  // assert
+  assert.deepStrictEqual(orderOf(plan), { first: HTTPS_ATTEMPT, note: "ssh-not-configured" });
+  assert.deepStrictEqual(calls, [
+    "userOverride",
+    "urlRewritten git@github.com:acme/ghp.git",
+    "probe",
+    "sshPresent",
+  ]);
+});
+
+test("D-SG-18: stays on ssh only when ssh -G shows no direct hop to github.com", async () => {
+  // arrange
+  const { checks, calls } = checksAnswering({
+    userOverride: false,
+    urlRewritten: false,
+    probe: "not-configured",
+    sshPresent: true,
+    showsDirectGitHub: false,
+  });
+
+  // act
+  const plan = await planPluginClone({ source: OWNER_REPO, checks });
+
+  // assert
+  assert.deepStrictEqual(orderOf(plan), { first: SSH_ATTEMPT, note: "via-ssh" });
+  assert.deepStrictEqual(await attemptsAfter(plan, CLONE_FAILURE), [SSH_ATTEMPT]);
+  assert.deepStrictEqual(calls, [
+    "userOverride",
+    "urlRewritten git@github.com:acme/ghp.git",
+    "probe",
+    "sshPresent",
+    "showsDirectGitHub",
+  ]);
 });
 
 for (const { label, failure } of [
@@ -182,6 +235,8 @@ for (const { label, failure } of [
       userOverride: false,
       urlRewritten: false,
       probe: "not-configured",
+      sshPresent: true,
+      showsDirectGitHub: true,
     });
 
     // act

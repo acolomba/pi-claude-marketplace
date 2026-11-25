@@ -9,7 +9,7 @@ import {
   GitCommandError,
   StoredCredentialRejectedError,
 } from "../shared/errors.ts";
-import { gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
+import { GITHUB_HOST, gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 
 import { withOneShotCredential } from "./git-one-shot-credential.ts";
@@ -37,8 +37,9 @@ import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from
  * parameter, and every request it sends takes its limit from
  * `gitTimeoutMs()` (D-SG-13). SG-SSH-02: `probeGitHubSsh` runs Claude Code's
  * ssh probe of GitHub through the same git process, with its own fixed limit.
- * D-SG-18: `userSshOverride` and `sshUrlRewritten` are two of the checks that
- * keep a GitHub plugin clone on SSH; both read the user's own settings only.
+ * D-SG-18: `userSshOverride`, `sshUrlRewritten`, and `sshShowsDirectGitHub`
+ * are the checks that keep a GitHub plugin clone on SSH; each reads the user's
+ * own settings only.
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred)
@@ -1025,6 +1026,55 @@ export async function sshUrlRewritten(
   } catch (error: unknown) {
     return { rewritten: true, exitCode: error instanceof GitCommandError ? error.exitCode : null };
   }
+}
+
+// The keys of an `ssh -G` line that send a connection through another host.
+const PROXY_KEYS = ["proxycommand", "proxyjump"] as const;
+
+// Upstream `Xxn`'s proxy test of one trimmed, lower-cased line: a line that
+// starts with a proxy key, unless the key is followed by ` none` alone.
+function isProxyLine(line: string): boolean {
+  const key = PROXY_KEYS.find((name) => line.startsWith(name));
+  return key !== undefined && line.slice(key.length) !== " none";
+}
+
+// Upstream `Xxn`: whether `ssh -G`'s output resolves github.com straight to
+// github.com, with no proxy.
+function showsDirectGitHub(output: string): boolean {
+  const lines = output.split("\n").map((line) => line.trim().toLowerCase());
+  return lines.includes(`hostname ${GITHUB_HOST}`) && !lines.some(isProxyLine);
+}
+
+/**
+ * D-SG-18, upstream `Qmt`: whether the user's ssh would reach github.com
+ * straight, as `ssh -G git@github.com` prints its config. `missing` means no
+ * ssh was found, so nothing ran. Otherwise `direct` is true only for an exit 0
+ * whose output holds a `hostname github.com` line and no proxy line other
+ * than `none`; a launch that throws is not direct. The output is read and
+ * dropped (T-04-22).
+ */
+export async function sshShowsDirectGitHub(
+  gitProcess: SystemGitProcess = NODE_GIT_PROCESS,
+): Promise<
+  | { readonly kind: "missing" }
+  | { readonly kind: "ran"; readonly direct: boolean; readonly exitCode: number | null }
+> {
+  let run: SshRun;
+  try {
+    run = await gitProcess.ssh("github-config");
+  } catch {
+    return { kind: "ran", direct: false, exitCode: null };
+  }
+
+  if (run.kind === "missing") {
+    return run;
+  }
+
+  return {
+    kind: "ran",
+    direct: run.exitCode === 0 && showsDirectGitHub(run.output),
+    exitCode: run.exitCode,
+  };
 }
 
 /**

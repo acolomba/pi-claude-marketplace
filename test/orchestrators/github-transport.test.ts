@@ -445,6 +445,28 @@ describe("cloneOverGitHubTransports", () => {
     );
   });
 
+  test("D-SG-18, upstream zHi: gives a plugin clone that fails over both Claude Code's retry text", async () => {
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan: planOf(HTTPS_ATTEMPT, "ssh-not-configured", SSH_ATTEMPT),
+        notes: createGitHubCloneNotes(),
+        subject: "ghp@gits",
+        surface: "plugin",
+        attempt: (attempt) =>
+          Promise.reject(new Error(attempt.transport === "https" ? "https refused" : "ssh denied")),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubTransportsFailedError);
+        assert.strictEqual(
+          error.message,
+          "https refused\nThe retry over SSH failed too: ssh denied\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.",
+        );
+        return true;
+      },
+    );
+  });
+
   test("D-SG-22: holds a rejection that is not an Error as an Error with its text", async () => {
     // act & assert
     await assert.rejects(
@@ -477,11 +499,16 @@ function countingPort(answers: {
   readonly userOverride?: boolean;
   readonly rewritten?: boolean;
   readonly probe?: Awaited<ReturnType<PluginSshOps["probe"]>>;
+  readonly hop?: Awaited<ReturnType<PluginSshOps["showsDirectGitHub"]>>;
 }): { readonly ssh: PluginSshOps; readonly calls: string[] } {
   const calls: string[] = [];
   return {
     calls,
     ssh: {
+      showsDirectGitHub: () => {
+        calls.push("showsDirectGitHub");
+        return Promise.resolve(answers.hop ?? { kind: "ran", direct: true, exitCode: 0 });
+      },
       probe: () => {
         calls.push("probe");
         return Promise.resolve(answers.probe ?? "not-configured");
@@ -570,6 +597,72 @@ describe("createPluginTransportContext", () => {
       "[git] GitHub SSH URL is rewritten by git config, or git could not say (code=128): staying on SSH",
     ]);
   });
+
+  test("D-SG-18: answers both ssh -G checks from one launch and logs nothing for a direct hop", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { ssh, calls } = countingPort({ hop: { kind: "ran", direct: true, exitCode: 0 } });
+    const context = createPluginTransportContext({ env: {}, ssh });
+
+    // act
+    const answers = [
+      await context.checks.sshPresent(),
+      await context.checks.showsDirectGitHub(),
+      await context.checks.showsDirectGitHub(),
+    ];
+
+    // assert
+    assert.deepStrictEqual(answers, [true, true, true]);
+    assert.deepStrictEqual(calls, ["showsDirectGitHub"]);
+    assert.deepStrictEqual(logged, []);
+  });
+
+  test("D-SG-18: reads a missing ssh as no ssh present", async () => {
+    // arrange
+    const context = createPluginTransportContext({
+      env: {},
+      ssh: countingPort({ hop: { kind: "missing" } }).ssh,
+    });
+
+    // act
+    const present = await context.checks.sshPresent();
+
+    // assert
+    assert.strictEqual(present, false);
+  });
+
+  for (const { label, hop, line } of [
+    {
+      label: "a hop that is not direct",
+      hop: { kind: "ran", direct: false, exitCode: 0 },
+      line: "[git] ssh -G does not show git@github.com going straight to github.com (code=0): staying on SSH",
+    },
+    {
+      label: "no ssh",
+      hop: { kind: "missing" },
+      line: "[git] ssh -G does not show git@github.com going straight to github.com (code=null): staying on SSH",
+    },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    hop: Awaited<ReturnType<PluginSshOps["showsDirectGitHub"]>>;
+    line: string;
+  }>) {
+    test(`D-SG-18: logs Claude Code's line once for ${label}`, async (t) => {
+      // arrange
+      const logged = captureDebugLog(t);
+      const context = createPluginTransportContext({ env: {}, ssh: countingPort({ hop }).ssh });
+
+      // act
+      const answers = [
+        await context.checks.showsDirectGitHub(),
+        await context.checks.showsDirectGitHub(),
+      ];
+
+      // assert
+      assert.deepStrictEqual(answers, [false, false]);
+      assert.deepStrictEqual(logged, [line]);
+    });
+  }
 
   test("D-SG-22: starts each context with notes of its own", () => {
     // arrange

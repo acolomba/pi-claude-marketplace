@@ -9,7 +9,7 @@
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage, GitHubTransportsFailedError } from "../shared/errors.ts";
-import { gitHubOverrideHost } from "../shared/github-base-url.ts";
+import { GITHUB_HOST, gitHubOverrideHost } from "../shared/github-base-url.ts";
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 import { redactCredentials } from "../shared/redact-credentials.ts";
 import { preferHttps } from "../shared/upstream-flag.ts";
@@ -195,6 +195,14 @@ export interface PluginSshOps {
   readonly urlRewritten: (
     sshUrl: string,
   ) => Promise<{ readonly rewritten: boolean; readonly exitCode: number | null }>;
+  /**
+   * `ssh -G git@github.com`: `missing` when no ssh was found, else whether
+   * it shows a direct hop to github.com, with its exit code.
+   */
+  readonly showsDirectGitHub: () => Promise<
+    | { readonly kind: "missing" }
+    | { readonly kind: "ran"; readonly direct: boolean; readonly exitCode: number | null }
+  >;
 }
 
 /**
@@ -255,6 +263,31 @@ function urlRewrittenOnce(ssh: PluginSshOps): PluginSshChecks["urlRewritten"] {
   };
 }
 
+// The two checks that `ssh -G` answers, from one launch: whether an ssh was
+// found, and whether it shows a direct hop. A hop that is not direct writes
+// Claude Code's debug line.
+function sshHopChecks(
+  ssh: PluginSshOps,
+): Pick<PluginSshChecks, "sshPresent" | "showsDirectGitHub"> {
+  const hop = once(() => ssh.showsDirectGitHub());
+  return {
+    sshPresent: async () => (await hop()).kind !== "missing",
+    showsDirectGitHub: once(async () => {
+      const answer = await hop();
+      const direct = answer.kind === "ran" && answer.direct;
+      if (!direct) {
+        const code = answer.kind === "ran" ? answer.exitCode : null;
+        hookDebugLog(
+          `ssh -G does not show git@${GITHUB_HOST} going straight to ${GITHUB_HOST} (code=${code}): staying on SSH`,
+          "git",
+        );
+      }
+
+      return direct;
+    }),
+  };
+}
+
 /**
  * D-SG-18: the transport context of one command. `force` is read from `env`
  * (`transportForce`) the first time a clone asks for it, so a command whose
@@ -277,6 +310,7 @@ export function createPluginTransportContext(args: {
       userOverride: once(() => ssh.userOverride()),
       urlRewritten: urlRewrittenOnce(ssh),
       probe: once(() => ssh.probe()),
+      ...sshHopChecks(ssh),
     },
     notes: createGitHubCloneNotes(),
   };
