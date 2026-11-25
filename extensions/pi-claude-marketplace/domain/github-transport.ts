@@ -9,7 +9,16 @@
 //
 // The module is pure: the probe is a function the caller passes, called at
 // most once, and only when the plan needs its answer.
+//
+// A plan with two attempts gives the other one once after the first fails,
+// as Claude Code's marketplace clone retries on any error. Pi gives none
+// after git is missing or the command was aborted: no transport can clone
+// without git, and an abort stops the command. Nor after print mode refused
+// the Device Flow sign-in (MODE-04): that refusal is about the mode, not the
+// transport, and print mode shows no failed row, so a retry that failed too
+// would hide the refusal's remedy.
 
+import { DeviceFlowUnavailableError, GitCommandError } from "../shared/errors.ts";
 import { GITHUB_HOST } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
@@ -36,12 +45,24 @@ export interface TransportAttempt {
 export type TransportForce = "prefer-https" | "base-override";
 
 /**
- * A clone's plan: the first attempt, and the D-SG-22 note that names how it
- * chose that transport. A clone that made no choice has no note.
+ * A clone's plan: the first attempt, the D-SG-22 note that names how it chose
+ * that transport, and the attempt to run after one fails. A clone that made
+ * no choice has no note.
  */
 export interface TransportPlan {
   readonly first: TransportAttempt;
   readonly note?: CloneNoteKind;
+  /**
+   * The attempt to run after `failed` threw `failure`, or undefined when the
+   * clone stops there. A two-attempt plan gives its other attempt once, and
+   * nothing after a `GitCommandError` whose kind is `git-missing` or
+   * `aborted`, or after a `DeviceFlowUnavailableError`. A one-attempt plan
+   * gives nothing.
+   */
+  readonly after: (
+    failure: unknown,
+    failed: TransportAttempt,
+  ) => Promise<TransportAttempt | undefined>;
 }
 
 /** The inputs of `planMarketplaceClone`. */
@@ -69,6 +90,32 @@ function gitHubSshCloneUrl(source: GitHubSource): string {
   return ensureGitSuffix(`git@${GITHUB_HOST}:${source.owner}/${source.repo}`);
 }
 
+// The `after` of a plan with one attempt.
+function noRetry(): Promise<undefined> {
+  return Promise.resolve(undefined);
+}
+
+// Whether `failure` stops the clone with no other attempt: git is missing,
+// the command was aborted, or print mode refused the sign-in.
+function stopsTheClone(failure: unknown): boolean {
+  if (failure instanceof DeviceFlowUnavailableError) {
+    return true;
+  }
+
+  return (
+    failure instanceof GitCommandError &&
+    (failure.kind === "git-missing" || failure.kind === "aborted")
+  );
+}
+
+// The `after` of a plan whose `first` attempt has `other` behind it.
+function retryWith(first: TransportAttempt, other: TransportAttempt): TransportPlan["after"] {
+  return (failure, failed) =>
+    Promise.resolve(
+      failed.transport === first.transport && !stopsTheClone(failure) ? other : undefined,
+    );
+}
+
 // The transport git uses for an address it is given as written.
 function addressTransport(url: string): GitHubTransport {
   return isScpGitAddress(url) || SSH_URL.test(url) ? "ssh" : "https";
@@ -79,8 +126,9 @@ function addressTransport(url: string): GitHubTransport {
  * transport gives one HTTPS attempt with the `via-https` note. A GitHub URL
  * gives one attempt as written, with the same note. An `owner/repo` source
  * asks the probe: `configured` puts SSH first with the `via-ssh` note, and any
- * other answer puts HTTPS first with the `ssh-not-configured` note. A url
- * source gives one attempt as written and no note.
+ * other answer puts HTTPS first with the `ssh-not-configured` note. Either
+ * order has the other transport behind its first attempt. A url source gives
+ * one attempt as written and no note.
  */
 export async function planMarketplaceClone(
   input: MarketplaceClonePlanInput,
@@ -88,15 +136,16 @@ export async function planMarketplaceClone(
   const { source } = input;
   const written = networkCloneUrl(source);
   if (source.kind === "url") {
-    return { first: { transport: addressTransport(written), url: written } };
+    return { first: { transport: addressTransport(written), url: written }, after: noRetry };
   }
 
   const https: TransportAttempt = { transport: "https", url: written };
   if (input.force !== undefined || !isOwnerRepoSpelling(source)) {
-    return { first: https, note: "via-https" };
+    return { first: https, note: "via-https", after: noRetry };
   }
 
+  const ssh: TransportAttempt = { transport: "ssh", url: gitHubSshCloneUrl(source) };
   return (await input.probe()) === "configured"
-    ? { first: { transport: "ssh", url: gitHubSshCloneUrl(source) }, note: "via-ssh" }
-    : { first: https, note: "ssh-not-configured" };
+    ? { first: ssh, note: "via-ssh", after: retryWith(ssh, https) }
+    : { first: https, note: "ssh-not-configured", after: retryWith(https, ssh) };
 }

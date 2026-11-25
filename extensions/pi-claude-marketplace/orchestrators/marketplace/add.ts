@@ -72,6 +72,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   FetchedUrlCause,
   GitCommandError,
+  GitHubTransportsFailedError,
   HostedManifestFetchError,
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
@@ -345,7 +346,8 @@ function unwrapAddError(err: unknown): unknown {
     err instanceof UnsupportedSourceError ||
     err instanceof ManifestReadDeniedError ||
     err instanceof HostedManifestFetchError ||
-    err instanceof GitCommandError
+    err instanceof GitCommandError ||
+    err instanceof GitHubTransportsFailedError
   ) {
     return err;
   }
@@ -1018,6 +1020,7 @@ function gitStagingSteps(
         notes: cloneNotes,
         subject: source.raw,
         surface: "marketplace",
+        beforeRetry: () => clearStagingDir(removalOps, stagingDir),
         attempt: (attempt) =>
           gitOps.clone({
             dir: stagingDir,
@@ -1032,6 +1035,18 @@ function gitStagingSteps(
       recognizeLeftover({ finalDir, derivedName, source, gitOps, removalOps }),
     cloneNotes,
   };
+}
+
+/**
+ * SG-SSH-02, NFR-1, NFR-3: removes the staging directory before a clone's
+ * second transport runs, through the add's removal ops, so the retry starts
+ * where the first attempt did, with no directory, and a failed add leaves
+ * nothing behind. git removes what a failed clone made (03-06 A10); the
+ * directory is removed anyway. A removal that fails throws, and the add's own
+ * cleanup then runs.
+ */
+async function clearStagingDir(removalOps: RemovalOps, stagingDir: string): Promise<void> {
+  await removalOps.rm(stagingDir, { recursive: true, force: true });
 }
 
 /**
@@ -1477,14 +1492,16 @@ function failedAddRow(
  * that failed without an HTTP status (D-PL5-10), or a `git-missing` failure,
  * whose cause names the git requirement (D-SG-07, SG-PRC-06), and a ref that
  * looks like a commit id with capital letters, whose cause names the ref and
- * the fix (SG-TRN-02). The wording of every other git failure kind is decided
- * later, so those keep the bare row.
+ * the fix (SG-TRN-02), and a GitHub clone that failed over both transports,
+ * whose cause names both attempts (D-SG-22, upstream `wqo`). The wording of
+ * every other git failure kind is decided later, so those keep the bare row.
  */
 function showsAddCause(unwrapped: unknown): boolean {
   return (
     unwrapped instanceof ReservedMarketplaceNameError ||
     unwrapped instanceof HostedManifestFetchError ||
     unwrapped instanceof CapitalLetterCommitRefError ||
+    unwrapped instanceof GitHubTransportsFailedError ||
     (unwrapped instanceof GitCommandError && unwrapped.kind === "git-missing")
   );
 }

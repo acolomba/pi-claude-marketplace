@@ -6,7 +6,10 @@
 // caller passes the attempt, so it stays outside NETWORK_SEAMS (NFR-5).
 
 import { hookDebugLog } from "../shared/debug-log.ts";
+import { errorMessage, GitHubTransportsFailedError } from "../shared/errors.ts";
 import { gitHubOverrideHost } from "../shared/github-base-url.ts";
+import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
+import { redactCredentials } from "../shared/redact-credentials.ts";
 import { preferHttps } from "../shared/upstream-flag.ts";
 
 import type {
@@ -14,7 +17,7 @@ import type {
   TransportForce,
   TransportPlan,
 } from "../domain/github-transport.ts";
-import type { GitHubTransportsFailedError } from "../shared/errors.ts";
+import type { GitHubTransportAttemptFailure } from "../shared/errors.ts";
 import type { CloneNoteKind, CloneTransportNote } from "../shared/notification-types.ts";
 
 /**
@@ -65,6 +68,8 @@ export interface GitHubCloneRun<T> {
   readonly plan: TransportPlan;
   /** Runs one clone attempt. */
   readonly attempt: (attempt: TransportAttempt) => Promise<T>;
+  /** Clears what a failed attempt left, before the next attempt runs. */
+  readonly beforeRetry?: (() => Promise<void>) | undefined;
   readonly notes: GitHubCloneNotes;
   /** The subject of the row that reports the clone. */
   readonly subject: string;
@@ -78,19 +83,98 @@ const CHOICE_LINES: Readonly<Partial<Record<CloneNoteKind, string>>> = {
   "ssh-not-configured": "SSH not configured for GitHub, using HTTPS for",
 };
 
+const TRANSPORT_LABELS = { ssh: "SSH", https: "HTTPS" } as const;
+
+// Keeps the plan's note for the run's subject, with the URLs of the retries
+// that ran after its first attempt.
+function recordNote(run: GitHubCloneRun<unknown>, retries: readonly string[]): void {
+  const { plan } = run;
+  if (plan.note !== undefined) {
+    run.notes.record(run.subject, {
+      note: plan.note,
+      url: plan.first.url,
+      ...(retries.length > 0 && { retries }),
+    });
+  }
+}
+
+// A failure's message for a debug line, with no credential and no absolute path.
+function debugMessage(error: unknown): string {
+  return redactCredentials(redactAbsolutePaths(errorMessage(error)));
+}
+
+// A rejection as the Error an attempt failure holds.
+function asError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(errorMessage(error));
+}
+
+/**
+ * D-SG-22 / OQ-8, upstream `wqo`: the error of a clone whose two attempts
+ * both failed. On the marketplace surface, two failures with the same
+ * message give the second error unchanged; any other pair gives one error
+ * that names both attempts.
+ */
+function bothFailedError(
+  surface: GitHubCloneRun<unknown>["surface"],
+  attempts: readonly [GitHubTransportAttemptFailure, GitHubTransportAttemptFailure],
+): Error {
+  const [first, last] = attempts;
+  return surface === "marketplace" && first.error.message === last.error.message
+    ? last.error
+    : new GitHubTransportsFailedError(surface, attempts);
+}
+
+// Runs the plan's other attempt after the first failed with `firstError`.
+async function runRetry<T>(
+  run: GitHubCloneRun<T>,
+  firstError: unknown,
+  next: TransportAttempt,
+): Promise<T> {
+  const { first } = run.plan;
+  try {
+    return await run.attempt(next);
+  } catch (lastError: unknown) {
+    hookDebugLog(
+      `${TRANSPORT_LABELS[next.transport]} clone fallback also failed for ${run.surface} ${run.subject}: ${debugMessage(lastError)}`,
+      "git",
+    );
+    throw bothFailedError(run.surface, [
+      { ...first, error: asError(firstError) },
+      { ...next, error: asError(lastError) },
+    ]);
+  }
+}
+
 /**
  * SG-SSH-02: records the plan's note for `run.subject`, then runs the plan's
- * first attempt. A failure of that attempt reaches the caller unchanged.
+ * first attempt. When it fails and the plan gives another attempt, as Claude
+ * Code's marketplace clone does after any error, the run logs the fallback,
+ * runs `beforeRetry`, adds the retry's URL to the note, and runs that attempt.
+ * A failure the plan gives no attempt after reaches the caller unchanged.
+ * When the other attempt fails too, the run throws `bothFailedError`'s error.
  */
 export async function cloneOverGitHubTransports<T>(run: GitHubCloneRun<T>): Promise<T> {
   const { plan, subject } = run;
-  if (plan.note !== undefined) {
-    run.notes.record(subject, { note: plan.note, url: plan.first.url });
-    const line = CHOICE_LINES[plan.note];
-    if (line !== undefined) {
-      hookDebugLog(`${line} ${subject}`, "git");
-    }
+  recordNote(run, []);
+  const line = plan.note === undefined ? undefined : CHOICE_LINES[plan.note];
+  if (line !== undefined) {
+    hookDebugLog(`${line} ${subject}`, "git");
   }
 
-  return run.attempt(plan.first);
+  try {
+    return await run.attempt(plan.first);
+  } catch (error: unknown) {
+    const next = await plan.after(error, plan.first);
+    if (next === undefined) {
+      throw error;
+    }
+
+    hookDebugLog(
+      `${TRANSPORT_LABELS[plan.first.transport]} clone failed for ${run.surface} ${subject} (${debugMessage(error)}), falling back to ${TRANSPORT_LABELS[next.transport]}`,
+      "git",
+    );
+    await run.beforeRetry?.();
+    recordNote(run, [next.url]);
+    return runRetry(run, error, next);
+  }
 }

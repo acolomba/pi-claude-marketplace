@@ -214,6 +214,14 @@ function createOfflineGitOps(): {
 }
 
 /**
+ * The two clone URLs of the `acme/remote` marketplace. The run's refusing ssh
+ * makes the probe answer not-configured, so an add clones over https first
+ * and retries a failed clone over ssh (SG-SSH-02).
+ */
+const REMOTE_HTTPS = "https://github.com/acme/remote.git";
+const REMOTE_SSH = "git@github.com:acme/remote.git";
+
+/**
  * A git edge that admits exactly the listed remotes and copies `fixtureSourceDir`
  * into the clone target. `cloneError` turns the admitted clone into a throw,
  * which is the provoker for the typed marketplace-add failure.
@@ -1153,7 +1161,7 @@ describe("applyReconcile", () => {
       { operation: "clone", exitCode: 128 },
     );
     const { gitOps, clonedUrls } = createRemoteGitOps({
-      allowedRemoteUrls: ["https://github.com/acme/remote.git"],
+      allowedRemoteUrls: [REMOTE_HTTPS, REMOTE_SSH],
       cloneError: unreachable,
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -1178,7 +1186,7 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(Object.keys((await loadState(project.extensionRoot)).marketplaces), [
       "local-mp",
     ]);
-    assert.deepStrictEqual(clonedUrls(), ["https://github.com/acme/remote.git"]);
+    assert.deepStrictEqual(clonedUrls(), [REMOTE_HTTPS, REMOTE_SSH]);
     verifyBoundary();
   });
 
@@ -1287,7 +1295,7 @@ describe("applyReconcile", () => {
       "scheme",
     );
     const { gitOps } = createRemoteGitOps({
-      allowedRemoteUrls: ["https://github.com/acme/remote.git"],
+      allowedRemoteUrls: [REMOTE_HTTPS, REMOTE_SSH],
       cloneError: invalid,
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
@@ -1342,7 +1350,7 @@ describe("applyReconcile", () => {
       "scheme",
     );
     const { gitOps } = createRemoteGitOps({
-      allowedRemoteUrls: ["https://github.com/acme/remote.git"],
+      allowedRemoteUrls: [REMOTE_HTTPS, REMOTE_SSH],
       cloneError: invalid,
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);

@@ -21,6 +21,7 @@ import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrator
 import type {
   GitProcess,
   GitRequest,
+  SystemGitProcess,
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { TestContext } from "node:test";
 
@@ -28,12 +29,13 @@ import type { TestContext } from "node:test";
  * A git process over real system git with a scratch HOME, no system or global
  * config, and the case's own neutral directory, so no git variable or config
  * of the shell that runs the suite reaches it (SG-HRN-01). `variables` go over
- * its environment.
+ * its environment, so a `PATH` there decides which `ssh` its ssh launches and
+ * its git's ssh transport find.
  */
 export async function hermeticGitProcess(
   t: TestContext,
   variables: NodeJS.ProcessEnv = {},
-): Promise<GitProcess> {
+): Promise<SystemGitProcess> {
   const root = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
   return createGitProcess({
     spawn: NODE_GIT_SPAWN,

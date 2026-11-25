@@ -52,7 +52,7 @@ import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 import type { DeviceFlowRequest } from "../lib/github-device-flow/server.ts";
 import type { GitHostArm } from "../lib/https-git-host/server.ts";
 import type { GitRepositoryReference } from "../support/git-repository.ts";
-import type { ScenarioWorld } from "../support/world.ts";
+import type { ProfilePiVariables, ScenarioWorld } from "../support/world.ts";
 
 interface ServedRepository {
   readonly owner: string;
@@ -361,7 +361,11 @@ Given(
 // request on this machine. D-SG-14: a system git of that pi reaches
 // `github.com` through the CONNECT proxy, which tunnels only to the git host
 // and logs to the redirect log. The redirect config must be written already.
-async function startPiWithGitHubRouted(world: ScenarioWorld): Promise<void> {
+// `variables` go to that pi only (D-SG-24).
+async function startPiWithGitHubRouted(
+  world: ScenarioWorld,
+  variables?: ProfilePiVariables,
+): Promise<void> {
   const proxy = await startGitHubConnectProxy({
     gitHost: world.gitHost.address,
     logPath: path.join(harnessDirectory(world.tokens.home), GITHUB_REDIRECT_LOG),
@@ -372,6 +376,7 @@ async function startPiWithGitHubRouted(world: ScenarioWorld): Promise<void> {
     extraExtensions: [GITHUB_REDIRECT_EXTENSION],
     withoutGitHubBaseOverride: true,
     httpsProxy: `http://${proxy.address}`,
+    ...(variables !== undefined && { variables }),
   });
   const loads = (await readRedirectLog(world.profileHarness())).flatMap((line) =>
     line.decision === "loaded" ? [line] : [],
@@ -398,6 +403,28 @@ Given(
   async function (this: ScenarioWorld): Promise<void> {
     await writeRedirectConfig(this.tokens.home, { gitHost: this.gitHost.address });
     await startPiWithGitHubRouted(this);
+  },
+);
+
+/** D-SG-24: the one upstream variable `name` set to `value`, for a profile Pi. */
+function profilePiVariable(name: string, value: string): ProfilePiVariables {
+  if (name !== "CLAUDE_CODE_PLUGIN_PREFER_HTTPS" && name !== "CLAUDE_CODE_REMOTE") {
+    assert.fail(`a profile pi takes no variable ${name}`);
+  }
+
+  return { [name]: value };
+}
+
+// D-SG-24: upstream's switch to https, or its remote-session marker, which the
+// product does not read. A Pi reads its environment when it starts, and the
+// run's Pi never sets either, so the scenario gets a Pi of its own.
+Given(
+  "pi runs with github's requests routed to the git host and the environment variable {string} set to {string}",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld, name: string, value: string): Promise<void> {
+    const variables = profilePiVariable(name, value);
+    await writeRedirectConfig(this.tokens.home, { gitHost: this.gitHost.address });
+    await startPiWithGitHubRouted(this, variables);
   },
 );
 

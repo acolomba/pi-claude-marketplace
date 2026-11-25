@@ -17,9 +17,17 @@
 // proxy that tunnels only `github.com:443` to the stand-in, and trusts only
 // the stand-in's certificate, which names github.com. The case checks the
 // proxy's log, so a request to any other host would show (SG-TRN-07).
+//
+// With no base override the add also runs the ssh probe of github.com
+// (SG-SSH-02). The git process and the probe find the ssh stand-in first on
+// PATH, which denies github.com as a user with no GitHub key is denied, and
+// the case checks the stand-in's launch log, so no ssh launch reaches a real
+// host (T-04-52). The probe says ssh is not configured, so https goes first,
+// and the print refusal stops the clone with no ssh attempt (MODE-04).
 
 import assert from "node:assert/strict";
-import fs, { readFile, readdir, realpath } from "node:fs/promises";
+import fs, { mkdtemp, readFile, readdir, realpath, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 
@@ -29,6 +37,7 @@ import {
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { probeGitHubSsh } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { DeviceFlowUnavailableError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { startGitHubConnectProxy } from "../../features/lib/github-device-flow/connect-proxy.ts";
@@ -37,6 +46,7 @@ import {
   readRedirectLog,
 } from "../../features/lib/github-device-flow/extension.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
+import { SshGitHost } from "../../features/lib/ssh-git-host/host.ts";
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import {
@@ -49,7 +59,7 @@ import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { AddMarketplaceOptions } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
-import type { GitProcess } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
+import type { SystemGitProcess } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { RedirectLogLine } from "../../features/lib/github-device-flow/extension.ts";
 
 const TOKEN = "gho_test_token_e2e";
@@ -69,10 +79,23 @@ const GITHUB_TUNNEL = {
   target: "git host",
 } as const;
 
+/** The launch of Claude Code's ssh probe of github.com. */
+const GITHUB_PROBE_ARGV = [
+  "-T",
+  "-o",
+  "BatchMode=yes",
+  "-o",
+  "ConnectTimeout=2",
+  "-o",
+  "StrictHostKeyChecking=yes",
+  "git@github.com",
+];
+
 /**
  * The https git host serving `owner/private`, armed to answer 401 to every
  * request without the user `x-access-token` and `password`, the CONNECT proxy
- * in front of it, and a git process that reaches github.com through the proxy
+ * in front of it, the ssh stand-in that denies github.com, and a git process
+ * that finds the stand-in first on PATH, reaches github.com through the proxy,
  * and trusts only the host's certificate, with `variables` over its
  * environment. The GitHub base override is cleared for the case.
  */
@@ -82,8 +105,9 @@ async function privateStandIn(
   variables: NodeJS.ProcessEnv = {},
 ): Promise<{
   readonly host: HttpsGitHost;
+  readonly sshHost: SshGitHost;
   readonly oid: string;
-  readonly gitProcess: GitProcess;
+  readonly gitProcess: SystemGitProcess;
   readonly tunnels: () => Promise<RedirectLogLine[]>;
 }> {
   const root = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
@@ -98,11 +122,26 @@ async function privateStandIn(
     logPath: join(harness, GITHUB_REDIRECT_LOG),
   });
   t.after(() => proxy.close());
+  const sshRoot = await mkdtemp(join(tmpdir(), "auth-e2e-ssh-"));
+  const sshHost = await SshGitHost.start(join(sshRoot, "ssh-host"), {
+    repositoriesRoot: join(sshRoot, "repositories"),
+  });
+  // close() reads the launch log under the root, so one hook closes, then removes.
+  t.after(async () => {
+    try {
+      await sshHost.close();
+    } finally {
+      await rm(sshRoot, { recursive: true, force: true });
+    }
+  });
+  await sshHost.register("github.com", { probe: { kind: "denied" } });
   setGitHubBaseUrl(t, undefined);
   return {
     host,
+    sshHost,
     oid: served.initialOid,
     gitProcess: await hermeticGitProcess(t, {
+      PATH: sshHost.searchPath(),
       GIT_SSL_CAINFO: host.certificatePath,
       https_proxy: `http://${proxy.address}`,
       ...variables,
@@ -115,6 +154,7 @@ async function createPrintAdd(t: TestContext) {
   const environment = await createHermeticEnvironment(t, "print-add-");
   const standIn = await privateStandIn(t, TOKEN);
   const window = standIn.host.mark();
+  const sshWindow = await standIn.sshHost.mark();
   const locations = locationsFor("project", environment.cwd);
   const priorState = {
     schemaVersion: 3,
@@ -160,6 +200,7 @@ async function createPrintAdd(t: TestContext) {
     completionCache: createCompletionCache(),
     credentialOps: credentials.credentialOps,
     deviceFlowHttp: deviceFlow.http,
+    gitHubSsh: { probe: () => probeGitHubSsh(standIn.gitProcess) },
     gitOps: {
       ...gitOps,
       clone: (cloneOptions) => {
@@ -177,6 +218,8 @@ async function createPrintAdd(t: TestContext) {
     deviceFlow,
     notifications,
     requests: () => standIn.host.requestsSince(window).requests,
+    sshLaunches: async () =>
+      (await standIn.sshHost.launchesSince(sshWindow)).map((launch) => launch.argv),
     tunnels: standIn.tunnels,
     stagingRoot,
     stagingDirs,
@@ -200,6 +243,9 @@ async function assertUncommittedPrintAdd(fixture: Awaited<ReturnType<typeof crea
   assert.deepStrictEqual(fixture.notifications, []);
   assert.deepStrictEqual(fixture.requests(), [PRIVATE_INFO_REFS]);
   assert.deepStrictEqual(await fixture.tunnels(), [GITHUB_TUNNEL]);
+  // T-04-52: the add's one probe reached the stand-in, and the print refusal
+  // stopped the clone with no ssh attempt (MODE-04).
+  assert.deepStrictEqual(await fixture.sshLaunches(), [GITHUB_PROBE_ARGV]);
   assert.strictEqual(fixture.stagingDirs.length, 1);
   assert.deepStrictEqual(fixture.credentials.calls, { fill: [], approve: [], reject: [] });
   assert.deepStrictEqual(fixture.deviceFlow.calls, { requestCode: [], pollToken: [] });

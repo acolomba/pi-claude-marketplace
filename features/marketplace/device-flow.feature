@@ -8,6 +8,12 @@ Feature: Marketplace device flow
   A loopback stand-in answers GitHub's sign-in endpoints, the run's git host serves GitHub's
   repositories, an in-process redirect sends Pi's github.com requests to them, and a proxy tunnels
   git's github.com connections to the git host. Both refuse every other host.
+  A user who needs Device Flow has no SSH key on GitHub, so the user's ssh is denied for github.com:
+  the ssh probe says ssh is not configured, the add clones over https first, and the sign-in runs
+  inside that attempt. A sign-in that fails then retries over ssh, which GitHub refuses too.
+
+  Background:
+    Given the user's ssh is denied for "github.com"
 
   Scenario: Adding a private GitHub marketplace signs in through Device Flow and clones it
     Given the marketplace "tools" is published as a github source
@@ -89,15 +95,19 @@ Feature: Marketplace device flow
     Given pi runs with github's requests routed to the stand-ins
     When the user runs "/claude:plugin marketplace add acme/tools --scope user"
     Then the command reports these results:
-      | kind               | severity | needs reload | verification uri                | user code | summary                             |
-      | device-flow-prompt | info     | false        | https://github.com/login/device | WDJB-MJHT |                                     |
-      | cascade            | error    | false        |                                 |           | A marketplace operation has failed. |
+      | kind               | severity | needs reload | verification uri                | user code | summary                      |
+      | device-flow-prompt | info     | false        | https://github.com/login/device | WDJB-MJHT |                              |
+      | cascade            | error    | false        |                                 |           | Some operations have failed. |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons     |
-      | acme/tools       | user              | failed             | authentication required |
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                       | cause truncated |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: https-auth, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
     Then github's sign-in receives these requests:
       | method | path                      | form                                                                                                                      |
       | POST   | /login/device/code        | client_id=Ov23liNcyK08uGdU0mMl, scope=repo                                                                                |
@@ -265,18 +275,22 @@ Feature: Marketplace device flow
     Given pi runs with github's requests routed to the stand-ins
     When the user runs "/claude:plugin marketplace add acme/tools --scope user"
     Then the result has these fields:
-      | kind         | cascade                             |
-      | severity     | error                               |
-      | needs reload | false                               |
-      | summary      | A marketplace operation has failed. |
-    Then the result lists these marketplaces:
-      | name       | scope | status | reasons                 |
-      | acme/tools | user  | failed | authentication required |
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                       | cause truncated |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: https-auth, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           |
     Then no result of the command contains "expired-token"
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
     Then github's sign-in receives no request
     Then pi routes these github requests:
       | method  | url            | routed to |

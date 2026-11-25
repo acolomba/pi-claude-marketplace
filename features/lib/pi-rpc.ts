@@ -89,6 +89,20 @@ export interface RpcGitEnvironment {
    */
   readonly CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE?: string;
   /**
+   * Upstream's switch that clones every GitHub address over https with no
+   * ssh probe, set only for a scenario's own Pi (D-SG-24). The run's shared
+   * Pi never sets it, so its GitHub clones keep the probe's order, and the
+   * shell's value never reaches a child.
+   */
+  readonly CLAUDE_CODE_PLUGIN_PREFER_HTTPS?: string;
+  /**
+   * Upstream's marker of a remote session, set only for a scenario's own Pi.
+   * The product does not read it (D-SG-24), and a scenario pins that; the
+   * run's shared Pi never sets it, and the shell's value never reaches a
+   * child.
+   */
+  readonly CLAUDE_CODE_REMOTE?: string;
+  /**
    * The harness CONNECT proxy, set only for the Device Flow profile, so a
    * system git request of that Pi reaches `github.com` through the git host
    * or is refused and logged (D-SG-14). Lowercase, the spelling git and curl
@@ -231,6 +245,8 @@ const OPTIONAL_GIT_VARIABLES = [
   "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS",
   "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS",
   "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE",
+  "CLAUDE_CODE_PLUGIN_PREFER_HTTPS",
+  "CLAUDE_CODE_REMOTE",
   "https_proxy",
   "no_proxy",
 ] as const satisfies ReadonlyArray<keyof RpcGitEnvironment>;

@@ -43,6 +43,9 @@ import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 const BOOTSTRAP_REMOTE = "https://github.com/anthropics/claude-plugins-official.git";
+// SG-SSH-02: the run's refusing ssh makes the probe answer not-configured, so
+// the add clones over https first and retries a failed clone over ssh.
+const BOOTSTRAP_SSH_REMOTE = "git@github.com:anthropics/claude-plugins-official.git";
 const BOOTSTRAP_MANIFEST_JSON = JSON.stringify({
   name: "claude-plugins-official",
   owner: { name: "Quick 260516-02r Tests" },
@@ -79,7 +82,7 @@ function createBootstrapGitOps(options: BootstrapGitOptions = {}): {
 } {
   const git = createGitOpsFake({
     boundary: "memory",
-    allowedRemoteUrls: [BOOTSTRAP_REMOTE],
+    allowedRemoteUrls: [BOOTSTRAP_REMOTE, BOOTSTRAP_SSH_REMOTE],
     cloneFixture: { boundary: "local", sourceDir: fixtureClaudePluginsOfficial() },
     ...(options.cloneError === undefined ? {} : { cloneError: options.cloneError }),
   });
@@ -586,7 +589,7 @@ test("propagates a clone failure silently", async (t) => {
     marketplaces: {},
   });
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), failedAddScopeTree());
-  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
+  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE, BOOTSTRAP_SSH_REMOTE]);
   verifyBoundary();
 });
 
@@ -625,7 +628,7 @@ test("renders a failed add as marketplace add does and never reaches the missing
     marketplaces: {},
   });
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), failedAddScopeTree());
-  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
+  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE, BOOTSTRAP_SSH_REMOTE]);
   verifyBoundary();
 });
 

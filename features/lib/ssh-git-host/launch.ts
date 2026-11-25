@@ -25,9 +25,15 @@ export const LAUNCHES_FILE = "launches.jsonl";
 /** The scratch HOME, under the stand-in directory, of every `git upload-pack` the stub runs. */
 export const HOME_DIRECTORY = "home";
 
-/** The scripted answer a registered host gives a probe launch. */
+/**
+ * The scripted answer a registered host gives a probe launch. A
+ * `no-repository` host authenticates its user, as `authenticated` does, but
+ * answers every transport launch as GitHub answers a repository the user
+ * cannot reach.
+ */
 export type SshProbeArm =
   | { readonly kind: "authenticated"; readonly user: string }
+  | { readonly kind: "no-repository"; readonly user: string }
   | { readonly kind: "denied" }
   | { readonly kind: "host-key" }
   | { readonly kind: "hold" };
@@ -194,6 +200,18 @@ export interface SshProbeAnswer {
   readonly exitCode: number;
 }
 
+// ssh's own refusal of every key, which names the destination's user and host.
+function deniedAnswer(destination: string): SshProbeAnswer {
+  const { user, host } = destinationParts(destination);
+  return { stderr: `${user ?? "git"}@${host}: Permission denied (publickey).\n`, exitCode: 255 };
+}
+
+// ssh's own refusal of a host whose key it does not know.
+const HOST_KEY_ANSWER: SshProbeAnswer = {
+  stderr: "Host key verification failed.\n",
+  exitCode: 255,
+};
+
 /**
  * Returns the answer of the arm `arm` to a probe of `destination`, or `"hold"`
  * when the stub answers nothing until its caller kills it. The strings and
@@ -205,22 +223,44 @@ export interface SshProbeAnswer {
 export function probeAnswer(arm: SshProbeArm, destination: string): SshProbeAnswer | "hold" {
   switch (arm.kind) {
     case "authenticated":
+    case "no-repository":
       return {
         stderr: `Hi ${arm.user}! You've successfully authenticated, but GitHub does not provide shell access.\n`,
         exitCode: 1,
       };
-    case "denied": {
-      const { user, host } = destinationParts(destination);
-      return {
-        stderr: `${user ?? "git"}@${host}: Permission denied (publickey).\n`,
-        exitCode: 255,
-      };
-    }
-
+    case "denied":
+      return deniedAnswer(destination);
     case "host-key":
-      return { stderr: "Host key verification failed.\n", exitCode: 255 };
+      return HOST_KEY_ANSWER;
     case "hold":
       return "hold";
+  }
+}
+
+/**
+ * Returns the answer of the arm `arm` to a transport launch to `destination`,
+ * such as git's `git-upload-pack`, or `undefined` when the stub serves the
+ * launch. A `denied` or `host-key` host refuses it with the text and the exit
+ * code of its probe answer, as a real ssh refuses both before any command
+ * runs. A `no-repository` host answers as GitHub does for a repository the
+ * user cannot reach: `ERROR: Repository not found.` and exit 1. An
+ * `authenticated` host serves the launch, and so does a `hold` host, whose
+ * hold is for probes only.
+ */
+export function transportRefusal(
+  arm: SshProbeArm,
+  destination: string,
+): SshProbeAnswer | undefined {
+  switch (arm.kind) {
+    case "denied":
+      return deniedAnswer(destination);
+    case "host-key":
+      return HOST_KEY_ANSWER;
+    case "no-repository":
+      return { stderr: "ERROR: Repository not found.\n", exitCode: 1 };
+    case "authenticated":
+    case "hold":
+      return undefined;
   }
 }
 
@@ -256,6 +296,7 @@ function isProbeArm(value: unknown): value is SshProbeArm {
 
   switch (value.kind) {
     case "authenticated":
+    case "no-repository":
       return typeof value.user === "string";
     case "denied":
     case "host-key":
