@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: parity-gaps
 status: Awaiting next milestone
 stopped_at: Milestone parity-gaps completed and archived (override_closeout)
-last_updated: "2026-11-17T18:22:58.068Z"
-last_activity: 2026-11-17
-last_activity_desc: "parity-gaps shipped as PR #324"
-state_head: 6857cedb21be3c94d0d03672658036dc2df4aebb
+last_updated: "2026-11-25T16:33:16.867Z"
+last_activity: 2026-11-25
+last_activity_desc: "Completed quick task 261125-i5j"
+state_head: 33d63181188d5ecfecf2b75e92dd3479ceeec2ed
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: null
 current_phase_name: null
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: Milestone parity-gaps complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-17 -- parity-gaps shipped as PR #324
+Last activity: 2026-11-25 - Completed quick task 261125-i5j: Resolve plugins with no supported component as unavailable
 
 ### parity-gaps closeout: `override_closeout`
 
@@ -471,6 +471,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261116-im3 | Fail closed on unreadable recorded plugin options (maintainer review of D-PG10-25) | 2026-11-16 | 6d9a3cdd | complete | [261116-im3-fail-closed-on-unreadable-recorded-plugi](./quick/261116-im3-fail-closed-on-unreadable-recorded-plugi/) |
 | 261116-kw7 | Keep both workflow names that the plugin prefix elision would merge (maintainer decision D-PG8-18) | 2026-11-16 | 3488bf29 | complete | [261116-kw7-keep-both-workflow-names-the-prefix-elis](./quick/261116-kw7-keep-both-workflow-names-the-prefix-elis/) |
 | 261116-p4s | End the UserPromptSubmit block notice with the original prompt (maintainer decision, HOOKORIGPROMPT-01) | 2026-11-16 | 8c64be00 | complete | [261116-p4s-end-the-prompt-block-notice-with-the-orig](./quick/261116-p4s-end-the-prompt-block-notice-with-the-orig/) |
+| 261125-i5j | Resolve plugins with no supported component as unavailable (D-NSC-01) | 2026-11-25 | 33d6318 | complete | [261125-i5j-resolve-plugins-with-no-supported-compon](./quick/261125-i5j-resolve-plugins-with-no-supported-compon/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
