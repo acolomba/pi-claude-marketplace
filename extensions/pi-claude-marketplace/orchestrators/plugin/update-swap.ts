@@ -248,6 +248,8 @@ export interface ThreePhaseArgsBase {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /** D-SG-19: the command's GitHub transport context (`PreparePluginUpdateOptions`). */
+  readonly transportContext?: NonNullable<PreparePluginUpdateOptions["transportContext"]>;
   /**
    * D-10-18: the run-scoped tag memos, one per repository URL and one per
    * marketplace root, threaded into every target's preflight so one bulk run

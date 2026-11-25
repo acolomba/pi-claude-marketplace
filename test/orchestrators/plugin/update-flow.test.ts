@@ -33,6 +33,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -84,6 +85,7 @@ import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type { PluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -15824,5 +15826,160 @@ test("UPD-DEP-D1: an autoupdate run settles the new version's dependencies in th
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+// ─── D-SG-19: one GitHub transport context per update command ───────────────
+
+const PROBE_REFUSED = "the probe of the command's transport context ran";
+
+/**
+ * A GitHub base no server answers. A clone that ignores the command's context
+ * sends its request there and fails at once, so no row reaches github.com.
+ */
+const UNANSWERED_GITHUB_BASE = "https://127.0.0.1:9";
+
+/**
+ * D-SG-19: a transport context for a user with no ssh setting whose probe
+ * fails with `PROBE_REFUSED`, so a plugin clone that plans over it fails
+ * before git runs, and `probes` counts the probes. Nothing forces HTTPS, so
+ * the plan asks the probe even while the base override is set.
+ */
+function probeRefusingContext(probes: { count: number }): PluginTransportContext {
+  const { platform, checks, notes } = createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: () => {
+        probes.count += 1;
+        return Promise.reject(new Error(PROBE_REFUSED));
+      },
+      userOverride: () => Promise.resolve(false),
+      urlRewritten: () => Promise.resolve({ rewritten: false, exitCode: 1 }),
+      showsDirectGitHub: () => Promise.resolve({ kind: "ran", direct: true, exitCode: 0 }),
+      showsDirectGitHubThroughGit: () => Promise.resolve(true),
+    },
+  });
+  return { force: undefined, platform, checks, notes };
+}
+
+/** The update operations, with the transport context factory `newTransportContext`. */
+function transportUpdateOperations(newTransportContext: () => PluginTransportContext) {
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+    undefined,
+    process.env,
+    undefined,
+    newTransportContext,
+  );
+}
+
+/** Seeds the unpinned github plugin `gp@mp` in the project scope of `cwd`, with no mirror. */
+function seedUnpinnedGitHubPlugin(cwd: string): Promise<void> {
+  return seedGitUpdateMarketplace({
+    cwd,
+    cloneUrl: "https://github.com/org/repo",
+    entrySource: { source: "github", repo: "org/repo" },
+    recordedSha: SHA_OLD,
+    versionTag: "1.0.0",
+  });
+}
+
+test("D-SG-19: an update command makes one transport context and its plugin clone plans over it", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-transport-root-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedUnpinnedGitHubPlugin(cwd);
+    const probes = { count: 0 };
+    let made = 0;
+    const operations = transportUpdateOperations(() => {
+      made += 1;
+      return probeRefusingContext(probes);
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await operations.updatePlugins({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+    });
+
+    // assert
+    assert.deepStrictEqual({ made, probes: probes.count }, { made: 1, probes: 1 });
+    assert.match(notifications.map((n) => n.message).join("\n"), /\(failed\)/);
+  });
+});
+
+test("D-SG-19: an update command clones over the transport context its caller gives and makes none", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-transport-given-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedUnpinnedGitHubPlugin(cwd);
+    const probes = { count: 0 };
+    const operations = transportUpdateOperations(() => {
+      throw new Error("a caller's context leaves the factory unused");
+    });
+    const { ctx, run } = makeCtx();
+
+    // act
+    await operations.updatePlugins({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+      transportContext: probeRefusingContext(probes),
+    });
+
+    // assert
+    assert.strictEqual(probes.count, 1);
+  });
+});
+
+test("D-SG-19: one autoupdate run gives its plugin updates one transport context, and the next run another", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-transport-autoupdate-");
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await seedUnpinnedGitHubPlugin(cwd);
+    process.chdir(cwd);
+    const probes = { count: 0 };
+    let made = 0;
+    const operations = transportUpdateOperations(() => {
+      made += 1;
+      return probeRefusingContext(probes);
+    });
+
+    // act
+    const firstRun = operations.beginPluginUpdateRun(commandNotification());
+    const first = await firstRun("gp", "mp", "project");
+    const again = await firstRun("gp", "mp", "project");
+    const madeByFirstRun = made;
+    await operations.beginPluginUpdateRun(commandNotification())("gp", "mp", "project");
+
+    // assert
+    assert.deepStrictEqual(
+      [first, again].map((outcome) =>
+        outcome.partition === "failed" ? outcome.notes.join(" ") : outcome.partition,
+      ),
+      [PROBE_REFUSED, PROBE_REFUSED],
+    );
+    assert.deepStrictEqual(
+      { madeByFirstRun, made, probes: probes.count },
+      { madeByFirstRun: 1, made: 2, probes: 2 },
+    );
   });
 });
