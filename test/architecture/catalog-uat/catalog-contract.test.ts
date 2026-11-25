@@ -19,7 +19,7 @@ const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 22;
 const EXPECTED_SECTION_COUNT = 22;
 const EXPECTED_STATE_COUNT = 329;
-const EXPECTED_UTF8_BYTES = 55_844;
+const EXPECTED_UTF8_BYTES = 55_943;
 
 const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",

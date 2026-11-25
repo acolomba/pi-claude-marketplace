@@ -24,6 +24,11 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
             name: "claude-plugins-official",
             scope: "user",
             status: "added",
+            // D-SG-22: the transport the clone used.
+            clone: {
+              note: "ssh-not-configured",
+              url: "https://github.com/anthropics/claude-plugins-official.git",
+            },
             plugins: [],
           },
         ],

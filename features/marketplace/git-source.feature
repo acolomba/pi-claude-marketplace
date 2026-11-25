@@ -31,6 +31,27 @@ Feature: Marketplace git source
       | url         | project | https://{git host}/acme/tools.git | /acme/tools.git |
       | url         | user    | https://{git host}/acme/tools.git | /acme/tools.git |
 
+  Scenario Outline: A removed github marketplace can be added again from the same source and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the <scope> scope
+    Given the user has run "/claude:plugin marketplace remove tools --scope <scope>"
+    When the user runs "/claude:plugin marketplace add <source> --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | <scope> | added  | via-https  | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the git host receives these requests:
+      | method | path                                                | status |
+      | GET    | <repository path>/info/refs?service=git-upload-pack | 200    |
+      | POST   | <repository path>/git-upload-pack                   | 200    |
+      | POST   | <repository path>/git-upload-pack                   | 200    |
+
     @github
     Examples:
       | source kind | scope   | source     | repository path |
@@ -188,8 +209,8 @@ Feature: Marketplace git source
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                                                   | cause truncated |
-      | <source>         | project           | failed             | <source> | <source> | failed | authentication required | project |       |                  | git clone --depth failed: https-auth, exit code 128, fetched https://{git host}/acme/tools.git | false           |
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                                                    | cause truncated | marketplace clone note | marketplace clone url             |
+      | <source>         | project           | failed             | <source> | <source> | failed | authentication required | project |       |                  | git clone --depth failed: https-auth, exit code 128, fetched https://{git host}/acme/tools.git | false           | via-https              | https://github.com/acme/tools.git |
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status |
@@ -228,6 +249,28 @@ Feature: Marketplace git source
     Examples:
       | source kind | source                            |
       | url         | https://{git host}/acme/tools.git |
+
+  Scenario Outline: Adding a github marketplace with a stored credential clones it and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the user has stored a credential for the git host with the user "alice" and the password "s3cret"
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
     @github
     Examples:

@@ -31,6 +31,20 @@ Feature: Marketplace reserved name
       | source kind | source                                              | refusal                                                                                                                                                |
       | url         | https://{git host}/acme/claude-plugins-official.git | The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
 
+  Scenario Outline: Adding a github marketplace whose manifest declares a reserved name fails with Claude Code's refusal and names its clone transport
+    Given the marketplace "claude-plugins-official" is published as a <source kind> source
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons          | scope   | leaks | rollback partial | cause chain | cause truncated | marketplace clone note | marketplace clone url                               |
+      | <source>         | project           | failed             | <source> | <source> | failed | invalid manifest | project |       |                  | <refusal>   | false           | via-https              | https://github.com/acme/claude-plugins-official.git |
+    Then the project scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the project scope does not exist
+
     @github
     Examples:
       | source kind | source                       | refusal                                                                                                                                                |
@@ -71,8 +85,8 @@ Feature: Marketplace reserved name
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name             | marketplace scope | marketplace status | id                           | name                         | status | reasons          | scope   | leaks | rollback partial | cause chain                                                            | cause truncated |
-      | anthropics/claude-plugins-v2 | project           | failed             | anthropics/claude-plugins-v2 | anthropics/claude-plugins-v2 | failed | invalid manifest | project |       |                  | Marketplace name impersonates an official Anthropic/Claude marketplace | false           |
+      | marketplace name             | marketplace scope | marketplace status | id                           | name                         | status | reasons          | scope   | leaks | rollback partial | cause chain                                                            | cause truncated | marketplace clone note | marketplace clone url                               |
+      | anthropics/claude-plugins-v2 | project           | failed             | anthropics/claude-plugins-v2 | anthropics/claude-plugins-v2 | failed | invalid manifest | project |       |                  | Marketplace name impersonates an official Anthropic/Claude marketplace | false           | via-https              | https://github.com/anthropics/claude-plugins-v2.git |
     Then the project scope holds no marketplace checkout
     Then the "claude-plugins.json" file of the project scope does not exist
 
@@ -148,8 +162,8 @@ Feature: Marketplace reserved name
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name                    | scope   | status |
-      | claude-plugins-official | project | added  |
+      | name                    | scope   | status | clone note | clone url                                                 |
+      | claude-plugins-official | project | added  | via-https  | https://github.com/anthropics/claude-plugins-official.git |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name                    | source                             |
       | claude-plugins-official | anthropics/claude-plugins-official |
@@ -162,8 +176,8 @@ Feature: Marketplace reserved name
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name                    | scope   | status |
-      | claude-plugins-official | project | added  |
+      | name                    | scope   | status | clone note | clone url                                             |
+      | claude-plugins-official | project | added  | via-ssh    | git@github.com:anthropics/claude-plugins-official.git |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name                    | source                                                |
       | claude-plugins-official | git@github.com:anthropics/claude-plugins-official.git |

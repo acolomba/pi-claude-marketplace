@@ -12,8 +12,8 @@ Feature: Plugin bootstrap
       | kind    | severity | needs reload |
       | cascade | info     | false        |
     Then the results list these marketplaces and plugins:
-      | marketplace name        | marketplace scope | marketplace status |
-      | claude-plugins-official | user              | added              |
+      | marketplace name        | marketplace scope | marketplace status | marketplace clone note | marketplace clone url                                     |
+      | claude-plugins-official | user              | added              | via-https              | https://github.com/anthropics/claude-plugins-official.git |
     Then the git host receives these requests:
       | method | path                                                                      | status |
       | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
@@ -31,8 +31,8 @@ Feature: Plugin bootstrap
       | kind    | severity | needs reload |
       | cascade | info     | false        |
     Then the results list these marketplaces and plugins:
-      | marketplace name        | marketplace scope | marketplace status |
-      | claude-plugins-official | user              | added              |
+      | marketplace name        | marketplace scope | marketplace status | marketplace clone note | marketplace clone url                                     |
+      | claude-plugins-official | user              | added              | via-https              | https://github.com/anthropics/claude-plugins-official.git |
     Then the git host receives these requests:
       | method | path                                                                      | status |
       | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
@@ -49,6 +49,7 @@ Feature: Plugin bootstrap
     Then pi's terminal shows this result of the command:
       """
       ● claude-plugins-official [user] (added)
+        Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git
       """
     Then the git host receives these requests:
       | method | path                                                                      | status |
@@ -107,8 +108,8 @@ Feature: Plugin bootstrap
       | kind    | severity | needs reload |
       | cascade | info     | true         |
     Then the results list these marketplaces and plugins:
-      | marketplace name        | marketplace scope | marketplace status | id                          | name                        | status    | reasons              | scope | version |
-      | claude-plugins-official | user              | added              | lib@claude-plugins-official | lib@claude-plugins-official | installed | dependency installed | user  | 1.0.0   |
+      | marketplace name        | marketplace scope | marketplace status | id                          | name                        | status    | reasons              | scope | version | marketplace clone note | marketplace clone url                                     |
+      | claude-plugins-official | user              | added              | lib@claude-plugins-official | lib@claude-plugins-official | installed | dependency installed | user  | 1.0.0   | via-https              | https://github.com/anthropics/claude-plugins-official.git |
     Then the installation record of the user scope holds these plugins:
       | id                          | version | enabled |
       | app@tools                   | 1.0.0   | true    |

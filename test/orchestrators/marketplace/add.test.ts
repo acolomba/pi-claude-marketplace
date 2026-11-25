@@ -233,6 +233,22 @@ function userSsh(answer: Awaited<ReturnType<GitHubSshOps["probe"]>>): GitHubSshO
   return { probe: () => Promise.resolve(answer) };
 }
 
+/**
+ * D-SG-22: the clone note line of an add of the GitHub `repository` that went
+ * https first because the user's ssh is not set up, which is what the run's
+ * refusing ssh makes the probe answer.
+ */
+function sshNotConfiguredNote(repository: string): string {
+  return `  SSH not configured, cloning via HTTPS: https://github.com/${repository}.git`;
+}
+
+/** D-SG-22: the clone note line of an add of anthropics/claude-plugins-official. */
+const OFFICIAL_NOTE = sshNotConfiguredNote("anthropics/claude-plugins-official");
+
+/** D-SG-22: the same add's note while the GitHub base override forces https. */
+const OFFICIAL_OVERRIDE_NOTE =
+  "  Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git";
+
 function createGitOps(initial: GitOpsAdapterOptions = {}) {
   const git = createGitOpsFake({
     boundary: "memory",
@@ -546,7 +562,7 @@ test("MA-5: github source clones, validates, renames, mutates state, emits V2 su
     // SNM-33 / D-22-01: the catalog collapses github + path source onto one
     // `(added)` shape. A marketplace record is not a Pi-visible resource, so
     // NO `/reload` trailer.
-    assert.equal(note.message, "● valid-marketplace [project] (added)");
+    assert.equal(note.message, `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}`);
     assert.equal(note.severity, undefined);
     // SNM-33 / D-22-01: empty-plugins add never triggers the reload-hint.
     assert.equal(note.message.includes("/reload to pick up changes"), false);
@@ -582,6 +598,157 @@ test("SG-SSH-02: clones an owner/repo source over ssh without the auth bundle wh
       })),
       [{ url: "git@github.com:acme/mp.git", ref: "main", singleBranch: true, auth: undefined }],
     );
+  });
+});
+
+test("D-SG-22: names the ssh clone of an owner/repo source under the added block", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● valid-marketplace [project] (added)\n  Cloning via SSH: git@github.com:acme/mp.git",
+      },
+    ]);
+  });
+});
+
+/**
+ * A JSON-mode context and run whose entries `capture` records, with the
+ * inventory reads one notification makes.
+ */
+function jsonNotification(): {
+  readonly ctx: ExtensionContext;
+  readonly run: NotificationRun;
+  readonly capture: ReturnType<typeof createJsonCapture>;
+  readonly verifyReads: () => void;
+} {
+  const capture = createJsonCapture();
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .once();
+  const inventory = mock<
+    Pick<Parameters<typeof openNotificationRun>[0], "getAllTools" | "getCommands">
+  >({ exactParams: true, name: "inventory" });
+  when(() => inventory.getAllTools())
+    .thenReturn([])
+    .times(3);
+  when(() => inventory.getCommands())
+    .thenReturn([])
+    .once();
+  const run = openNotificationRun(
+    {
+      getAllTools: () => inventory.getAllTools(),
+      getCommands: () => inventory.getCommands(),
+      appendEntry: capture.entrySink.appendEntry,
+    },
+    { kind: "command", commandId: "plugin", invocationId: "test-run" },
+  );
+  return {
+    ctx,
+    run,
+    capture,
+    verifyReads: () => {
+      verify(inventory);
+      verify(ctx);
+    },
+  };
+}
+
+test("D-SG-22: puts the clone note of an owner/repo source on the added block in JSON", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-clone-note-json-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, capture, verifyReads } = jsonNotification();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "cascade",
+          severity: "info",
+          needsReload: false,
+          marketplaces: [
+            {
+              name: "valid-marketplace",
+              scope: "project",
+              status: "added",
+              clone: { note: "via-ssh", url: "git@github.com:acme/mp.git" },
+              plugins: [],
+            },
+          ],
+        },
+      },
+    ]);
+    capture.assertValid();
+    verifyReads();
+  });
+});
+
+test("D-SG-22: names the clone of an add whose manifest fails after the clone above the bare failed row", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ acme/mp [project] (failed) {unparseable}\n" +
+          "  Cloning via SSH: git@github.com:acme/mp.git",
+        severity: "error",
+      },
+    ]);
   });
 });
 
@@ -772,6 +939,34 @@ test("D-SG-22, OQ-8: shows both attempts in the cause of the failed row when bot
   });
 });
 
+test("D-SG-22: names both attempts of a clone that failed over both transports above the failed row", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps: failingOverBoth(httpError(404), SSH_PUBLICKEY_FAILURE),
+      gitHubSsh: userSsh("not-configured"),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications[0]?.message.split("\n").slice(0, 6), [
+      "Some operations have failed.",
+      "",
+      "⊘ acme/mp [project] (failed)",
+      "  SSH not configured, cloning via HTTPS: https://github.com/acme/mp.git",
+      "  HTTPS clone failed, retrying with SSH: git@github.com:acme/mp.git",
+      "  ⊘ acme/mp (failed) {authentication required}",
+    ]);
+  });
+});
+
 test("D-SG-21: clones an owner/repo source once over https and runs no ssh probe while the GitHub base override is set", async (t) => {
   setGitHubBaseUrl(t, "https://mirror.example/git");
   await withTmpScope(async ({ cwd }) => {
@@ -868,7 +1063,7 @@ test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {s
     // notify() prepends the UXG-07 summary line for error severity.
     assert.equal(
       note.message,
-      "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+      `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}\n${OFFICIAL_NOTE}`,
     );
     assert.equal(note.severity, "error");
   });
@@ -877,6 +1072,8 @@ test("MA-6 / ATTR-07: pre-existing non-empty sources/<name>/ renders (failed) {s
 interface Ma12RecognizedOrigin {
   readonly rawSource: string;
   readonly origin: string;
+  /** The added block's clone note lines: a GitHub add has one (D-SG-22). */
+  readonly note: string;
 }
 
 // MA-12 / Q-03 / D-SG-23: an owned leftover is recognized when its origin
@@ -886,31 +1083,37 @@ interface Ma12RecognizedOrigin {
 const MA12_RECOGNIZED_ORIGINS: readonly Ma12RecognizedOrigin[] = [
   {
     rawSource: "anthropics/claude-plugins-official",
+    note: `\n${OFFICIAL_NOTE}`,
     origin: "https://github.com/anthropics/claude-plugins-official.git",
   },
   {
     rawSource: "anthropics/claude-plugins-official",
+    note: `\n${OFFICIAL_NOTE}`,
     origin: "https://GitHub.com/anthropics/claude-plugins-official",
   },
   {
     rawSource: "anthropics/claude-plugins-official",
+    note: `\n${OFFICIAL_NOTE}`,
     origin: "https://www.github.com/anthropics/claude-plugins-official.git",
   },
   {
     rawSource: "https://gitlab.example.com/team/mp",
+    note: "",
     origin: "https://GitLab.Example.com/team/mp",
   },
   {
     rawSource: "anthropics/claude-plugins-official",
+    note: `\n${OFFICIAL_NOTE}`,
     origin: "https://github.com/Anthropics/claude-plugins-official.git",
   },
   {
     rawSource: "anthropics/claude-plugins-official",
+    note: `\n${OFFICIAL_NOTE}`,
     origin: "git@github.com:anthropics/claude-plugins-official.git",
   },
 ];
 
-for (const { rawSource, origin } of MA12_RECOGNIZED_ORIGINS) {
+for (const { rawSource, origin, note } of MA12_RECOGNIZED_ORIGINS) {
   test(`MA-12 / Q-03: an owned leftover whose origin is ${origin} recovers for ${rawSource}`, async () => {
     await withTmpScope(async ({ cwd, locations }) => {
       // arrange
@@ -925,7 +1128,9 @@ for (const { rawSource, origin } of MA12_RECOGNIZED_ORIGINS) {
       await addMarketplace({ ctx, run, scope: "project", cwd, rawSource, gitOps });
 
       // assert
-      assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+      assert.deepStrictEqual(notifications, [
+        { message: `● valid-marketplace [project] (added)${note}` },
+      ]);
       const persisted = await loadState(locations.extensionRoot);
       assert.strictEqual(persisted.marketplaces["valid-marketplace"]?.marketplaceRoot, finalDir);
       assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), false);
@@ -962,7 +1167,9 @@ test("GHB-02 / D-02: an owned leftover with a canonical origin recovers under th
     });
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● valid-marketplace [project] (added)\n${OFFICIAL_OVERRIDE_NOTE}` },
+    ]);
     const persisted = await loadState(locations.extensionRoot);
     assert.strictEqual(persisted.marketplaces["valid-marketplace"]?.marketplaceRoot, finalDir);
     assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), false);
@@ -995,8 +1202,7 @@ test("MA-13 / WR-03: a leftover without the ownership marker refuses as stale cl
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+        message: `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}\n${OFFICIAL_NOTE}`,
         severity: "error",
       },
     ]);
@@ -1098,7 +1304,9 @@ test("IN-06: a destination that disappears before recognition reads it proceeds 
     });
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}` },
+    ]);
     const persisted = await loadState(locations.extensionRoot);
     assert.strictEqual(persisted.marketplaces["valid-marketplace"]?.marketplaceRoot, finalDir);
   });
@@ -1180,7 +1388,7 @@ for (const { title, listRemotesResult } of MA13_REFUSAL_ARMS) {
       assert.ok(note);
       assert.equal(
         note.message,
-        "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+        `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}\n${OFFICIAL_NOTE}`,
       );
       assert.equal(note.severity, "error");
       assert.equal(await pathExists(path.join(finalDir, ".leftover-sentinel")), true);
@@ -1227,7 +1435,7 @@ for (const { listRemotesResult, reason } of MA13_UNREADABLE_ARMS) {
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {${reason}}`,
+          message: `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {${reason}}\n${OFFICIAL_NOTE}`,
           severity: "error",
         },
       ]);
@@ -1305,8 +1513,7 @@ for (const { title, config } of LEFTOVER_ORIGIN_CONFIGS) {
       assert.strictEqual(outcome, undefined);
       assert.deepStrictEqual(notifications, [
         {
-          message:
-            "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}",
+          message: `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}\n${OFFICIAL_NOTE}`,
           severity: "error",
         },
       ]);
@@ -1396,7 +1603,7 @@ test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {sta
     assert.ok(note);
     assert.equal(
       note.message,
-      "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
+      `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}\n${sshNotConfiguredNote("owner/repo")}`,
     );
     assert.equal(note.severity, "error");
   });
@@ -1464,8 +1671,7 @@ async function arrangeUnremovableLeftover(
 }
 
 const UNREMOVABLE_LEFTOVER_NOTIFICATION = {
-  message:
-    "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}\n\n    failed to clean up marketplace leftover clone at valid-marketplace: EACCES: permission denied, rm 'valid-marketplace'",
+  message: `A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {stale clone}\n${OFFICIAL_NOTE}\n\n    failed to clean up marketplace leftover clone at valid-marketplace: EACCES: permission denied, rm 'valid-marketplace'`,
   severity: "error",
 };
 
@@ -1848,7 +2054,7 @@ test("D-08-07: refuses a cloned marketplace named __proto__ as an invalid manife
       {
         message:
           "A marketplace operation has failed.\n\n" +
-          "⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}",
+          `⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}\n${OFFICIAL_NOTE}`,
         severity: "error",
       },
     ]);
@@ -1902,6 +2108,7 @@ test("MKT-01: refuses a reserved name cloned from another github owner and leave
         message:
           "Some operations have failed.\n\n" +
           "⊘ acme/mp [project] (failed)\n" +
+          `${sshNotConfiguredNote("acme/mp")}\n` +
           "  ⊘ acme/mp (failed) {invalid manifest}\n" +
           "    cause: The name 'healthcare' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.",
         severity: "error",
@@ -1935,7 +2142,7 @@ test("MKT-01: records a reserved name cloned from the anthropics organization", 
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● claude-plugins-official [project] (added)" },
+      { message: `● claude-plugins-official [project] (added)\n${OFFICIAL_NOTE}` },
     ]);
     assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
       "claude-plugins-official",
@@ -2037,7 +2244,7 @@ test("MA-9 / MPA-02: a malformed manifest after clone renders (failed) {unparsea
     assert.equal(
       note.message,
       "A marketplace operation has failed.\n\n" +
-        "⊘ anthropics/claude-plugins-official [project] (failed) {unparseable}",
+        `⊘ anthropics/claude-plugins-official [project] (failed) {unparseable}\n${OFFICIAL_NOTE}`,
     );
     assert.equal(note.severity, "error");
 
@@ -2105,7 +2312,7 @@ test("classifies a malformed manifest through a staging-cleanup leak and preserv
       {
         message:
           "A marketplace operation has failed.\n\n" +
-          "⊘ anthropics/claude-plugins-official [project] (failed) {unparseable}",
+          `⊘ anthropics/claude-plugins-official [project] (failed) {unparseable}\n${OFFICIAL_NOTE}`,
         severity: "error",
       },
     ]);
@@ -2827,7 +3034,9 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
 
     // assert
     assert.strictEqual(outcome, undefined);
-    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}` },
+    ]);
     assert.deepStrictEqual(
       { ...persisted, marketplaces: { "valid-marketplace": stableRecord } },
       {
@@ -2945,7 +3154,9 @@ test("invalidates names before the plugin index only after the add is durable", 
         marketplace: "valid-marketplace",
       },
     ]);
-    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}` },
+    ]);
   });
 });
 
@@ -3105,7 +3316,7 @@ test("swallows each cache hygiene failure without rewriting the durable add", as
           true,
         );
         assert.deepStrictEqual(notifications, [
-          { message: "● valid-marketplace [project] (added)" },
+          { message: `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}` },
         ]);
       });
     });
@@ -4168,7 +4379,10 @@ test("RECON-03 standalone-default mode -- omitted notifications option remains b
     // assert
     assert.equal(outcome, undefined, "standalone (omitted) returns void");
     assert.equal(notifications.length, 1);
-    assert.equal(notifications[0]?.message, "● valid-marketplace [project] (added)");
+    assert.equal(
+      notifications[0]?.message,
+      `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}`,
+    );
   });
 });
 
@@ -4554,7 +4768,9 @@ test("D-PL5-17: re-adding a github marketplace whose checkout is gone re-clones 
     await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: GITHUB_SOURCE, gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}` },
+    ]);
     assert.deepStrictEqual(
       gitState.cloneCalls.map((call) => call.url),
       ["https://github.com/anthropics/claude-plugins-official.git"],
@@ -4595,7 +4811,9 @@ test("D-PL5-17: a repair into a layer that does not declare the marketplace decl
     });
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● valid-marketplace [project] (added)\n${OFFICIAL_NOTE}` },
+    ]);
     assert.strictEqual(
       await readFile(locations.localConfigJsonPath, "utf8"),
       declaredMarketplaceBytes("valid-marketplace", GITHUB_SOURCE),
@@ -4624,7 +4842,7 @@ test("D-PL5-17: a re-clone that declares another name fails as a source mismatch
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `A marketplace operation has failed.\n\n⊘ ${GITHUB_SOURCE} [project] (failed) {source mismatch}`,
+        message: `A marketplace operation has failed.\n\n⊘ ${GITHUB_SOURCE} [project] (failed) {source mismatch}\n${OFFICIAL_NOTE}`,
         severity: "error",
       },
     ]);
@@ -4658,7 +4876,7 @@ test("D-PL5-17 / WR-07: a repair whose state save fails removes the new checkout
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `A marketplace operation has failed.\n\n⊘ ${GITHUB_SOURCE} [project] (failed) {unreadable}`,
+        message: `A marketplace operation has failed.\n\n⊘ ${GITHUB_SOURCE} [project] (failed) {unreadable}\n${OFFICIAL_NOTE}`,
         severity: "error",
       },
     ]);
@@ -5733,6 +5951,7 @@ test("SG-PRC-06: a GitHub clone with no git on PATH renders {git missing} with t
         message:
           "Some operations have failed.\n\n" +
           "⊘ acme/mp [project] (failed)\n" +
+          `${sshNotConfiguredNote("acme/mp")}\n` +
           "  ⊘ acme/mp (failed) {git missing}\n" +
           "    cause: Git is required to install marketplaces.",
         severity: "error",
@@ -5963,6 +6182,8 @@ test("ADD-10: a GitHub clone the host answers with HTTP 502 names the github.com
         message:
           "Some operations have failed.\n\n" +
           "⊘ acme/mp [project] (failed)\n" +
+          `${sshNotConfiguredNote("acme/mp")}\n` +
+          "  HTTPS clone failed, retrying with SSH: git@github.com:acme/mp.git\n" +
           "  ⊘ acme/mp (failed) {network error}\n" +
           "    cause: 502 on https://github.com/acme/mp.git -> git clone failed: network, exit code 128",
         severity: "error",
@@ -6248,7 +6469,9 @@ test("GHB-02: a GitHub add under the override clones the canonical URL with the 
     });
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● valid-marketplace [project] (added)\n${OFFICIAL_OVERRIDE_NOTE}` },
+    ]);
     assert.deepStrictEqual(
       state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
       [
@@ -6361,6 +6584,7 @@ test("GHB-01: a GitHub add failing under the override names the fetched URL on a
         message:
           "Some operations have failed.\n\n" +
           "⊘ anthropics/claude-plugins-official [project] (failed)\n" +
+          `${OFFICIAL_OVERRIDE_NOTE}\n` +
           "  ⊘ anthropics/claude-plugins-official (failed) {source missing}\n" +
           "    cause: git clone failed: repository-not-found, exit code 128 -> fetched https://mirror.example/git/anthropics/claude-plugins-official.git",
         severity: "error",

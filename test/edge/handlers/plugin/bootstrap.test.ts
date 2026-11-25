@@ -457,7 +457,10 @@ test("WR-02: lets a missing-dependency step that throws after the add committed 
     (error: unknown) => error === stepError,
   );
   assert.deepStrictEqual(notifications, [
-    { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] (added)` },
+    // D-SG-22: the run's refusing ssh makes the probe answer not-configured.
+    {
+      message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] (added)\n  SSH not configured, cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git`,
+    },
   ]);
   assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();

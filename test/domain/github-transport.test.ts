@@ -183,6 +183,18 @@ for (const { raw, url, transport } of [
     url: "git+ssh://git@127.0.0.1/acme/tools.git",
     transport: "ssh",
   },
+  // A GitHub repository over a scheme that is neither https nor ssh.
+  {
+    raw: "git://github.com/acme/tools.git",
+    url: "git://github.com/acme/tools.git",
+    transport: "https",
+  },
+  // An ssh scheme that the GitHub fold does not read, so not GitHub.
+  {
+    raw: "ssh+git://git@github.com/acme/tools.git",
+    url: "ssh+git://git@github.com/acme/tools.git",
+    transport: "ssh",
+  },
 ] as const) {
   test(`clones the url source ${raw} once over ${transport} with no note and no probe`, async () => {
     // arrange
@@ -197,6 +209,48 @@ for (const { raw, url, transport } of [
     assert.strictEqual(calls(), 0);
   });
 }
+
+for (const { raw, transport, note } of [
+  { raw: "git@github.com:acme/tools.git", transport: "ssh", note: "via-ssh" },
+  { raw: "git@ssh.github.com:Acme/Tools", transport: "ssh", note: "via-ssh" },
+  { raw: "ssh://git@github.com/acme/tools.git", transport: "ssh", note: "via-ssh" },
+  { raw: "git+ssh://git@ssh.github.com/acme/tools.git", transport: "ssh", note: "via-ssh" },
+  { raw: "https://www.GitHub.com/acme/tools.git", transport: "https", note: "via-https" },
+  { raw: "http://github.com/acme/tools", transport: "https", note: "via-https" },
+] as const) {
+  test(`D-SG-22, OQ-3: clones the GitHub url source ${raw} once as written with the ${note} note and no probe`, async () => {
+    // arrange
+    const source = { kind: "url", raw, url: raw } satisfies UrlSource;
+    const { probe, calls } = probeAnswering("configured");
+
+    // act
+    const plan = await planMarketplaceClone({ source, probe });
+
+    // assert
+    assert.deepStrictEqual(orderOf(plan), {
+      first: { transport, url: raw },
+      note,
+    } satisfies PlanOrder);
+    assert.strictEqual(calls(), 0);
+  });
+}
+
+test("D-SG-21, OQ-3: keeps the ssh note of an scp GitHub url source while the base override forces GitHub clones", async () => {
+  // arrange
+  const raw = "git@github.com:acme/tools.git";
+  const source = { kind: "url", raw, url: raw } satisfies UrlSource;
+  const { probe, calls } = probeAnswering("configured");
+
+  // act
+  const plan = await planMarketplaceClone({ source, force: "base-override", probe });
+
+  // assert
+  assert.deepStrictEqual(orderOf(plan), {
+    first: { transport: "ssh", url: raw },
+    note: "via-ssh",
+  } satisfies PlanOrder);
+  assert.strictEqual(calls(), 0);
+});
 
 test("D-SG-24: keeps a non-GitHub ssh url source as written when prefer-https forces GitHub clones", async () => {
   // arrange

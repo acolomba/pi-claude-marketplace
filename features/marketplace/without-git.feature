@@ -24,6 +24,21 @@ Feature: Marketplace without git
       | source kind | source                            |
       | url         | https://{git host}/acme/tools.git |
 
+  Scenario Outline: Adding a github marketplace with no git fails as git missing, sends no request, and names the clone it tried
+    Given the marketplace "tools" is published as a <source kind> source
+    Given pi runs without git on its path
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons     | scope   | leaks | rollback partial | cause chain                              | cause truncated | marketplace clone note | marketplace clone url             |
+      | <source>         | project           | failed             | <source> | <source> | failed | git missing | project |       |                  | Git is required to install marketplaces. | false           | via-https              | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the git host receives no request
+
     @github
     Examples:
       | source kind | source                            |

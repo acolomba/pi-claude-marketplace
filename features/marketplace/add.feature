@@ -28,6 +28,20 @@ Feature: Marketplace add
       | source kind | source                            |
       | url         | https://{git host}/acme/tools.git |
 
+  Scenario Outline: Adding a github marketplace records it in the chosen scope and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
     @github
     Examples:
       | source kind | source     |
@@ -88,6 +102,24 @@ Feature: Marketplace add
     Examples:
       | source kind | source                            |
       | url         | https://{git host}/acme/tools.git |
+
+  Scenario Outline: Adding a github marketplace the user scope holds to the project scope records it in both scopes and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
 
     @github
     Examples:
@@ -261,8 +293,8 @@ Feature: Marketplace add
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope   | status |
-      | tools | project | added  |
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
     Then the checkout of the marketplace "tools" in the project scope holds these files:
       | file                            |
       | .claude-plugin/marketplace.json |
@@ -301,6 +333,31 @@ Feature: Marketplace add
     Examples:
       | source kind | source                            |
       | url         | https://{git host}/acme/tools.git |
+
+  Scenario Outline: Adding again a github marketplace whose checkout is gone restores it, keeps its installed plugins, and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name      | version |
+      | formatter | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install formatter@tools --scope project"
+    Given the project scope has lost the checkout of the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
+    Then the installation record of the project scope holds these plugins:
+      | id              | version | enabled |
+      | formatter@tools | 1.0.0   | true    |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
     @github
     Examples:

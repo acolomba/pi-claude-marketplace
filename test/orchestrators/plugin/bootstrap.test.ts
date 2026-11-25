@@ -46,6 +46,9 @@ const BOOTSTRAP_REMOTE = "https://github.com/anthropics/claude-plugins-official.
 // SG-SSH-02: the run's refusing ssh makes the probe answer not-configured, so
 // the add clones over https first and retries a failed clone over ssh.
 const BOOTSTRAP_SSH_REMOTE = "git@github.com:anthropics/claude-plugins-official.git";
+// D-SG-22: the added block of the bootstrap add, with its clone note line. The
+// run's refusing ssh makes the probe answer not-configured.
+const BOOTSTRAP_ADDED = `● claude-plugins-official [user] (added)\n  SSH not configured, cloning via HTTPS: ${BOOTSTRAP_REMOTE}`;
 const BOOTSTRAP_MANIFEST_JSON = JSON.stringify({
   name: "claude-plugins-official",
   owner: { name: "Quick 260516-02r Tests" },
@@ -286,7 +289,7 @@ test("D-PL8-19: adds the canonical marketplace, whose autoupdate is on by defaul
   );
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: "● claude-plugins-official [user] (added)" }]);
+  assert.deepStrictEqual(notifications, [{ message: BOOTSTRAP_ADDED }]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
     schemaVersion: 3,
     marketplaces: {
@@ -346,7 +349,7 @@ test("D-PL2-09: hands its missing-dependency step to the add, which runs it in t
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● claude-plugins-official [user] (added)\n" +
+        `${BOOTSTRAP_ADDED}\n` +
         "  ● lib@claude-plugins-official v1.0.0 (installed) {dependency installed}\n" +
         "\n" +
         "/reload to pick up changes",
@@ -379,7 +382,7 @@ test("a missing-dependency step that throws after the add committed rejects with
     assert.strictEqual(err.cause, stepError);
     return true;
   });
-  assert.deepStrictEqual(notifications, [{ message: "● claude-plugins-official [user] (added)" }]);
+  assert.deepStrictEqual(notifications, [{ message: BOOTSTRAP_ADDED }]);
   assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {
@@ -419,7 +422,7 @@ test("converges on a second bootstrap without changing the recorded state or the
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "● claude-plugins-official [user] (added)" },
+    { message: BOOTSTRAP_ADDED },
     // MPA-01: the re-run reports the add as a no-op; the benign reason routes
     // to info, which the renderer emits with no severity argument (UXG-02 / UXG-04).
     { message: "● claude-plugins-official [user] (skipped) {already added}" },

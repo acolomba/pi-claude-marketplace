@@ -2484,7 +2484,12 @@ describe("registerClaudePluginCommand", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● claude-plugins-official [user] (added)" },
+      // D-SG-22: the run's refusing ssh makes the probe answer not-configured.
+      {
+        message:
+          "● claude-plugins-official [user] (added)\n" +
+          "  SSH not configured, cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git",
+      },
     ]);
     assert.deepStrictEqual(await loadState(userLocations.extensionRoot), {
       schemaVersion: 3,

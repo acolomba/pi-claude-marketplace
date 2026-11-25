@@ -316,6 +316,21 @@ Feature: Marketplace state lock
       | project | url         | https://{git host}/acme/tools.git |
       | user    | url         | https://{git host}/acme/tools.git |
 
+  Scenario Outline: Adding a github marketplace while a process that died left the state lock of the scope adds it and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given a process that died left the state lock of the <scope> scope
+    When the user runs "/claude:plugin marketplace add <source> --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | <scope> | added  | via-https  | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
     @github
     Examples:
       | scope   | source kind | source     |
