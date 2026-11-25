@@ -220,8 +220,11 @@ const ALLOWED_MARKETPLACE_REMOTES = [
   // D-2-02: stands in for a host that serves ONLY its `.git`-suffixed path --
   // admitted here suffixed so a verbatim (non-github) request is refused.
   "https://gitlab.example.com/team/git-only-mp.git",
-  // SG-SSH-02: the SSH clone URL of an owner/repo source.
+  // SG-SSH-02: the SSH clone URLs of owner/repo sources. The run's refusing
+  // ssh makes the default probe answer not-configured, so an add whose https
+  // clone fails retries over ssh.
   "git@github.com:acme/mp.git",
+  "git@github.com:anthropics/claude-plugins-official.git",
 ] as const;
 
 /** SG-SSH-02: the user's ssh, answering the probe with `answer`. */
@@ -636,6 +639,53 @@ test("SG-SSH-02: clones a github URL source as written and runs no ssh probe", a
       ["https://github.com/acme/mp.git"],
     );
     verify(gitHubSsh);
+  });
+});
+
+test("SG-SSH-02: removes the staging directory and clones over https after the ssh clone fails", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run } = makeCtx();
+    const fake = createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") });
+    const stagingAtEachClone: string[][] = [];
+    const gitOps: GitOps = {
+      ...fake.gitOps,
+      async clone(options) {
+        stagingAtEachClone.push(await readdir(options.dir).catch(() => ["<absent>"]));
+        if (stagingAtEachClone.length > 1) {
+          await fake.gitOps.clone(options);
+          return;
+        }
+
+        await mkdir(options.dir, { recursive: true });
+        await writeFile(path.join(options.dir, "half-cloned"), "");
+        throw new Error("ERROR: Repository not found.");
+      },
+    };
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+    });
+
+    // assert
+    assert.deepStrictEqual(stagingAtEachClone, [["<absent>"], ["<absent>"]]);
+    assert.deepStrictEqual(
+      fake.state.cloneCalls.map(({ url, auth }) => ({ url, authHost: auth?.host })),
+      [{ url: "https://github.com/acme/mp.git", authHost: "github.com" }],
+    );
+    const persisted = await loadState(locations.extensionRoot);
+    assert.deepStrictEqual(Object.keys(persisted.marketplaces), ["valid-marketplace"]);
+    assert.deepStrictEqual(
+      await readdir(path.join(locations.extensionRoot, "sources-staging")),
+      [],
+    );
   });
 });
 

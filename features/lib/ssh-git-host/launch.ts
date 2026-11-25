@@ -25,9 +25,15 @@ export const LAUNCHES_FILE = "launches.jsonl";
 /** The scratch HOME, under the stand-in directory, of every `git upload-pack` the stub runs. */
 export const HOME_DIRECTORY = "home";
 
-/** The scripted answer a registered host gives a probe launch. */
+/**
+ * The scripted answer a registered host gives a probe launch. A
+ * `no-repository` host authenticates its user, as `authenticated` does, but
+ * answers every transport launch as GitHub answers a repository the user
+ * cannot reach.
+ */
 export type SshProbeArm =
   | { readonly kind: "authenticated"; readonly user: string }
+  | { readonly kind: "no-repository"; readonly user: string }
   | { readonly kind: "denied" }
   | { readonly kind: "host-key" }
   | { readonly kind: "hold" };
@@ -205,6 +211,7 @@ export interface SshProbeAnswer {
 export function probeAnswer(arm: SshProbeArm, destination: string): SshProbeAnswer | "hold" {
   switch (arm.kind) {
     case "authenticated":
+    case "no-repository":
       return {
         stderr: `Hi ${arm.user}! You've successfully authenticated, but GitHub does not provide shell access.\n`,
         exitCode: 1,
@@ -222,6 +229,18 @@ export function probeAnswer(arm: SshProbeArm, destination: string): SshProbeAnsw
     case "hold":
       return "hold";
   }
+}
+
+/**
+ * Returns the answer of the arm `arm` to a transport launch, such as git's
+ * `git-upload-pack`, or `undefined` when the stub serves the launch. A
+ * `no-repository` host answers as GitHub does for a repository the user
+ * cannot reach: `ERROR: Repository not found.` and exit 1.
+ */
+export function transportRefusal(arm: SshProbeArm): SshProbeAnswer | undefined {
+  return arm.kind === "no-repository"
+    ? { stderr: "ERROR: Repository not found.\n", exitCode: 1 }
+    : undefined;
 }
 
 /**
@@ -256,6 +275,7 @@ function isProbeArm(value: unknown): value is SshProbeArm {
 
   switch (value.kind) {
     case "authenticated":
+    case "no-repository":
       return typeof value.user === "string";
     case "denied":
     case "host-key":

@@ -21,6 +21,15 @@ Given(
   },
 );
 
+// SG-SSH-02: the probe authenticates, but every repository the user's ssh
+// asks for is one GitHub says it cannot find.
+Given(
+  "the user's ssh authenticates to {string} as {string} without access to its repositories",
+  async function (this: ScenarioWorld, host: string, user: string): Promise<void> {
+    await this.sshHost.register(host, { probe: { kind: "no-repository", user } });
+  },
+);
+
 // SG-SSH-02: the probe's three answers that are not an authentication: GitHub
 // refuses every key, the host key is not known, and no answer comes before
 // the probe's time limit.

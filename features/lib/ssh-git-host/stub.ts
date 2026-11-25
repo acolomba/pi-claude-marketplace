@@ -10,7 +10,8 @@
  * server, and serves a `git-upload-pack` command from the repositories root
  * with `git upload-pack` in the hermetic environment. It answers `ssh -G` and
  * a probe launch with no remote command as the host's arm scripts, with the
- * strings and exit codes Claude Code 2.1.330 reads. A held probe answers
+ * strings and exit codes Claude Code 2.1.330 reads, and refuses a transport
+ * launch the arm refuses, as GitHub does. A held probe answers
  * nothing until its caller kills it, and it ends on its own when its caller
  * dies or after a hard limit, so a killed caller leaves no stub running. Of
  * its own environment it reads only
@@ -32,6 +33,7 @@ import {
   parseSshLaunch,
   probeAnswer,
   servedRepository,
+  transportRefusal,
   uploadPackEnvironment,
   uploadPackPath,
 } from "./launch.ts";
@@ -179,7 +181,14 @@ async function answer(directory: string, argv: readonly string[]): Promise<void>
 
   const requested = uploadPackPath(launch.command);
   if (requested !== undefined) {
-    await serveUploadPack(directory, hosts, requested);
+    const refused = transportRefusal(arm.probe);
+    if (refused === undefined) {
+      await serveUploadPack(directory, hosts, requested);
+    } else {
+      process.stderr.write(refused.stderr);
+      process.exitCode = refused.exitCode;
+    }
+
     return;
   }
 

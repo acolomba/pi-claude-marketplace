@@ -1018,6 +1018,7 @@ function gitStagingSteps(
         notes: cloneNotes,
         subject: source.raw,
         surface: "marketplace",
+        beforeRetry: () => clearStagingDir(removalOps, stagingDir),
         attempt: (attempt) =>
           gitOps.clone({
             dir: stagingDir,
@@ -1032,6 +1033,18 @@ function gitStagingSteps(
       recognizeLeftover({ finalDir, derivedName, source, gitOps, removalOps }),
     cloneNotes,
   };
+}
+
+/**
+ * SG-SSH-02, NFR-1, NFR-3: removes the staging directory before a clone's
+ * second transport runs, through the add's removal ops, so the retry starts
+ * where the first attempt did, with no directory, and a failed add leaves
+ * nothing behind. git removes what a failed clone made (03-06 A10); the
+ * directory is removed anyway. A removal that fails throws, and the add's own
+ * cleanup then runs.
+ */
+async function clearStagingDir(removalOps: RemovalOps, stagingDir: string): Promise<void> {
+  await removalOps.rm(stagingDir, { recursive: true, force: true });
 }
 
 /**

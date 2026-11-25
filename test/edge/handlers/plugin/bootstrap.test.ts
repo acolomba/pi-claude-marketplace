@@ -139,6 +139,13 @@ const UUID_LEAF = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
 /** The single clone the hard-coded github shorthand produces, authless. */
 const BOOTSTRAP_CLONE: GitCloneCall = { dir: STAGED_CLONE_DIR, url: CLONE_URL };
 
+/**
+ * SG-SSH-02: the ssh retry of a failed bootstrap clone. The run's refusing ssh
+ * makes the probe answer not-configured, so https goes first.
+ */
+const SSH_CLONE_URL = "git@github.com:anthropics/claude-plugins-official.git";
+const BOOTSTRAP_SSH_CLONE: GitCloneCall = { dir: STAGED_CLONE_DIR, url: SSH_CLONE_URL };
+
 /** The manifest the cloned staging tree carries. */
 const MARKETPLACE_MANIFEST = `{
   "name": "${BOOTSTRAP_MARKETPLACE_NAME}",
@@ -234,7 +241,7 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
 function createGitPort(sourceTree: string, cloneError?: Error): GitPort {
   const git = createGitOpsFake({
     boundary: "memory",
-    allowedRemoteUrls: [CLONE_URL],
+    allowedRemoteUrls: [CLONE_URL, SSH_CLONE_URL],
     cloneFixture: { boundary: "local", sourceDir: sourceTree },
     ...(cloneError === undefined ? {} : { cloneError }),
   });
@@ -423,7 +430,10 @@ test("converts a thrown bootstrap failure into one failed marketplace row carryi
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: FAILED_ROW_MESSAGE, severity: "error" }]);
-  assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [BOOTSTRAP_CLONE]);
+  assert.deepStrictEqual(describeClones(git.clones, userStagingRoot(cwd)), [
+    BOOTSTRAP_CLONE,
+    BOOTSTRAP_SSH_CLONE,
+  ]);
   assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
