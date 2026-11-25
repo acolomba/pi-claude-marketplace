@@ -171,7 +171,7 @@ export const USER_CONFIG_UNSET_NOTE = "required userConfig options have no defau
 const KIND_NOTE = /^contains ([A-Za-z]+)$/;
 
 /**
- * D-90-05 / SURF-01 / D-PG10-06: the reason tokens of a plugin that is
+ * D-NSC-01 / D-90-05 / SURF-01 / D-PG10-06: the reason tokens of a plugin that is
  * unavailable only for its unsupported kinds, or `undefined`.
  *
  * An unavailable resolution carries no kind list, only notes, so the kinds

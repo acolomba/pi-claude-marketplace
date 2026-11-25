@@ -259,7 +259,7 @@ Feature: Plugin list
       | marketplace name | marketplace scope | id          | name  | status      | reasons        | version |
       | tools            | project           | ghost@tools | ghost | unavailable | source missing | 1.0.0   |
 
-  Scenario: The list names a plugin whose only component is an LSP server unavailable as lsp
+  Scenario: The list names a plugin whose only component is an LSP server unavailable as lsp (D-NSC-01)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" publishes this manifest:
       """
@@ -279,7 +279,7 @@ Feature: Plugin list
       | marketplace name | marketplace scope | id             | name  | status      | reasons | version |
       | fixtures         | project           | clang@fixtures | clang | unavailable | lsp     | 1.0.0   |
 
-  Scenario: The list names a plugin whose only component is a hooks module unavailable as an unsupported component
+  Scenario: The list names a plugin whose only component is a hooks module unavailable as an unsupported component (D-NSC-01)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" publishes this manifest:
       """

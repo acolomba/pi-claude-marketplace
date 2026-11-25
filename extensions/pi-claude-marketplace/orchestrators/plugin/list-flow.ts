@@ -138,11 +138,12 @@ type PluginRenderStatus =
  * LIST-01 / D-67-01: the internal resolver-state bucket the filter predicate
  * keys on. It is retained as a concept DISTINCT from {@link PluginRenderStatus}
  * even though USTAT-01 / D-64-01 now de-collapses the render tokens (resolver
- * `partially-available` renders `(partially-available)` / `⊖`, structural `unavailable` renders
- * `(unavailable)` / `⊘`): the filter keys on this pre-collapse bucket so
+ * `partially-available` renders `(partially-available)` / `⊖`, every `unavailable`
+ * resolution renders `(unavailable)` / `⊘`): the filter keys on this pre-collapse bucket so
  * `--partial` (not-installed plugins resolving `partially-available` -- the
  * partially-available candidates) partitions cleanly from `--unavailable`
- * (structural-unavailable only, A2) regardless of the render token.
+ * (the `unavailable` bucket only, A2: a structural defect, or no supported
+ * component, D-NSC-01) regardless of the render token.
  * Installed-inventory rows
  * (installed / upgradable / disabled / partially-installed / partially-upgradable) are
  * not resolver-classified here -- they carry the `installed-inventory` bucket
@@ -214,7 +215,7 @@ function filtersPassive(opts: PluginListPayloadOptions): boolean {
  * PL-1 / LIST-01 / D-67-01 filter predicate. `status` is the render status;
  * `bucket` is the internal resolver-state bucket (only meaningful for
  * not-installed rows, where the render `(unavailable)` token is ambiguous
- * between `partially-available` and structural `unavailable`). Installed-inventory rows
+ * between `partially-available` and `unavailable`). Installed-inventory rows
  * pass `installed-inventory` and are matched on `status`.
  */
 function shouldShow(
@@ -260,7 +261,8 @@ function shouldShow(
     return true;
   }
 
-  // A2: `--unavailable` narrows to the structural `unavailable` bucket only --
+  // A2: `--unavailable` narrows to the `unavailable` bucket only, for either
+  // cause (D-NSC-01) --
   // the not-installed `partially-available` rows (now a distinct `(partially-available)` token)
   // are excluded.
   if (opts.unavailable === true && bucket === "unavailable") {

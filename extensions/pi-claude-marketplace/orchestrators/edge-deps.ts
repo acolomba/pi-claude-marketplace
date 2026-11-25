@@ -164,7 +164,7 @@ async function classifyInstalledPluginRow(
  * LIST-02 / D-67-02: build the cache row for ONE not-installed manifest entry
  * via the shared `classifyManifestEntry`, over the view of `mcpImplementation`
  * that `list` applies (D-P6-22). `partially-available` is emitted DISTINCTLY
- * from structural `unavailable` so the `--partial`-gated candidate sets can offer
+ * from `unavailable` so the `--partial`-gated candidate sets can offer
  * `available + partially-available`. A probe failure is structural unavailability; the
  * cache row carries no diagnostic notes (the `list` surface renders detail).
  */

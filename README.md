@@ -29,7 +29,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 - MCP servers. Uses Pi's built-in MCP or, for more MCP features, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
-Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
+Plugins that contain both supported and unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
 
 The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. Desired-state configs in `[~/].pi/agent/claude-plugins[.local].json` make plugin installations automatic and repeatable. You can share these configs across machines or team members.
 

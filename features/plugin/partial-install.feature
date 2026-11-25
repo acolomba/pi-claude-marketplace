@@ -85,7 +85,7 @@ Feature: Plugin partial install
       | plugin components resolved     | true                  |
       | plugin components skills       | demo-skill            |
 
-  Scenario: Installing a plugin whose only component is an LSP server fails as unavailable, even with --partial
+  Scenario: Installing a plugin whose only component is an LSP server fails as unavailable, even with --partial (D-NSC-01)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" publishes this manifest:
       """
@@ -111,7 +111,7 @@ Feature: Plugin partial install
       | fixtures         | project           | clang@fixtures | clang | unavailable | lsp     |
     Then the project scope has no installed plugins
 
-  Scenario: Installing a plugin whose only component is a theme fails as unavailable for an unsupported component
+  Scenario: Installing a plugin whose only component is a theme fails as unavailable for an unsupported component (D-NSC-01)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" publishes this manifest:
       """

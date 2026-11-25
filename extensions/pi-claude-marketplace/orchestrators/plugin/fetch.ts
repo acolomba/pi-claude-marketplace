@@ -537,7 +537,7 @@ function freshRow(
 
 /**
  * The row of a resolved tree: the unsupported component kinds of a
- * partially-available plugin and the structural notes of an unavailable one
+ * partially-available plugin and the notes of an unavailable one
  * narrow through the SAME helpers `list` uses (byte-parity).
  */
 function resolvedRow(

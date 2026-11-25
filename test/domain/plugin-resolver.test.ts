@@ -416,7 +416,7 @@ describe("resolveStrict", () => {
   // HOOK-01 / D-CF5-20: the convention file is the only source of command
   // hooks. Hooks that the entry declares are not loaded, so a plugin whose only
   // component is an entry `hooks` field has nothing to install.
-  test("D-CF5-20: entry declares hooks field but no hooks/hooks.json on disk -> unavailable with contains hooks", async () => {
+  test("D-CF5-20 / D-NSC-01: entry declares hooks field but no hooks/hooks.json on disk -> unavailable with contains hooks", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
@@ -467,7 +467,7 @@ describe("resolveStrict", () => {
     }
   });
 
-  test("a modules-only hooks/hooks.json resolves unavailable with contains mod", async () => {
+  test("D-NSC-01: a modules-only hooks/hooks.json resolves unavailable with contains mod", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -524,7 +524,7 @@ describe("resolveStrict", () => {
     });
   });
 
-  test("a hooks module in a hooks file plugin.json names resolves unavailable with contains hooks and contains mod", async () => {
+  test("D-NSC-01: a hooks module in a hooks file plugin.json names resolves unavailable with contains hooks and contains mod", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -549,7 +549,7 @@ describe("resolveStrict", () => {
     });
   });
 
-  test("a hooks module in a hooks file the entry names resolves unavailable with contains hooks and contains mod", async () => {
+  test("D-NSC-01: a hooks module in a hooks file the entry names resolves unavailable with contains hooks and contains mod", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -577,7 +577,7 @@ describe("resolveStrict", () => {
     });
   });
 
-  test("a binaries map in an official marketplace resolves unavailable with contains binaries", async () => {
+  test("D-NSC-01: a binaries map in an official marketplace resolves unavailable with contains binaries", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(
@@ -3651,7 +3651,7 @@ describe("resolveStrict", () => {
     });
   }
 
-  test("PR-3: an LSP server beside an MCP server keeps the plugin partially available", async () => {
+  test("D-NSC-01: an LSP server beside an MCP server keeps the plugin partially available", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -3679,7 +3679,7 @@ describe("resolveStrict", () => {
     });
   });
 
-  test("D-P3-01: an LSP server beside a server only Pi's built-in MCP runs keeps the plugin partially available", async () => {
+  test("D-NSC-01 / D-P3-01: an LSP server beside a server only Pi's built-in MCP runs keeps the plugin partially available", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -3711,7 +3711,7 @@ describe("resolveStrict", () => {
     });
   });
 
-  test("PR-3: a plugin whose only MCP server no implementation runs resolves unavailable with contains mcpServers", async () => {
+  test("D-NSC-01: a plugin whose only MCP server no implementation runs resolves unavailable with contains mcpServers", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -5486,7 +5486,7 @@ describe("resolveStrict userConfig", () => {
     ]);
   });
 
-  test("D-PG10-06: required options with no default and no other component make the plugin unavailable", async () => {
+  test("D-PG10-06 / D-NSC-01: required options with no default and no other component make the plugin unavailable", async () => {
     // arrange
     const context = withManifest({
       userConfig: { token: requiredOption("Token"), region: requiredOption("Region") },

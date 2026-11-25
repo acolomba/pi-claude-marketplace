@@ -23,7 +23,7 @@ type ListStatus =
   | "installed"
   | "available"
   // USTAT-01 / D-64-01: not-installed, partially-available row -- distinct from
-  // structural `unavailable` (renders `(partially-available)` / `⊖`).
+  // `unavailable` (renders `(partially-available)` / `⊖`).
   | "partially-available"
   | "unavailable"
   | "upgradable"

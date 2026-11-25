@@ -1189,10 +1189,11 @@ export type PluginShapeErrorShape =
       readonly plugin: string;
       readonly reasons: readonly string[];
       // SEV-02 / D-69-03: three-way distinction the resolver loses at the
-      // throw. `true` when the verdict is `partially-available` (force can
-      // degrade-install it), `false` when `unavailable` (structural; force
-      // cannot help). The render row points the user at `--partial` iff this
-      // is `true`. Does NOT affect `buildPluginShapeMessage` bytes.
+      // throw. `true` when the verdict is `partially-available` (`--partial`
+      // can install its supported part), `false` when `unavailable`, a
+      // structural defect or no supported component (D-NSC-01), which
+      // `--partial` cannot help. The render row points the user at `--partial`
+      // iff this is `true`. Does NOT affect `buildPluginShapeMessage` bytes.
       readonly partialable: boolean;
       // IN-02 / RSTATE-05: the resolver's typed `unsupported[]` component-kind
       // list, carried alongside the free-form `reasons`. A partially-available
@@ -1200,7 +1201,7 @@ export type PluginShapeErrorShape =
       // note (hooks is not an UNSUPPORTED_COMPONENT_KINDS member), so the
       // failure-row composer reads this typed list -- not `reasons` -- to render
       // the same per-kind marker `list`/`info` emit via `narrowUnsupportedKinds`.
-      // Empty for `unavailable` (structural) throws. Does NOT affect message bytes.
+      // Empty for `unavailable` throws. Does NOT affect message bytes.
       readonly unsupportedKinds?: readonly string[];
     }
   | {
