@@ -259,6 +259,26 @@ Feature: Plugin list
       | marketplace name | marketplace scope | id          | name  | status      | reasons        | version |
       | tools            | project           | ghost@tools | ghost | unavailable | source missing | 1.0.0   |
 
+  Scenario: The list names a plugin whose only component is an LSP server unavailable as lsp
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "clang", "source": "./plugins/clang", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "fixtures" has the file "plugins/clang/.lsp.json" at its root with this text:
+      """
+      { "clangd": { "command": "clangd", "extensionToLanguage": { ".c": "c" } } }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin list"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status      | reasons | version |
+      | fixtures         | project           | clang@fixtures | clang | unavailable | lsp     | 1.0.0   |
+
   Scenario: The list shows the plugin.json version of a fetched git-source plugin whose entry declares none
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

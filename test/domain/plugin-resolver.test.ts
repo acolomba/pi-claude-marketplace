@@ -414,9 +414,9 @@ describe("resolveStrict", () => {
   });
 
   // HOOK-01 / D-CF5-20: the convention file is the only source of command
-  // hooks. Hooks that the entry declares are not loaded, so a plugin whose entry
-  // declares a `hooks` field resolves partially available with `hooks` unsupported.
-  test("D-CF5-20: entry declares hooks field but no hooks/hooks.json on disk -> partially available with hooks unsupported", async () => {
+  // hooks. Hooks that the entry declares are not loaded, so a plugin whose only
+  // component is an entry `hooks` field has nothing to install.
+  test("D-CF5-20: entry declares hooks field but no hooks/hooks.json on disk -> unavailable with contains hooks", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
@@ -429,17 +429,10 @@ describe("resolveStrict", () => {
 
     // assert
     assert.deepStrictEqual(resolvedPlugin, {
-      state: "partially-available",
-      installable: true,
+      state: "unavailable",
+      installable: false,
       name: "p1",
-      pluginRoot: localRoot,
-      supported: [],
-      unsupported: ["hooks"],
-      notes: [],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      declaredMcpServers: {},
-      defaultEnabled: true,
+      notes: ["contains hooks"],
     });
   });
 
@@ -474,7 +467,7 @@ describe("resolveStrict", () => {
     }
   });
 
-  test("a modules-only hooks/hooks.json resolves partially available with contains mod", async () => {
+  test("a modules-only hooks/hooks.json resolves unavailable with contains mod", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -489,17 +482,10 @@ describe("resolveStrict", () => {
 
     // assert
     assert.deepStrictEqual(resolvedPlugin, {
-      state: "partially-available",
-      installable: true,
+      state: "unavailable",
+      installable: false,
       name: "p1",
-      pluginRoot: localRoot,
-      supported: [],
-      unsupported: ["mod"],
       notes: ["contains mod"],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      declaredMcpServers: {},
-      defaultEnabled: true,
     });
   });
 
@@ -538,7 +524,7 @@ describe("resolveStrict", () => {
     });
   });
 
-  test("a hooks module in a hooks file plugin.json names resolves partially available with contains mod", async () => {
+  test("a hooks module in a hooks file plugin.json names resolves unavailable with contains hooks and contains mod", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -556,21 +542,14 @@ describe("resolveStrict", () => {
 
     // assert
     assert.deepStrictEqual(resolvedPlugin, {
-      state: "partially-available",
-      installable: true,
+      state: "unavailable",
+      installable: false,
       name: "p1",
-      pluginRoot: localRoot,
-      supported: [],
-      unsupported: ["hooks", "mod"],
-      notes: ["contains mod"],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      declaredMcpServers: {},
-      defaultEnabled: true,
+      notes: ["contains hooks", "contains mod"],
     });
   });
 
-  test("a hooks module in a hooks file the entry names resolves partially available with contains mod", async () => {
+  test("a hooks module in a hooks file the entry names resolves unavailable with contains hooks and contains mod", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -591,21 +570,14 @@ describe("resolveStrict", () => {
 
     // assert
     assert.deepStrictEqual(resolvedPlugin, {
-      state: "partially-available",
-      installable: true,
+      state: "unavailable",
+      installable: false,
       name: "p1",
-      pluginRoot: localRoot,
-      supported: [],
-      unsupported: ["hooks", "mod"],
-      notes: ["contains mod"],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      declaredMcpServers: {},
-      defaultEnabled: true,
+      notes: ["contains hooks", "contains mod"],
     });
   });
 
-  test("a binaries map in an official marketplace resolves partially available with contains binaries", async () => {
+  test("a binaries map in an official marketplace resolves unavailable with contains binaries", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(
@@ -624,17 +596,10 @@ describe("resolveStrict", () => {
 
     // assert
     assert.deepStrictEqual(resolvedPlugin, {
-      state: "partially-available",
-      installable: true,
+      state: "unavailable",
+      installable: false,
       name: "p1",
-      pluginRoot: localRoot,
-      supported: [],
-      unsupported: ["binaries"],
       notes: ["contains binaries"],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
-      mcpServers: {},
-      declaredMcpServers: {},
-      defaultEnabled: true,
     });
   });
 
@@ -964,6 +929,7 @@ describe("resolveStrict", () => {
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
       [localRoot]: "dir",
+      [path.join(localRoot, "skills")]: "dir",
       [path.join(localRoot, "hooks", "hooks.json")]: {
         contents: await fixture("hooks-notification-only"),
       },
@@ -1264,6 +1230,7 @@ describe("resolveStrict", () => {
       const localRoot = pathUnderMarketplace(`./local-${scenario.kind}`);
       const context = resolveContext(marketplaceRoot, {
         [localRoot]: "dir",
+        [path.join(localRoot, "skills")]: "dir",
         [path.join(localRoot, scenario.relativePath)]: scenario.stat,
       });
 
@@ -1305,12 +1272,14 @@ describe("resolveStrict", () => {
 
     // act
     const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
-    // D-64-06: unsupported component kinds, no structural defect -> unsupported.
 
     // assert
-    assert.strictEqual(resolvedPlugin.state, "partially-available");
-    assert.deepStrictEqual(resolvedPlugin.notes, ["contains monitors", "contains themes"]);
-    assert.deepStrictEqual(resolvedPlugin.notes, ["contains monitors", "contains themes"]);
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["contains monitors", "contains themes"],
+    });
   });
 
   test("PR-2(6) malformed mcpServers (array form) -> notInstallable", async () => {
@@ -1477,7 +1446,10 @@ describe("resolveStrict", () => {
   test("MREC-01: a bundle reference makes the plugin partially available and flags the bundle", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
-    const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, "skills")]: "dir",
+    });
 
     // act
     const resolvedPlugin = await resolveStrict(
@@ -1491,10 +1463,10 @@ describe("resolveStrict", () => {
       installable: true,
       name: "p1",
       pluginRoot: localRoot,
-      supported: [],
+      supported: ["skills"],
       unsupported: ["mcpServers"],
       notes: [],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      componentPaths: { skills: ["skills"], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       declaredMcpServers: {},
       mcpBundle: true,
@@ -1739,7 +1711,10 @@ describe("resolveStrict", () => {
   // at the `partiallyAvailable()` call site would otherwise go unnoticed.
   test("DFEN-02 partially-available arm carries the entry-resolved defaultEnabled", async () => {
     // arrange
-    const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+    const context = resolveContext(marketplaceRoot, {
+      [pathUnderMarketplace("./local")]: "dir",
+      [path.join(pathUnderMarketplace("./local"), "skills")]: "dir",
+    });
 
     // act
     const resolvedPlugin = await resolveStrict(
@@ -2295,12 +2270,14 @@ describe("resolveStrict", () => {
       pluginEntry({ source: "./local", themes: { dark: {} }, monitors: { m: "x" } }),
       context,
     );
-    // D-64-06: multiple unsupported kinds, no structural defect -> unsupported.
 
     // assert
-    assert.strictEqual(resolvedPlugin.state, "partially-available");
-    assert.deepStrictEqual(resolvedPlugin.notes, ["contains monitors", "contains themes"]);
-    assert.deepStrictEqual(resolvedPlugin.notes, ["contains monitors", "contains themes"]);
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["contains monitors", "contains themes"],
+    });
   });
 
   // PR-4 [D-07/COMP-01]: for `skills` only, implicit-by-convention SUPPLEMENTS
@@ -2772,6 +2749,7 @@ describe("resolveStrict", () => {
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
       [localRoot]: "dir",
+      [path.join(localRoot, "skills")]: "dir",
       [path.join(localRoot, "hooks", "hooks.json")]: {
         contents: JSON.stringify({
           PreToolUse: [{ matcher: "MultiEdit", hooks: [{ type: "command", command: "echo x" }] }],
@@ -3571,6 +3549,7 @@ describe("resolveStrict", () => {
     const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
     const context = resolveContext(marketplaceRoot, {
       [localRoot]: "dir",
+      [path.join(localRoot, "skills")]: "dir",
       [manifestPath]: { contents: JSON.stringify({ name: "p1", defaultEnabled: false }) },
     });
 
@@ -3639,8 +3618,12 @@ describe("resolveStrict", () => {
     );
 
     // assert
-    assert.strictEqual(resolvedPlugin.state, "partially-available");
-    assert.deepStrictEqual(resolvedPlugin.notes, ["contains themes"]);
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["contains themes"],
+    });
   });
 
   for (const scenario of unsupportedConventionScenarios) {
@@ -3659,14 +3642,121 @@ describe("resolveStrict", () => {
       );
 
       // assert
-      assert.strictEqual(
-        resolvedPlugin.state,
-        "partially-available",
-        `${scenario.kind} should be unsupported`,
-      );
-      assert.deepStrictEqual(resolvedPlugin.notes, [`contains ${scenario.kind}`]);
+      assert.deepStrictEqual(resolvedPlugin, {
+        state: "unavailable",
+        installable: false,
+        name: "p1",
+        notes: [`contains ${scenario.kind}`],
+      });
     });
   }
+
+  test("PR-3: an LSP server beside an MCP server keeps the plugin partially available", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, ".lsp.json")]: { contents: "{}" },
+      [path.join(localRoot, ".mcp.json")]: { contents: WRAPPED_MCP },
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "partially-available",
+      installable: true,
+      name: "p1",
+      pluginRoot: localRoot,
+      supported: [],
+      unsupported: ["lspServers"],
+      notes: ["contains lspServers"],
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      mcpServers: { srv: { command: "node" } },
+      declaredMcpServers: { srv: { command: "node" } },
+      defaultEnabled: true,
+    });
+  });
+
+  test("D-P3-01: an LSP server beside a server only Pi's built-in MCP runs keeps the plugin partially available", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, ".lsp.json")]: { contents: "{}" },
+      [path.join(localRoot, ".mcp.json")]: {
+        contents: JSON.stringify({
+          mcpServers: { asker: { command: "node", bareElicitationCapability: true } },
+        }),
+      },
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "partially-available",
+      installable: true,
+      name: "p1",
+      pluginRoot: localRoot,
+      supported: [],
+      unsupported: ["lspServers"],
+      notes: ["contains lspServers"],
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      declaredMcpServers: { asker: { command: "node", bareElicitationCapability: true } },
+      defaultEnabled: true,
+    });
+  });
+
+  test("PR-3: a plugin whose only MCP server no implementation runs resolves unavailable with contains mcpServers", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, ".mcp.json")]: {
+        contents: JSON.stringify({
+          mcpServers: { live: { type: "ws", url: "wss://mcp.example.com/ws" } },
+        }),
+      },
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./local" }), context);
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["contains mcpServers"],
+    });
+  });
+
+  test("RSTATE-02: a structural defect beside an unsupported kind and a skills folder keeps its structural note first", async () => {
+    // arrange
+    const localRoot = pathUnderMarketplace("./local");
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, "skills")]: "dir",
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./local", mcpServers: [1, 2, 3], themes: { dark: {} } }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["malformed mcpServers: must be object", "contains themes"],
+    });
+  });
 
   test("MM-5 declared-path happy path: entry declares skills and commands -> installable with both supported", async () => {
     // arrange
@@ -3754,7 +3844,10 @@ describe("resolveStrict", () => {
   test("resolveStrict returns the complete partially-available true arm", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./partially-materializable");
-    const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, "skills")]: "dir",
+    });
 
     // act
     const resolvedPlugin = await resolveStrict(
@@ -3768,10 +3861,10 @@ describe("resolveStrict", () => {
       installable: true,
       name: "p1",
       pluginRoot: localRoot,
-      supported: [],
+      supported: ["skills"],
       unsupported: ["themes"],
       notes: ["contains themes"],
-      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      componentPaths: { skills: ["skills"], commands: [], agents: [], workflows: [] },
       mcpServers: {},
       declaredMcpServers: {},
       defaultEnabled: true,
@@ -4735,7 +4828,10 @@ describe("requireInstallable", () => {
   // dropped either would silently suppress the `--partial` hint on the render row.
   test("SEV-02 / IN-02: requireInstallable on unsupported throws partialable with the typed unsupportedKinds", async () => {
     // arrange
-    const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+    const context = resolveContext(marketplaceRoot, {
+      [pathUnderMarketplace("./local")]: "dir",
+      [path.join(pathUnderMarketplace("./local"), "skills")]: "dir",
+    });
 
     // act
     const resolvedPlugin = await resolveStrict(
@@ -4767,7 +4863,10 @@ describe("requireInstallable", () => {
     const localRoot = pathUnderMarketplace("./partial-gate");
     const resolvedPlugin = await resolveStrict(
       pluginEntry({ source: "./partial-gate", themes: ["dark"] }),
-      resolveContext(marketplaceRoot, { [localRoot]: "dir" }),
+      resolveContext(marketplaceRoot, {
+        [localRoot]: "dir",
+        [path.join(localRoot, "skills")]: "dir",
+      }),
     );
 
     // act & assert
@@ -4860,7 +4959,10 @@ describe("requireInstallable", () => {
       // arrange
       const resolvedPlugin = await resolveStrict(
         pluginEntry({ source: "./local", hooks: entryHooks }),
-        resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" }),
+        resolveContext(marketplaceRoot, {
+          [pathUnderMarketplace("./local")]: "dir",
+          [path.join(pathUnderMarketplace("./local"), "skills")]: "dir",
+        }),
       );
 
       // act & assert
@@ -4953,7 +5055,10 @@ describe("requirePartialInstallable", () => {
 
   test("RSTATE-04 requirePartialInstallable admits unsupported and exposes pluginRoot", async () => {
     // arrange
-    const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+    const context = resolveContext(marketplaceRoot, {
+      [pathUnderMarketplace("./local")]: "dir",
+      [path.join(pathUnderMarketplace("./local"), "skills")]: "dir",
+    });
 
     // act
     const resolvedPlugin: ResolvedPlugin = await resolveStrict(
@@ -5034,7 +5139,10 @@ describe("requirePartialInstallable", () => {
 
   test("RSTATE-04 strict: requirePartialInstallable admits unsupported and exposes pluginRoot", async () => {
     // arrange
-    const context = resolveContext(marketplaceRoot, { [pathUnderMarketplace("./local")]: "dir" });
+    const context = resolveContext(marketplaceRoot, {
+      [pathUnderMarketplace("./local")]: "dir",
+      [path.join(pathUnderMarketplace("./local"), "skills")]: "dir",
+    });
 
     // act
     const resolvedPlugin: ResolvedPlugin = await resolveStrict(
@@ -5073,7 +5181,10 @@ describe("requirePartialInstallable", () => {
   test("requirePartialInstallable admits both true arms and exposes pluginRoot", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./narrowable");
-    const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+    const context = resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [path.join(localRoot, "skills")]: "dir",
+    });
     const installablePlugin: ResolvedPlugin = await resolveStrict(
       pluginEntry({ source: "./narrowable" }),
       context,
@@ -5295,10 +5406,14 @@ describe("resolveStrict userConfig", () => {
     required: true,
   });
 
-  function withManifest(manifest: Record<string, unknown>): ResolveContext {
+  function withManifest(
+    manifest: Record<string, unknown>,
+    extraFiles: Record<string, "dir"> = {},
+  ): ResolveContext {
     return resolveContext(marketplaceRoot, {
       [localRoot]: "dir",
       [manifestPath]: { contents: JSON.stringify({ name: "p1", ...manifest }) },
+      ...extraFiles,
     });
   }
 
@@ -5343,13 +5458,16 @@ describe("resolveStrict userConfig", () => {
 
   test("D-PG10-06: required options with no default keep the plugin partially available", async () => {
     // arrange
-    const context = withManifest({
-      userConfig: {
-        token: requiredOption("Token"),
-        mode: modeOption,
-        region: requiredOption("Region"),
+    const context = withManifest(
+      {
+        userConfig: {
+          token: requiredOption("Token"),
+          mode: modeOption,
+          region: requiredOption("Region"),
+        },
       },
-    });
+      { [path.join(localRoot, "skills")]: "dir" },
+    );
 
     // act
     const resolved = await resolveStrict(pluginEntry(), context);
@@ -5368,9 +5486,30 @@ describe("resolveStrict userConfig", () => {
     ]);
   });
 
+  test("D-PG10-06: required options with no default and no other component make the plugin unavailable", async () => {
+    // arrange
+    const context = withManifest({
+      userConfig: { token: requiredOption("Token"), region: requiredOption("Region") },
+    });
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: ["required userConfig options have no default: token, region"],
+    });
+  });
+
   test("D-PG10-04: a plugin that also declares themes is partially available for themes alone", async () => {
     // arrange
-    const context = withManifest({ userConfig: { mode: modeOption }, themes: "./themes" });
+    const context = withManifest(
+      { userConfig: { mode: modeOption }, themes: "./themes" },
+      { [path.join(localRoot, "skills")]: "dir" },
+    );
 
     // act
     const resolved = await resolveStrict(pluginEntry(), context);
