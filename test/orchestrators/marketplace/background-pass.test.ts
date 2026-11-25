@@ -18,7 +18,10 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  githubSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createBackgroundGate } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts";
 import { createBackgroundPass } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts";
 import { updateMarketplace } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
@@ -35,6 +38,7 @@ import {
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
@@ -43,6 +47,7 @@ import type {
   BackgroundContext,
   BackgroundPassDeps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts";
+import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { UpdateMarketplaceOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 import type {
   PluginUpdateFailedOutcome,
@@ -776,6 +781,73 @@ test("routes the update's own output to the debug log only", async (t) => {
 
   // assert
   assert.deepStrictEqual(lines, ["[autoupdate] ● alpha [project] (updated)"]);
+});
+
+/** An autoupdated GitHub `acme/tools` marketplace whose checkout holds an empty catalog. */
+async function seedGitHubMarketplace(cwd: string): Promise<void> {
+  const locations = locationsFor("project", cwd);
+  const cloneDir = await locations.sourceCloneDir("tools");
+  const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, JSON.stringify(toolsCatalog([])));
+  await mergeMarketplaceIntoState(locations.extensionRoot, "tools", {
+    name: "tools",
+    scope: "project",
+    source: githubSource("acme/tools"),
+    addedFromCwd: cwd,
+    manifestPath,
+    marketplaceRoot: cloneDir,
+    plugins: {},
+  });
+  await seedAutoupdateConfig(locations, "tools", true);
+}
+
+function toolsCatalog(plugins: readonly { readonly name: string; readonly source: string }[]) {
+  return { name: "tools", owner: { name: "acme" }, plugins };
+}
+
+/** A git port whose remote is ahead of the checkout and whose clone writes a one-plugin catalog. */
+function staleRemoteGitOps(): GitOps {
+  const fake = createGitOpsFake({ boundary: "memory" });
+  return {
+    ...fake.gitOps,
+    resolveRemoteRef: () => Promise.resolve("abcdef0000000000000000000000000000000002"),
+    clone: async ({ dir }) => {
+      const manifestPath = path.join(dir, ".claude-plugin", "marketplace.json");
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(
+        manifestPath,
+        JSON.stringify(toolsCatalog([{ name: "one", source: "./one" }])),
+      );
+    },
+  };
+}
+
+test("D-SG-22: the debug log of a pass whose refresh re-clones a GitHub marketplace names the transport under its block", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-clone-note-");
+  await seedGitHubMarketplace(cwd);
+  const lines = observeDebugLog(t);
+  const gitOps = staleRemoteGitOps();
+  const { deps } = createPassUnderTest({});
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace: (opts) =>
+      updateMarketplace({
+        ...opts,
+        gitOps,
+        gitHubSsh: { probe: () => Promise.resolve("configured") },
+      }),
+  });
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(
+    lines.filter((line) => line.startsWith("[autoupdate]")),
+    ["[autoupdate] ● tools [project] (updated)\n  Cloning via SSH: git@github.com:acme/tools.git"],
+  );
 });
 
 test("yields to a command that arrives during the refresh before the first plugin update", async (t) => {

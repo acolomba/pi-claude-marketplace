@@ -2,6 +2,7 @@ Feature: Marketplace github refresh
 
   Updating a GitHub marketplace lists and clones the source it was declared with, in the order the marketplace probe picks: ssh first only when the user's ssh authenticates to github.com (SG-SSH-02, SG-SSH-06).
   An ssh stand-in first on Pi's path answers the probe and serves the git host's repositories over ssh, and a CONNECT proxy tunnels git's github.com connections to the git host.
+  A refresh that re-clones names the clone's transport and its retries on the marketplace's result; a current refresh clones nothing and names no clone (D-SG-22).
 
   Scenario: Updating a github marketplace when the user's ssh authenticates refreshes it over ssh
     Given the marketplace "tools" is published as a github source
@@ -15,8 +16,8 @@ Feature: Marketplace github refresh
       | severity     | info    |
       | needs reload | false   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status |
-      | tools            | user              | updated            |
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url         |
+      | tools            | user              | updated            | via-ssh                | git@github.com:acme/tools.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                 |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
@@ -37,8 +38,8 @@ Feature: Marketplace github refresh
       | severity     | info    |
       | needs reload | false   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status |
-      | tools            | user              | updated            |
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url         | marketplace clone retries         |
+      | tools            | user              | updated            | via-ssh                | git@github.com:acme/tools.git | https://github.com/acme/tools.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                 |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
@@ -65,8 +66,8 @@ Feature: Marketplace github refresh
       | severity     | info    |
       | needs reload | false   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status |
-      | tools            | user              | updated            |
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url         |
+      | tools            | user              | updated            | via-ssh                | git@github.com:acme/tools.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                 |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
@@ -87,8 +88,8 @@ Feature: Marketplace github refresh
       | severity     | info    |
       | needs reload | false   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status |
-      | tools            | user              | updated            |
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | user              | updated            | via-https              | https://github.com/acme/tools.git |
     Then the user's ssh receives no launch
     Then the git host receives these requests:
       | method | path                                              | status |
