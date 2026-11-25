@@ -1636,6 +1636,44 @@ test("SG-SSH-02, CONTEXT [Identity]: the sync of an owner/repo marketplace whose
   });
 });
 
+test("CONTEXT [Identity]: the sync of a github marketplace checks the declared source's URL, not the origin its checkout records", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-origin-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const fake = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const gitOps: GitOps = {
+        ...fake.gitOps,
+        listRemotes: () =>
+          Promise.resolve({ kind: "origin", url: "https://github.com/test/earlier-name.git" }),
+      };
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        fake.state.resolveRemoteRefCalls.map(({ url }) => url),
+        ["https://github.com/test/repo.git"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("GHB-02: the GitHub marketplace sync under the override binds the override host", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-override-");
