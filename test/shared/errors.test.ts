@@ -22,6 +22,7 @@ import {
   findManualRecoveryError,
   formatCauseChain,
   GitCommandError,
+  GitHubTransportsFailedError,
   hasFetchedUrlCause,
   HostedManifestFetchError,
   HostedManifestHttpError,
@@ -882,6 +883,103 @@ describe("GitCommandError", () => {
 
     // assert
     assert.strictEqual(error.cause, cause);
+  });
+});
+
+describe("GitHubTransportsFailedError", () => {
+  test("OQ-8: composes the marketplace message from both attempts and keeps the last error as its cause", () => {
+    // arrange
+    const sshError = new Error("ssh refused");
+    const httpsError = new Error("https refused");
+
+    // act
+    const error = new GitHubTransportsFailedError("marketplace", [
+      { transport: "ssh", url: "git@github.com:acme/tools.git", error: sshError },
+      { transport: "https", url: "https://github.com/acme/tools.git", error: httpsError },
+    ]);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, surface: error.surface, message: error.message },
+      {
+        name: "GitHubTransportsFailedError",
+        surface: "marketplace",
+        message:
+          "Fetching the marketplace from GitHub failed on both attempts. SSH (git@github.com:acme/tools.git): ssh refused\n\nHTTPS (https://github.com/acme/tools.git): https refused",
+      },
+    );
+    assert.strictEqual(error.cause, httpsError);
+  });
+
+  test("OQ-8: composes the plugin message with the SSH retry and the install remedy", () => {
+    // arrange
+    const httpsError = new Error("https refused");
+    const sshError = new Error("ssh refused");
+
+    // act
+    const error = new GitHubTransportsFailedError("plugin", [
+      { transport: "https", url: "https://github.com/acme/ghp.git", error: httpsError },
+      { transport: "ssh", url: "git@github.com:acme/ghp.git", error: sshError },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(
+      { surface: error.surface, message: error.message },
+      {
+        surface: "plugin",
+        message:
+          "https refused\nThe retry over SSH failed too: ssh refused\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.",
+      },
+    );
+    assert.strictEqual(error.cause, sshError);
+  });
+
+  test("OQ-8: keeps both attempts in order in a frozen list", () => {
+    // arrange
+    const sshError = new Error("ssh refused");
+    const httpsError = new Error("https refused");
+    const attempts = [
+      { transport: "ssh", url: "git@github.com:acme/tools.git", error: sshError },
+      { transport: "https", url: "https://github.com/acme/tools.git", error: httpsError },
+    ] as const;
+
+    // act
+    const error = new GitHubTransportsFailedError("marketplace", attempts);
+
+    // assert
+    assert.deepStrictEqual(error.attempts, [
+      { transport: "ssh", url: "git@github.com:acme/tools.git", error: sshError },
+      { transport: "https", url: "https://github.com/acme/tools.git", error: httpsError },
+    ]);
+    assert.deepStrictEqual(
+      [
+        Object.isFrozen(error.attempts),
+        ...error.attempts.map((attempt) => Object.isFrozen(attempt)),
+      ],
+      [true, true, true],
+    );
+  });
+
+  test("T-04-06: redacts the credentials that a URL or an attempt message carries", () => {
+    // arrange
+    const attempts = [
+      {
+        transport: "https",
+        url: "https://user:secret123@github.com/acme/tools.git",
+        error: new Error("denied for https://user:secret123@github.com/acme/tools.git"),
+      },
+      { transport: "ssh", url: "git@github.com:acme/tools.git", error: new Error("ssh refused") },
+    ] as const;
+
+    // act
+    const error = new GitHubTransportsFailedError("marketplace", attempts);
+
+    // assert
+    assert.strictEqual(
+      error.message,
+      "Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://***@github.com/acme/tools.git): denied for https://***@github.com/acme/tools.git\n\nSSH (git@github.com:acme/tools.git): ssh refused",
+    );
   });
 });
 
