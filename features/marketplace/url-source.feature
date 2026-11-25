@@ -189,7 +189,7 @@ Feature: Marketplace url source
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                  | cause truncated |
+      | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                     | cause truncated |
       | https://{git host}/acme/tools.git | project           | failed             | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git clone --depth failed: network, exit code 128 | false           |
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
@@ -252,7 +252,7 @@ Feature: Marketplace url source
     Then the "claude-plugins.local.json" file of the project scope does not exist
     Then the installation record bytes of the project scope are unchanged
 
-  Scenario Outline: Installing a pinned plugin from the repository of a url marketplace makes no git request after the add (D-SEED-01)
+  Scenario Outline: Installing a pinned plugin from the repository of a url marketplace clones it and fetches its commit, which the depth-1 checkout of the add lacks (D-SEED-01, SG-TRN-02)
     Given the marketplace "tools" is published as a url source
     Given the marketplace "tools" offers these plugins from its own repository:
       | name | version | url          | pinned |
@@ -266,14 +266,21 @@ Feature: Marketplace url source
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id         | name | status    | reasons | scope   | version |
       | tools            | project           | demo@tools | demo | installed |         | project | 1.0.0   |
-    Then the git host receives no request
+    Then the git host receives these requests:
+      | method | path                                                 | status |
+      | GET    | /acme/<repository>/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/<repository>/git-upload-pack                   | 200    |
+      | POST   | /acme/<repository>/git-upload-pack                   | 200    |
+      | GET    | /acme/<repository>/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/<repository>/git-upload-pack                   | 200    |
+      | POST   | /acme/<repository>/git-upload-pack                   | 200    |
 
     Examples:
-      | plugin url                         |
-      | https://{git host}/acme/tools      |
-      | https://{git host}/acme/tools.git  |
-      | https://{git host}/acme/tools/     |
-      | https://{git host}/acme/tools.git/ |
+      | plugin url                         | repository |
+      | https://{git host}/acme/tools      | tools      |
+      | https://{git host}/acme/tools.git  | tools.git  |
+      | https://{git host}/acme/tools/     | tools      |
+      | https://{git host}/acme/tools.git/ | tools.git  |
 
   Scenario Outline: A plugin from the repository of a url marketplace lists as available right after the add (D-SEED-01)
     Given the marketplace "tools" is published as a url source

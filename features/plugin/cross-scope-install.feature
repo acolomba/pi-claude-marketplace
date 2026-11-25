@@ -95,6 +95,7 @@ Feature: Plugin cross-scope install
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
   Scenario: Installing into the project scope a plugin that the user-scope marketplace does not list fails before the project clones the marketplace (WR-05, WR-07)
     Given the marketplace "tools" is published as a url source
@@ -197,6 +198,7 @@ Feature: Plugin cross-scope install
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name     | source                            |

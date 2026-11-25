@@ -279,9 +279,8 @@ Feature: Marketplace device flow
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
     Then github's sign-in receives no request
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
     Then the user's git credential store holds no credentials
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the user scope holds no marketplace record
@@ -310,7 +309,9 @@ Feature: Marketplace device flow
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then github's sign-in receives these requests:
       | method | path                      | form                                                                                                                      |
@@ -318,13 +319,12 @@ Feature: Marketplace device flow
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/login/device/code                                | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                         | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                         | sign-in   |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+      | method  | url                                         | routed to |
+      | CONNECT | github.com:443                              | git host  |
+      | POST    | https://github.com/login/device/code        | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | CONNECT | github.com:443                              | git host  |
     Then the user's git credential store holds these credentials:
       | protocol | host       | user           | password              |
       | https    | github.com | x-access-token | stand-in-access-token |
@@ -349,8 +349,8 @@ Feature: Marketplace device flow
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
     Then github's sign-in receives no request
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
     Then the files of the project scope are unchanged
 
   Scenario: Applying a config that declares a private GitHub marketplace in pi's print mode adds nothing and leaves no staged clone, and print mode shows nothing, a documented Pi gap (MODE-04, JDOC-02)
@@ -370,8 +370,8 @@ Feature: Marketplace device flow
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
     Then github's sign-in receives no request
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source     | autoupdate |
       | tools | acme/tools | false      |
