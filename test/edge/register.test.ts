@@ -2515,9 +2515,11 @@ describe("registerClaudePluginCommand", () => {
         },
       },
     });
+    // The add's ssh probe of GitHub runs in the neutral directory (SG-SSH-02).
     assert.deepStrictEqual(userTree, [
       "claude-plugins.json",
       "pi-claude-marketplace/",
+      "pi-claude-marketplace/git-neutral/",
       "pi-claude-marketplace/sources/",
       "pi-claude-marketplace/sources/claude-plugins-official/",
       "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/",

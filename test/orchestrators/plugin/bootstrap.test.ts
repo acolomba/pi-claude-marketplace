@@ -200,11 +200,16 @@ async function seedAddedMarketplace(
   );
 }
 
-/** Every path a clean bootstrap leaves under the user scope root. */
+/**
+ * Every path a clean bootstrap leaves under the user scope root. The add's
+ * ssh probe of GitHub runs in the neutral directory, so the add makes it
+ * (SG-SSH-02, SG-PRC-03).
+ */
 function bootstrappedScopeTree(): readonly string[] {
   return [
     "claude-plugins.json",
     "pi-claude-marketplace/",
+    "pi-claude-marketplace/git-neutral/",
     "pi-claude-marketplace/sources/",
     "pi-claude-marketplace/sources/claude-plugins-official/",
     "pi-claude-marketplace/sources/claude-plugins-official/.claude-plugin/",
@@ -214,6 +219,14 @@ function bootstrappedScopeTree(): readonly string[] {
     "pi-claude-marketplace/sources-staging/",
     "pi-claude-marketplace/state.json",
   ];
+}
+
+/**
+ * What a failed add leaves under the user scope root: the extension root,
+ * and the neutral directory its ssh probe ran in (SG-SSH-02, SG-PRC-03).
+ */
+function failedAddScopeTree(): readonly string[] {
+  return ["pi-claude-marketplace/", "pi-claude-marketplace/git-neutral/"];
 }
 
 /** The seeded tree, which a bootstrap that clones nothing leaves as it is. */
@@ -572,7 +585,7 @@ test("propagates a clone failure silently", async (t) => {
     schemaVersion: 3,
     marketplaces: {},
   });
-  assert.deepStrictEqual(await retryTree(locations.scopeRoot), ["pi-claude-marketplace/"]);
+  assert.deepStrictEqual(await retryTree(locations.scopeRoot), failedAddScopeTree());
   assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
   verifyBoundary();
 });
@@ -611,7 +624,7 @@ test("renders a failed add as marketplace add does and never reaches the missing
     schemaVersion: 3,
     marketplaces: {},
   });
-  assert.deepStrictEqual(await retryTree(locations.scopeRoot), ["pi-claude-marketplace/"]);
+  assert.deepStrictEqual(await retryTree(locations.scopeRoot), failedAddScopeTree());
   assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
   verifyBoundary();
 });
