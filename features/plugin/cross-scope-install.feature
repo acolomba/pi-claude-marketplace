@@ -63,6 +63,27 @@ Feature: Plugin cross-scope install
       | source kind | source                            |
       | url         | https://{git host}/acme/tools.git |
 
+  Scenario Outline: Installing a plugin into the project scope from a github marketplace the user scope added declares that marketplace in the project's base config and names the add's clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin install demo@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons | scope   | version | marketplace clone note | marketplace clone url             |
+      | tools            | project           | demo@tools | demo | installed |         | project | 1.0.0   | via-https              | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id         |
+      | demo@tools |
+
     @github
     Examples:
       | source kind | source     |

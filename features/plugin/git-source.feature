@@ -33,9 +33,35 @@ Feature: Plugin git source
 
     Examples:
       | plugin source kind | plugin | repository | path         |
-      | github             | ghp    | ghp        |              |
       | url                | urlp   | urlp       |              |
       | git-subdir         | subp   | mono       | plugins/subp |
+
+  Scenario: Installing a plugin from a github source clones its repository from the git host and names its clone transport
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-https  | https://github.com/acme/ghp.git |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    When the user reloads pi
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:ghp-skill | A skill of ghp 1.0.0. |
 
   Scenario: A plugin pinned to the commit another installed plugin was cloned at installs with no request
     Given the git repository "mono" holds these plugins:
@@ -156,8 +182,8 @@ Feature: Plugin git source
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons  | scope   | leaks | rollback partial | cause chain   | cause truncated |
-      | gits             | project           | ghp@gits | ghp  | failed | <reason> | project |       |                  | <cause chain> | false           |
+      | marketplace name | marketplace scope | id       | name | status | reasons  | scope   | leaks | rollback partial | cause chain   | cause truncated | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | <reason> | project |       |                  | <cause chain> | false           | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status   |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
@@ -189,8 +215,8 @@ Feature: Plugin git source
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  |
+      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 401    |
@@ -220,9 +246,9 @@ Feature: Plugin git source
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name     | status | reasons           | scope   | leaks | rollback partial | cause chain   | cause truncated |
-      | gits             | project           | app@gits | app      | failed | dependency failed | project |       |                  |               |                 |
-      | gits             | project           | ghp@gits | ghp@gits | failed | <reason>          | project |       |                  | <cause chain> | false           |
+      | marketplace name | marketplace scope | id       | name     | status | reasons           | scope   | leaks | rollback partial | cause chain   | cause truncated | clone note | clone url                       |
+      | gits             | project           | app@gits | app      | failed | dependency failed | project |       |                  |               |                 |            |                                 |
+      | gits             | project           | ghp@gits | ghp@gits | failed | <reason>          | project |       |                  | <cause chain> | false           | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status   |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
@@ -362,8 +388,8 @@ Feature: Plugin git source
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                       | cause truncated |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | A fresh clone from the git host does not hold the commit 0123456789abcdef0123456789abcdef01234567 | false           |
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                       | cause truncated | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | A fresh clone from the git host does not hold the commit 0123456789abcdef0123456789abcdef01234567 | false           | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -398,8 +424,8 @@ Feature: Plugin git source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -476,8 +502,8 @@ Feature: Plugin git source
     Given the marketplace "gits" is added to the project scope
     When the user runs "/claude:plugin install ghp@gits --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 2.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 2.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -533,8 +559,8 @@ Feature: Plugin git source
     Given the marketplace "gits" is added to the project scope
     When the user runs "/claude:plugin install ghp@gits --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 2} |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 2} | via-https  | https://github.com/acme/ghp.git |
     Then the installation record of the project scope holds these plugins:
       | id       | version          | enabled |
       | ghp@gits | {ghp revision 2} | true    |
@@ -593,8 +619,8 @@ Feature: Plugin git source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name           | marketplace scope | id                              | name | status    | reasons | scope   | version                 |
-      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | installed |         | project | 1.0.0-{dirp revision 1} |
+      | marketplace name           | marketplace scope | id                              | name | status    | reasons | scope   | version                 | clone note | clone url                        |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | installed |         | project | 1.0.0-{dirp revision 1} | via-https  | https://github.com/acme/dirp.git |
 
   Scenario: A pinned plugin of the anthropic-plugin-directory marketplace lists as installed, not upgradable
     Given the git repository "dirp" holds these plugins:
