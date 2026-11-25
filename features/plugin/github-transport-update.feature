@@ -177,3 +177,34 @@ Feature: Plugin github transport update
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: Enabling a github plugin whose clone is gone falls back to https for a user with no ssh key
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the user scope
+    Given the user has run "/claude:plugin install ghp@gits --scope user"
+    Given the user has run "/claude:plugin disable ghp@gits --scope user"
+    Given the cached clones of git plugins in the user scope are deleted
+    When the user runs "/claude:plugin enable ghp@gits --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope | version |
+      | gits             | user              | ghp@gits | ghp  | installed |         | user  | 1.0.0   |
+    Then the installation record of the user scope holds these plugins:
+      | id       | version | enabled |
+      | ghp@gits | 1.0.0   | true    |
+    Then the user's ssh receives these launches:
+      | argv                                                                                |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
+      | -G git@github.com                                                                   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |

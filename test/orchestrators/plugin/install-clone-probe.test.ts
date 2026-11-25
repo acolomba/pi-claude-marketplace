@@ -677,8 +677,10 @@ test("D-SG-18: a clone under a transport context plans with its checks and notes
   });
 });
 
-test("D-SG-18: a clone with no transport context stays on ssh when nothing forces https", async (testContext) => {
+test("D-SG-19: a clone with no transport context makes one for the call and follows the install's checks", async (testContext) => {
   // arrange
+  // The run's ssh stand-in finds no configured key and shows a direct hop,
+  // and nothing forces https, so the install's checks let https go first.
   const { locations, root } = await freshLocations(testContext);
   setGitHubBaseUrl(testContext, undefined);
   const { seam, transports } = transportKeepingSeam(root);
@@ -695,8 +697,8 @@ test("D-SG-18: a clone with no transport context stays on ssh when nothing force
   // assert
   assert.deepStrictEqual(await plannedTransport(transports[0]), {
     subject: "ghp@gits",
-    first: { transport: "ssh", url: "git@github.com:acme/ghp.git" },
-    note: "via-ssh",
+    first: { transport: "https", url: "https://github.com/acme/ghp.git" },
+    note: "ssh-not-configured",
   });
 });
 

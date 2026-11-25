@@ -78,7 +78,11 @@ import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
-import { foldUnstageNotices, mcpConfigNoticesMember } from "../marketplace/shared.ts";
+import {
+  defaultPluginTransportContext,
+  foldUnstageNotices,
+  mcpConfigNoticesMember,
+} from "../marketplace/shared.ts";
 
 import {
   buildScopeDeclarationIndex,
@@ -137,6 +141,7 @@ import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 import type { RecordDeclarations } from "./dependency-index.ts";
@@ -290,15 +295,25 @@ export interface EnableDisablePluginOptions {
    * (undefined) === `{ mode: "standalone" }` -- matches standalone behavior.
    */
   readonly notifications?: EnableDisablePluginNotifications;
+  /**
+   * D-SG-19: the run's GitHub transport context, which `apply` and `import`
+   * pass so one run probes once. Omitted, the enable makes one for the
+   * command. An enable re-clones a git plugin whose clone is gone, and the
+   * root and every re-enabled member clone over this one context. A disable
+   * clones nothing and reads it nowhere.
+   */
+  readonly transportContext?: PluginTransportContext;
 }
 
 /**
  * The options a `createSetPluginEnabled` operation runs with: the caller's
  * options plus the environment its factory was built with. D-08-06: the
- * enable branch stages MCP servers with `env`.
+ * enable branch stages MCP servers with `env`. D-SG-19: `transportContext`
+ * is the caller's, or the one the entry made for the command.
  */
 interface SetEnabledRunOptions extends EnableDisablePluginOptions {
   readonly env: ClaudeEnv;
+  readonly transportContext: PluginTransportContext;
 }
 
 /** Owns only the semantic transaction steps composed by enable and disable. */
@@ -455,6 +470,8 @@ async function materializeEnableRoot(
       // the required removal port.
       removalOps: createRemovalOps(),
       env: opts.env,
+      // D-SG-19: a clone that is gone re-clones over the command's context.
+      transportContext: opts.transportContext,
     },
     capture,
   );
@@ -1041,6 +1058,8 @@ function buildEnableCascadeMemberPhase(
             consentView: "none",
             removalOps: createRemovalOps(),
             env: opts.env,
+            // D-SG-19: the member shares the root's transport context.
+            transportContext: opts.transportContext,
           },
           capture,
         );
@@ -2713,12 +2732,14 @@ export interface SetPluginEnabledOperation {
 /**
  * D-08-06: `env` is the environment the enable branch stages MCP servers with.
  * It defaults to Pi's process environment here, at the entry point, the way
- * `createGetPluginInfo` binds it.
+ * `createGetPluginInfo` binds it. D-SG-19: `newTransportContext` makes the
+ * command's one transport context when the caller gives none.
  */
 export function createSetPluginEnabled(
   transaction: EnableDisableTransaction,
   hooksRouting: EnableDisableHooksRouting,
   env: ClaudeEnv = process.env,
+  newTransportContext: () => PluginTransportContext = defaultPluginTransportContext,
 ): SetPluginEnabledOperation {
   function configuredSetPluginEnabled(
     opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
@@ -2729,7 +2750,11 @@ export function createSetPluginEnabled(
   function configuredSetPluginEnabled(
     opts: EnableDisablePluginOptions,
   ): Promise<EnableDisablePluginOutcome | undefined> {
-    return setPluginEnabledWithTransaction(transaction, hooksRouting, { ...opts, env });
+    return setPluginEnabledWithTransaction(transaction, hooksRouting, {
+      ...opts,
+      env,
+      transportContext: opts.transportContext ?? newTransportContext(),
+    });
   }
 
   return configuredSetPluginEnabled;

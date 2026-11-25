@@ -250,15 +250,6 @@ for (const { label, failure } of [
   });
 }
 
-test("D-SG-18: stays on ssh only with no transport context", async () => {
-  // act
-  const plan = await planPluginClone({ source: OWNER_REPO });
-
-  // assert
-  assert.deepStrictEqual(orderOf(plan), { first: SSH_ATTEMPT, note: "via-ssh" });
-  assert.deepStrictEqual(await attemptsAfter(plan, CLONE_FAILURE), [SSH_ATTEMPT]);
-});
-
 for (const force of ["prefer-https", "base-override"] as const) {
   test(`D-SG-24, D-SG-21: clones once over https and runs no check when forced by ${force}`, async () => {
     // arrange
@@ -359,8 +350,9 @@ test("D-SG-20: clones a git-subdir owner/repo shorthand once over ssh and runs n
   assert.deepStrictEqual(calls, []);
 });
 
-test("D-SG-20: clones a forced git-subdir owner/repo shorthand once over https", async () => {
+test("D-SG-20: clones a forced git-subdir owner/repo shorthand once over https and runs no check", async () => {
   // arrange
+  const { checks, calls } = checksAnswering({});
   const source: GitBackedSource = {
     kind: "git-subdir",
     raw: "acme/mono",
@@ -369,16 +361,18 @@ test("D-SG-20: clones a forced git-subdir owner/repo shorthand once over https",
   };
 
   // act
-  const plan = await planPluginClone({ source, force: "prefer-https" });
+  const plan = await planPluginClone({ source, force: "prefer-https", checks });
 
   // assert
   const https = { transport: "https", url: "https://github.com/acme/mono.git" } as const;
   assert.deepStrictEqual(orderOf(plan), { first: https, note: "via-https" });
   assert.deepStrictEqual(await attemptsAfter(plan, CLONE_FAILURE), [https]);
+  assert.deepStrictEqual(calls, []);
 });
 
-test("D-SG-20: clones a git-subdir address once as written", async () => {
+test("D-SG-20: clones a git-subdir address once as written and runs no check", async () => {
   // arrange
+  const { checks, calls } = checksAnswering({});
   const source: GitBackedSource = {
     kind: "git-subdir",
     raw: "https://git.example.com/acme/mono.git",
@@ -387,12 +381,13 @@ test("D-SG-20: clones a git-subdir address once as written", async () => {
   };
 
   // act
-  const plan = await planPluginClone({ source });
+  const plan = await planPluginClone({ source, checks });
 
   // assert
   assert.deepStrictEqual(orderOf(plan), {
     first: { transport: "https", url: "https://git.example.com/acme/mono.git" },
   });
+  assert.deepStrictEqual(calls, []);
 });
 
 const PUBLICKEY_FAILURE = new GitCommandError(
@@ -499,15 +494,6 @@ test("SG-SSH-05: on Windows gives no ssh retry after an https attempt that git c
 
   // assert
   assert.deepStrictEqual([afterSsh, afterHttps], [HTTPS_ATTEMPT, undefined]);
-});
-
-test("SG-SSH-05: on Windows with no transport context stays on ssh after a key failure", async () => {
-  // act
-  const plan = await planPluginClone({ source: OWNER_REPO, platform: "win32" });
-
-  // assert
-  assert.deepStrictEqual(orderOf(plan), { first: SSH_ATTEMPT, note: "via-ssh" });
-  assert.deepStrictEqual(await attemptsAfter(plan, PUBLICKEY_FAILURE), [SSH_ATTEMPT]);
 });
 
 test("SG-SSH-05: on Windows keeps ssh after a key failure when -G through git shows no direct hop", async () => {
