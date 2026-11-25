@@ -728,7 +728,8 @@ const plannedInstallRows = [
   {
     condition: "a candidate that resolves with an unsupported component kind",
     stage: async (cwd: string, locations: ScopedLocations): Promise<void> => {
-      await stagePlannedInstall(cwd, locations, { degrade: true });
+      const { marketplaceRoot } = await stagePlannedInstall(cwd, locations, { degrade: true });
+      await mkdir(path.join(marketplaceRoot, "cr", "skills"));
     },
     rendered: "● cr (will partially install)",
     expectedMessage:
@@ -1521,6 +1522,7 @@ test("D-12 / D-24: pending lists a consent decline with the hint naming update -
     path.join(project.extensionRoot, "marketplaces", "tools", "demo", "output-styles", "terse.md"),
     "# Terse\n",
   );
+  await mkdir(path.join(project.extensionRoot, "marketplaces", "tools", "demo", "skills"));
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
   // act

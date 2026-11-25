@@ -111,7 +111,10 @@ interface SeededPlugin {
   /** Declare the entry in `marketplace.json` (default true). */
   readonly inManifest?: boolean;
   readonly manifestVersion?: string;
-  /** Declare an unsupported component kind on the manifest entry. */
+  /**
+   * Declare an unsupported component kind on the manifest entry, beside an
+   * empty `skills` folder, so the plugin stays partially available.
+   */
   readonly declaresUnsupported?: boolean;
   /**
    * The manifest entry's `source`, defaulting to the sibling path form. A git
@@ -275,6 +278,10 @@ async function layoutMarketplace(
       );
       if (plugin.mcpJson !== undefined) {
         await writeFile(path.join(pluginRoot, ".mcp.json"), plugin.mcpJson, "utf8");
+      }
+
+      if (plugin.declaresUnsupported === true) {
+        await mkdir(path.join(pluginRoot, "skills"));
       }
     }
 
