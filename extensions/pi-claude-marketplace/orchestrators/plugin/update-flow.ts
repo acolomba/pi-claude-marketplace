@@ -110,12 +110,16 @@ import {
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
   MARKETPLACE_MANIFEST_MARKER,
+  marketplaceRefreshPlans,
   refreshCloneBySwap,
-  swapCloneUrl,
   type CloneSwapResult,
   type RenameOps,
 } from "../marketplace/clone-swap.ts";
-import { DEFAULT_GIT_OPS, lacksStoredCredential } from "../marketplace/shared.ts";
+import {
+  DEFAULT_GIT_OPS,
+  DEFAULT_GITHUB_SSH_OPS,
+  lacksStoredCredential,
+} from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { collectPluginClonesLocked } from "./clone-gc.ts";
@@ -154,7 +158,7 @@ import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps } from "../auth-host.ts";
-import type { GitAuthBundle, GitOps } from "../marketplace/shared.ts";
+import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginConvergeFn,
   PluginConvergeTarget,
@@ -276,9 +280,10 @@ function syncAuthFor(
 
 /**
  * PUP-2 / D-SG-10 / D-SG-15: refresh one github or url marketplace checkout by
- * re-clone and swap, as `marketplace update` does. It runs under the scope
- * lock, and it reads the plugins whose packages the swap carries from the
- * state inside that lock (D-PL9-10). GAUTH-04: a url source's
+ * re-clone and swap, as `marketplace update` does, with the same plans from
+ * the declared source (SG-SSH-02, CONTEXT [Identity]). It runs under the
+ * scope lock, and it reads the plugins whose packages the swap carries from
+ * the state inside that lock (D-PL9-10). GAUTH-04: a url source's
  * auth failure that a stored credential could answer gains the
  * `NO_STORED_CREDENTIAL_CAUSE` line as the chain's tail.
  */
@@ -287,6 +292,7 @@ async function syncMarketplaceBySwap(args: {
   readonly mpName: string;
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
+  readonly gitHubSsh: GitHubSshOps;
   readonly auth: GitAuthBundle;
   readonly keepOnUnreachable: boolean;
   readonly renameOps: RenameOps;
@@ -294,7 +300,6 @@ async function syncMarketplaceBySwap(args: {
   const { source, mpName, locations, gitOps, auth } = args;
   const liveDir = await locations.sourceCloneDir(mpName);
   try {
-    const url = await swapCloneUrl(liveDir, source, gitOps);
     // D-PL9-10: the caller holds the scope lock, so this read sees every
     // plugin installed into the checkout before the swap carries packages.
     const { marketplaces } = await loadState(locations.extensionRoot);
@@ -302,7 +307,8 @@ async function syncMarketplaceBySwap(args: {
       liveDir,
       backupDir: await locations.sourceBackupDir(mpName),
       stagingDir: await locations.sourceSwapStagingDir(mpName),
-      url,
+      ...marketplaceRefreshPlans(source, args.gitHubSsh),
+      surface: "marketplace",
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,
       auth,
@@ -348,6 +354,7 @@ function makeSyncCloneOnce(
   opts: UpdatePluginsOptions,
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const gitHubSsh = opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const keepOnUnreachable = keepMarketplaceOnFailure(opts.environment);
   const renameOps = opts.renameOps ?? DEFAULT_RENAME_OPS;
@@ -375,6 +382,7 @@ function makeSyncCloneOnce(
           mpName,
           locations,
           gitOps,
+          gitHubSsh,
           auth,
           keepOnUnreachable,
           renameOps,

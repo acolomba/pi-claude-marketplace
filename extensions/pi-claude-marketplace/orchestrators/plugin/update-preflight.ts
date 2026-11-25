@@ -80,7 +80,7 @@ import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { RenameOps } from "../marketplace/clone-swap.ts";
-import type { GitAuthBundle, GitOps } from "../marketplace/shared.ts";
+import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginUpdateFailedOutcome,
   PluginUpdateSkippedOutcome,
@@ -117,6 +117,8 @@ export interface UpdatePluginsOptions {
   readonly cwd: string;
   readonly target: UpdatePluginsTarget;
   readonly gitOps?: GitOps;
+  /** SG-SSH-02: the ssh probe the marketplace sync plans with; the user's own by default. */
+  readonly gitHubSsh?: GitHubSshOps;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   readonly mapModel?: boolean;
   readonly local?: boolean;

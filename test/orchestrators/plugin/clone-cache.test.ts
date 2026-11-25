@@ -1692,7 +1692,11 @@ async function writeMirrorTree(dir: string, revision: string): Promise<void> {
  */
 async function warmMirror(
   t: TestContext,
-  options: { readonly remoteHead: string; readonly cloneError?: Error },
+  options: {
+    readonly remoteHead: string;
+    readonly cloneError?: Error;
+    readonly lsRemoteError?: Error;
+  },
 ): Promise<{
   readonly locations: ScopedLocations;
   readonly mirrorRoot: string;
@@ -1713,6 +1717,9 @@ async function warmMirror(
     remoteHead: options.remoteHead,
     cloneFixture: { boundary: "local", sourceDir: remote },
     ...(options.cloneError === undefined ? {} : { cloneError: options.cloneError }),
+    ...(options.lsRemoteError === undefined
+      ? {}
+      : { resolveRemoteRefError: options.lsRemoteError }),
   });
   return { locations, mirrorRoot, backupDir: await locations.pluginCloneBackupDir(key), git };
 }
@@ -1773,6 +1780,89 @@ void test("D-SG-10: a warm mirror whose remote moved is cloned into staging and 
       staging: [],
       gitEntries: ["HEAD"],
     },
+  );
+});
+
+void test("OQ-4: a warm mirror refresh with a plugin transport lists and re-clones over its plan and notes the re-clone", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+  const { transport, notes } = cloneTransport(GITHUB_SSH);
+
+  // act
+  const refreshed = await materializeOrRefreshPluginMirror({
+    ...warmMirrorArgs(mirror),
+    transport,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      resolvedSha: refreshed.resolvedSha,
+      checks: mirror.git.state.calls.resolveRemoteRef.map(({ url, auth }) => ({ url, auth })),
+      clones: mirror.git.state.calls.clone.map(({ url, auth }) => ({ url, auth })),
+      note: notes.noteFor("repo@gits"),
+      tree: await treeOf(mirror.mirrorRoot),
+    },
+    {
+      resolvedSha: MIRROR_COMMIT_B,
+      checks: [{ url: GITHUB_SSH.url, auth: undefined }],
+      clones: [{ url: GITHUB_SSH.url, auth: undefined }],
+      note: { note: "via-ssh", url: GITHUB_SSH.url },
+      tree: "B\n",
+    },
+  );
+});
+
+void test("OQ-4: a warm mirror refresh with no transport lists and re-clones its network url once", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+
+  // act
+  await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  const auth = publicCloneAuth();
+  assert.deepStrictEqual(
+    {
+      checks: mirror.git.state.calls.resolveRemoteRef.map(({ url }) => url),
+      clones: mirror.git.state.calls.clone.map(({ url }) => url),
+      authKinds: [...mirror.git.state.calls.resolveRemoteRef, ...mirror.git.state.calls.clone].map(
+        (call) => call.auth?.kind,
+      ),
+    },
+    {
+      checks: ["https://example.com/repo"],
+      clones: ["https://example.com/repo"],
+      authKinds: [auth.kind, auth.kind],
+    },
+  );
+});
+
+void test("OQ-4, D-SG-10: a warm mirror whose only planned freshness attempt fails re-clones once and throws that failure", async (t) => {
+  // arrange
+  const lsRemoteError = new GitCommandError(
+    { kind: "network" },
+    { operation: "ls-remote", exitCode: 128 },
+  );
+  const mirror = await warmMirror(t, {
+    remoteHead: MIRROR_COMMIT_B,
+    lsRemoteError,
+    cloneError: new GitCommandError({ kind: "network" }, { operation: "clone --depth" }),
+  });
+  const { transport } = cloneTransport(GITHUB_SSH);
+
+  // act
+  const refresh = materializeOrRefreshPluginMirror({ ...warmMirrorArgs(mirror), transport });
+
+  // assert
+  await assert.rejects(refresh, (error: unknown) => error === lsRemoteError);
+  assert.deepStrictEqual(
+    {
+      checks: mirror.git.state.calls.resolveRemoteRef.length,
+      clones: mirror.git.state.calls.clone.length,
+      tree: await treeOf(mirror.mirrorRoot),
+    },
+    { checks: 1, clones: 1, tree: "A\n" },
   );
 });
 

@@ -55,7 +55,9 @@ import { cloneOverGitHubTransports } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
+  oneAttemptPlans,
   refreshCloneBySwap,
+  type CloneSwapArgs,
   type RenameOps,
 } from "../marketplace/clone-swap.ts";
 import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "../marketplace/shared.ts";
@@ -559,8 +561,9 @@ export async function materializeUnpinnedSource(
  * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
  * needs `source.raw`, which is not recoverable from `cloneUrl` once the
  * parse-time strip has run. A cold clone, the freshness check, and a re-clone
- * all send it. D-SG-18: given a `transport`, a cold clone runs over its plan's
- * attempts instead (`runCloneStep`); a warm refresh still sends `networkUrl`.
+ * all send it. D-SG-18, OQ-4: given a `transport`, a cold clone runs over its
+ * plan's attempts instead (`runCloneStep`), and so do a warm refresh's
+ * freshness check and re-clone (`mirrorRefreshPlans`).
  */
 export async function materializeOrRefreshPluginMirror(args: {
   locations: ScopedLocations;
@@ -676,10 +679,33 @@ async function installedRootsInMirror(
 }
 
 /**
+ * OQ-4: the plans of a mirror refresh. With the caller's `transport`, the
+ * freshness check and the re-clone both run over its plan, and the re-clone
+ * records its note under the transport's subject; without one, each runs once
+ * on `networkUrl`.
+ */
+function mirrorRefreshPlans(
+  transport: CloneTransport | undefined,
+  networkUrl: string,
+): Pick<CloneSwapArgs, "freshness" | "reclone" | "notes" | "subject"> {
+  if (transport === undefined) {
+    return oneAttemptPlans(networkUrl);
+  }
+
+  return {
+    freshness: transport.plan,
+    reclone: transport.plan,
+    notes: transport.notes,
+    subject: transport.subject,
+  };
+}
+
+/**
  * D-SG-10 / SG-TRN-03: refresh the present mirror at `mirrorRoot` by re-clone
- * and swap. The keep variable of D-SG-15 is for marketplaces only, so an
- * unreachable remote is cloned again, and a mirror that cannot be moved aside
- * fails as `PluginMirrorInUseError`.
+ * and swap, over the plans `mirrorRefreshPlans` gives (OQ-4). The keep
+ * variable of D-SG-15 is for marketplaces only, so an unreachable remote is
+ * cloned again, and a mirror that cannot be moved aside fails as
+ * `PluginMirrorInUseError`.
  */
 async function refreshMirrorBySwap(args: {
   readonly locations: ScopedLocations;
@@ -691,12 +717,14 @@ async function refreshMirrorBySwap(args: {
   readonly removalOps: RemovalOps;
   readonly key: string;
   readonly mirrorRoot: string;
+  readonly transport?: CloneTransport | undefined;
 }): Promise<void> {
   const swapped = await refreshCloneBySwap({
     liveDir: args.mirrorRoot,
     backupDir: await args.locations.pluginCloneBackupDir(args.key),
     stagingDir: await args.locations.pluginMirrorStagingDir(args.key),
-    url: args.networkUrl,
+    ...mirrorRefreshPlans(args.transport, args.networkUrl),
+    surface: "plugin",
     ...(args.ref !== undefined && { ref: args.ref }),
     gitOps: args.gitOps,
     auth: args.auth,
