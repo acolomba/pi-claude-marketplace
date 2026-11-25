@@ -39,7 +39,8 @@ import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from
  * ssh probe of GitHub through the same git process, with its own fixed limit.
  * D-SG-18: `userSshOverride`, `sshUrlRewritten`, and `sshShowsDirectGitHub`
  * are the checks that keep a GitHub plugin clone on SSH; each reads the user's
- * own settings only.
+ * own settings only. SG-SSH-05: `sshShowsDirectGitHubThroughGit` is the
+ * Windows form of the last check, through git.
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred)
@@ -1075,6 +1076,44 @@ export async function sshShowsDirectGitHub(
     direct: run.exitCode === 0 && showsDirectGitHub(run.output),
     exitCode: run.exitCode,
   };
+}
+
+/**
+ * SG-SSH-05, upstream `Qmt`'s Windows pass: whether the ssh git starts for
+ * `sshUrl` would reach github.com straight. It runs `ls-remote` on the network
+ * lane with the `print-config` tail (`platform/git-process.ts`), so git
+ * starts Pi's own wrapper of the user's ssh with `-G`, which prints its config
+ * to stderr and connects to nothing, and the run's stderr is read as
+ * `sshShowsDirectGitHub` reads ssh's output, whatever git's exit code. The
+ * limit is 5 seconds and the run carries the abort scope's signal. A run that
+ * timed out, or a failure with no stderr of git, is not direct. The stderr is
+ * read and dropped (T-04-22).
+ */
+export async function sshShowsDirectGitHubThroughGit(
+  sshUrl: string,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<boolean> {
+  const signal = gitAbortScope.getStore();
+  let stderr: string;
+  try {
+    const run = await gitProcess.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [sshUrl],
+      sshTail: "print-config",
+      timeoutMs: SSH_CHECK_TIMEOUT_MS,
+      ...(signal !== undefined && { signal }),
+    });
+    ({ stderr } = run);
+  } catch (error: unknown) {
+    if (!(error instanceof GitCommandError) || error.kind === "timeout") {
+      return false;
+    }
+
+    ({ stderr } = error);
+  }
+
+  return showsDirectGitHub(stderr);
 }
 
 /**

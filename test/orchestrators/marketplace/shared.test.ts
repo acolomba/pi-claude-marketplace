@@ -403,6 +403,16 @@ test("D-SG-18: DEFAULT_GITHUB_SSH_OPS reads the refusing ssh's -G config as a di
   assert.deepStrictEqual(hop, { kind: "ran", direct: true, exitCode: 0 });
 });
 
+test("SG-SSH-05: DEFAULT_GITHUB_SSH_OPS reads the refusing ssh's -G config through git as a direct hop", async () => {
+  // act
+  const direct = await DEFAULT_GITHUB_SSH_OPS.showsDirectGitHubThroughGit(
+    "git@github.com:acme/ghp.git",
+  );
+
+  // assert
+  assert.strictEqual(direct, true);
+});
+
 test("D-SG-24: defaultPluginTransportContext reads its force from the environment it is given", () => {
   // act
   const context = defaultPluginTransportContext({ CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" });

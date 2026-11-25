@@ -12,7 +12,7 @@
  * `PATH`. So a test that reaches the product's ssh probe without a fake gets
  * `not-configured`, and no test runs the machine's own ssh against
  * github.com. Its `ssh -G` shows a direct hop to github.com, as a stock
- * OpenSSH does (D-SG-18). A case that needs another ssh puts its own first on the PATH
+ * OpenSSH does (D-SG-18), wherever the `-G` stands (SG-SSH-05). A case that needs another ssh puts its own first on the PATH
  * of the processes it starts.
  *
  * D-SG-18: it also removes the shell's `GIT_CONFIG_COUNT`,
@@ -35,12 +35,16 @@ import path from "node:path";
 
 // The answer GitHub's ssh gives a key it does not know. D-SG-18: `ssh -G`
 // prints the config of a stock OpenSSH, which reaches github.com straight, so
-// the run's user is one with no GitHub key and no ssh setting.
+// the run's user is one with no GitHub key and no ssh setting. SG-SSH-05:
+// like OpenSSH, it reads `-G` wherever it stands, as when git starts it with
+// Pi's options first.
 const REFUSING_SSH = `#!/bin/sh
-if [ "$1" = "-G" ]; then
-  printf 'host github.com\\nuser git\\nhostname github.com\\nport 22\\n'
-  exit 0
-fi
+for argument in "$@"; do
+  if [ "$argument" = "-G" ]; then
+    printf 'host github.com\\nuser git\\nhostname github.com\\nport 22\\n'
+    exit 0
+  fi
+done
 echo 'git@github.com: Permission denied (publickey).' >&2
 exit 255
 `;

@@ -60,7 +60,8 @@ const REAL_INSTALL_CLONE_CACHE_SEAM: InstallCloneCacheSeam = {
 
 /**
  * D-SG-18: the clone transport of one install source. With a context, the
- * plan reads its force and its checks, and the note goes to its notes. With
+ * plan reads its force, its checks, and its platform (SG-SSH-05), and the
+ * note goes to its notes. With
  * none, the plan reads the force of this process's environment, as Claude
  * Code reads its HTTPS switch before it looks for a context (upstream `zHi`),
  * and has no checks, so a GitHub clone stays on SSH unless forced; its note
@@ -73,7 +74,12 @@ function installCloneTransport(options: InstallCloneProbeOptions): CloneTranspor
       planPluginClone(
         context === undefined
           ? { source: options.source, force: transportForce(process.env) }
-          : { source: options.source, force: context.force, checks: context.checks },
+          : {
+              source: options.source,
+              force: context.force,
+              checks: context.checks,
+              platform: context.platform,
+            },
       ),
     notes: context?.notes ?? createGitHubCloneNotes(),
     subject: options.subject,

@@ -467,6 +467,84 @@ describe("cloneOverGitHubTransports", () => {
     );
   });
 
+  test("SG-SSH-05: runs the third attempt the plan gives after the retry fails, with both retries noted", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const notes = createGitHubCloneNotes();
+    const attempts: TransportAttempt[] = [];
+    const plan: TransportPlan = {
+      first: SSH_ATTEMPT,
+      note: "via-ssh",
+      after: (_failure, failed) =>
+        Promise.resolve(failed.transport === "ssh" ? HTTPS_ATTEMPT : SSH_ATTEMPT),
+    };
+
+    // act
+    const cloned = await cloneOverGitHubTransports({
+      plan,
+      notes,
+      subject: "ghp@gits",
+      surface: "plugin",
+      attempt: (attempt) => {
+        attempts.push(attempt);
+        return attempts.length < 3
+          ? Promise.reject(new Error(`${attempt.transport} refused`))
+          : Promise.resolve(`cloned ${attempt.url}`);
+      },
+    });
+
+    // assert
+    assert.strictEqual(cloned, "cloned git@github.com:acme/tools.git");
+    assert.deepStrictEqual(attempts, [SSH_ATTEMPT, HTTPS_ATTEMPT, SSH_ATTEMPT]);
+    assert.deepStrictEqual(notes.noteFor("ghp@gits"), {
+      note: "via-ssh",
+      url: "git@github.com:acme/tools.git",
+      retries: ["https://github.com/acme/tools.git", "git@github.com:acme/tools.git"],
+    });
+    assert.deepStrictEqual(logged, [
+      "[git] SSH configured for GitHub, using SSH for ghp@gits",
+      "[git] SSH clone failed for plugin ghp@gits (ssh refused), falling back to HTTPS",
+      "[git] HTTPS clone failed for plugin ghp@gits (https refused), falling back to SSH",
+    ]);
+  });
+
+  test("SG-SSH-05: stops after three attempts and names the last two when they all fail", async () => {
+    // arrange
+    const attempts: TransportAttempt[] = [];
+    const failures = [new Error("ssh denied"), new Error("https refused"), new Error("ssh again")];
+    const plan: TransportPlan = {
+      first: SSH_ATTEMPT,
+      after: (_failure, failed) =>
+        Promise.resolve(failed.transport === "ssh" ? HTTPS_ATTEMPT : SSH_ATTEMPT),
+    };
+
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan,
+        notes: createGitHubCloneNotes(),
+        subject: "ghp@gits",
+        surface: "plugin",
+        attempt: (attempt) => {
+          attempts.push(attempt);
+          return Promise.reject(failures[attempts.length - 1] ?? new Error("a fourth attempt"));
+        },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubTransportsFailedError);
+        assert.deepStrictEqual(
+          error.attempts.map((attempt) => [attempt.transport, attempt.error.message]),
+          [
+            ["https", "https refused"],
+            ["ssh", "ssh again"],
+          ],
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(attempts, [SSH_ATTEMPT, HTTPS_ATTEMPT, SSH_ATTEMPT]);
+  });
+
   test("D-SG-22: holds a rejection that is not an Error as an Error with its text", async () => {
     // act & assert
     await assert.rejects(
@@ -500,6 +578,7 @@ function countingPort(answers: {
   readonly rewritten?: boolean;
   readonly probe?: Awaited<ReturnType<PluginSshOps["probe"]>>;
   readonly hop?: Awaited<ReturnType<PluginSshOps["showsDirectGitHub"]>>;
+  readonly throughGit?: boolean;
 }): { readonly ssh: PluginSshOps; readonly calls: string[] } {
   const calls: string[] = [];
   return {
@@ -520,6 +599,10 @@ function countingPort(answers: {
       urlRewritten: (sshUrl) => {
         calls.push(`urlRewritten ${sshUrl}`);
         return Promise.resolve({ rewritten: answers.rewritten ?? false, exitCode: 0 });
+      },
+      showsDirectGitHubThroughGit: (sshUrl) => {
+        calls.push(`showsDirectGitHubThroughGit ${sshUrl}`);
+        return Promise.resolve(answers.throughGit ?? true);
       },
     },
   };
@@ -663,6 +746,46 @@ describe("createPluginTransportContext", () => {
       assert.deepStrictEqual(logged, [line]);
     });
   }
+
+  test("SG-SSH-05: takes this process's platform when it is given none", () => {
+    // act
+    const context = createPluginTransportContext({ env: {}, ssh: countingPort({}).ssh });
+
+    // assert
+    assert.strictEqual(context.platform, process.platform);
+  });
+
+  test("SG-SSH-05: keeps the platform it is given", () => {
+    // act
+    const context = createPluginTransportContext({
+      env: {},
+      ssh: countingPort({}).ssh,
+      platform: "win32",
+    });
+
+    // assert
+    assert.strictEqual(context.platform, "win32");
+  });
+
+  test("SG-SSH-05: asks the port the -G check through git once per url", async () => {
+    // arrange
+    const { ssh, calls } = countingPort({ throughGit: false });
+    const context = createPluginTransportContext({ env: {}, ssh, platform: "win32" });
+
+    // act
+    const answers = [
+      await context.checks.showsDirectGitHubThroughGit("git@github.com:acme/one.git"),
+      await context.checks.showsDirectGitHubThroughGit("git@github.com:acme/one.git"),
+      await context.checks.showsDirectGitHubThroughGit("git@github.com:acme/two.git"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(answers, [false, false, false]);
+    assert.deepStrictEqual(calls, [
+      "showsDirectGitHubThroughGit git@github.com:acme/one.git",
+      "showsDirectGitHubThroughGit git@github.com:acme/two.git",
+    ]);
+  });
 
   test("D-SG-22: starts each context with notes of its own", () => {
     // arrange

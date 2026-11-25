@@ -70,6 +70,7 @@ interface CheckAnswers {
   readonly probe?: ProbeAnswer;
   readonly sshPresent?: boolean;
   readonly showsDirectGitHub?: boolean;
+  readonly showsDirectGitHubThroughGit?: boolean;
 }
 
 /**
@@ -96,6 +97,8 @@ function checksAnswering(answers: CheckAnswers): {
       probe: () => answered("probe", answers.probe),
       sshPresent: () => answered("sshPresent", answers.sshPresent),
       showsDirectGitHub: () => answered("showsDirectGitHub", answers.showsDirectGitHub),
+      showsDirectGitHubThroughGit: (sshUrl) =>
+        answered(`showsDirectGitHubThroughGit ${sshUrl}`, answers.showsDirectGitHubThroughGit),
     },
   };
 }
@@ -390,4 +393,135 @@ test("D-SG-20: clones a git-subdir address once as written", async () => {
   assert.deepStrictEqual(orderOf(plan), {
     first: { transport: "https", url: "https://git.example.com/acme/mono.git" },
   });
+});
+
+const PUBLICKEY_FAILURE = new GitCommandError(
+  { kind: "ssh-auth", detail: "publickey" },
+  { operation: "clone --depth", exitCode: 128 },
+);
+
+/** The answers of a Windows user whose ssh settings keep nothing on SSH. */
+const WINDOWS_CHECKS_PASS = {
+  userOverride: false,
+  urlRewritten: false,
+  showsDirectGitHubThroughGit: true,
+} satisfies CheckAnswers;
+
+const WINDOWS_CHECK_CALLS = [
+  "userOverride",
+  "urlRewritten git@github.com:acme/ghp.git",
+  "showsDirectGitHubThroughGit git@github.com:acme/ghp.git",
+];
+
+test("SG-SSH-05: on Windows clones over ssh first and runs no check or probe before a failure", async () => {
+  // arrange
+  const { checks, calls } = checksAnswering({});
+
+  // act
+  const plan = await planPluginClone({ source: OWNER_REPO, checks, platform: "win32" });
+
+  // assert
+  assert.deepStrictEqual(orderOf(plan), { first: SSH_ATTEMPT, note: "via-ssh" });
+  assert.deepStrictEqual(calls, []);
+});
+
+for (const { label, failure } of [
+  { label: "GitHub refused every key", failure: PUBLICKEY_FAILURE },
+  {
+    label: "the host key is not known",
+    failure: new GitCommandError(
+      { kind: "ssh-host-key-unknown" },
+      { operation: "clone --depth", exitCode: 128 },
+    ),
+  },
+  {
+    label: "the host key changed",
+    failure: new GitCommandError(
+      { kind: "ssh-host-key-changed" },
+      { operation: "clone --depth", exitCode: 128 },
+    ),
+  },
+]) {
+  test(`SG-SSH-05: on Windows gives https, then ssh, when ${label} and every Windows check passes`, async () => {
+    // arrange
+    const { checks, calls } = checksAnswering(WINDOWS_CHECKS_PASS);
+    const plan = await planPluginClone({ source: OWNER_REPO, checks, platform: "win32" });
+
+    // act
+    const attempts = await attemptsAfter(plan, failure);
+
+    // assert
+    assert.deepStrictEqual(attempts, [SSH_ATTEMPT, HTTPS_ATTEMPT, SSH_ATTEMPT]);
+    assert.deepStrictEqual(calls, WINDOWS_CHECK_CALLS);
+  });
+}
+
+for (const { label, failure } of [
+  {
+    label: "a network failure",
+    failure: new GitCommandError({ kind: "network" }, { operation: "clone --depth" }),
+  },
+  {
+    label: "an ssh failure that names no key",
+    failure: new GitCommandError(
+      { kind: "ssh-auth", detail: "unconfirmed" },
+      { operation: "clone --depth", exitCode: 128 },
+    ),
+  },
+  { label: "an error that is not git's", failure: new Error("Permission denied (publickey).") },
+]) {
+  test(`SG-SSH-05: on Windows gives nothing after ${label} and runs no check`, async () => {
+    // arrange
+    const { checks, calls } = checksAnswering({});
+    const plan = await planPluginClone({ source: OWNER_REPO, checks, platform: "win32" });
+
+    // act
+    const attempts = await attemptsAfter(plan, failure);
+
+    // assert
+    assert.deepStrictEqual(attempts, [SSH_ATTEMPT]);
+    assert.deepStrictEqual(calls, []);
+  });
+}
+
+test("SG-SSH-05: on Windows gives no ssh retry after an https attempt that git could not run", async () => {
+  // arrange
+  const { checks } = checksAnswering(WINDOWS_CHECKS_PASS);
+  const plan = await planPluginClone({ source: OWNER_REPO, checks, platform: "win32" });
+  const gitMissing = new GitCommandError(
+    { kind: "git-missing", detail: "not-found" },
+    { operation: "clone" },
+  );
+
+  // act
+  const afterSsh = await plan.after(PUBLICKEY_FAILURE, SSH_ATTEMPT);
+  const afterHttps = await plan.after(gitMissing, HTTPS_ATTEMPT);
+
+  // assert
+  assert.deepStrictEqual([afterSsh, afterHttps], [HTTPS_ATTEMPT, undefined]);
+});
+
+test("SG-SSH-05: on Windows with no transport context stays on ssh after a key failure", async () => {
+  // act
+  const plan = await planPluginClone({ source: OWNER_REPO, platform: "win32" });
+
+  // assert
+  assert.deepStrictEqual(orderOf(plan), { first: SSH_ATTEMPT, note: "via-ssh" });
+  assert.deepStrictEqual(await attemptsAfter(plan, PUBLICKEY_FAILURE), [SSH_ATTEMPT]);
+});
+
+test("SG-SSH-05: on Windows keeps ssh after a key failure when -G through git shows no direct hop", async () => {
+  // arrange
+  const { checks, calls } = checksAnswering({
+    ...WINDOWS_CHECKS_PASS,
+    showsDirectGitHubThroughGit: false,
+  });
+  const plan = await planPluginClone({ source: OWNER_REPO, checks, platform: "win32" });
+
+  // act
+  const attempts = await attemptsAfter(plan, PUBLICKEY_FAILURE);
+
+  // assert
+  assert.deepStrictEqual(attempts, [SSH_ATTEMPT]);
+  assert.deepStrictEqual(calls, WINDOWS_CHECK_CALLS);
 });
