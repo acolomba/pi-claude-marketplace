@@ -4,7 +4,7 @@ import { describe, test } from "node:test";
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createGitTestRepository } from "../../platform/git-test-repository.ts";
-import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
+import { setGitHubBaseUrl, setPreferHttps } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ReleaseTagCandidate } from "../../../extensions/pi-claude-marketplace/domain/release-tag.ts";
@@ -19,11 +19,22 @@ import type {
   RemoteTag,
 } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TestContext } from "node:test";
 
 const MARKETPLACE_ROOT = "/marketplace/checkout";
 const DIRECTORY_SOURCE = "/home/user/acme-marketplace";
 const URL_SOURCE = "https://example.com/acme/marketplace.git";
 const GITHUB_SOURCE = "acme/marketplace";
+
+// D-SG-20: the two addresses a github owner/repo marketplace's tags are listed at.
+const GITHUB_SSH_URL = "git@github.com:acme/marketplace.git";
+const GITHUB_HTTPS_URL = "https://github.com/acme/marketplace.git";
+
+/** Clears both triggers that force https, so a case reads the default transport. */
+function unforced(t: TestContext): void {
+  setGitHubBaseUrl(t, undefined);
+  setPreferHttps(t, undefined);
+}
 
 interface FakeSeamOptions {
   readonly tags?: readonly RemoteTag[];
@@ -284,20 +295,85 @@ describe("probeMarketplaceTags on a git marketplace", () => {
     );
   });
 
-  test("D-SG-09: a github marketplace lists its wire URL with the GitHub bundle", async (t) => {
+  test("D-SG-09, D-SG-20: a github marketplace lists its ssh address and keys the memo under it", async (t) => {
     // arrange
-    setGitHubBaseUrl(t, undefined);
+    unforced(t);
     const fake = createFakeSeam({ tags: [{ name: "formatter--v2.0.0", oid: "oid-2" }] });
+    const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
 
     // act
-    await probeMarketplaceTags(
+    const result = await probeMarketplaceTags(
+      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, auth: auth(), tagMemo }),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { result, urls: fake.remoteCalls.map((call) => call.url), memo: [...tagMemo.keys()] },
+      {
+        result: { kind: "pinned", tag: "formatter--v2.0.0", oid: "oid-2", version: "2.0.0" },
+        urls: [GITHUB_SSH_URL],
+        memo: [GITHUB_SSH_URL],
+      },
+    );
+  });
+
+  for (const { trigger, force, bundle } of [
+    {
+      trigger: "CLAUDE_CODE_PLUGIN_PREFER_HTTPS",
+      force: (t: TestContext) => {
+        setPreferHttps(t, "1");
+      },
+      bundle: ["device-flow", "github.com"],
+    },
+    {
+      trigger: "the github base override",
+      force: (t: TestContext) => {
+        setGitHubBaseUrl(t, "https://mirror.example/base");
+      },
+      bundle: ["stored-credential", "mirror.example"],
+    },
+  ]) {
+    test(`D-SG-09, D-SG-21: a github marketplace lists its https wire URL once with its host's bundle under ${trigger}`, async (t) => {
+      // arrange
+      unforced(t);
+      force(t);
+      const fake = createFakeSeam({ tags: [{ name: "formatter--v2.0.0", oid: "oid-2" }] });
+      const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+
+      // act
+      await probeMarketplaceTags(
+        options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, auth: auth(), tagMemo }),
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          calls: fake.remoteCalls.map((call) => [call.url, call.auth?.kind, call.auth?.host]),
+          memo: [...tagMemo.keys()],
+        },
+        {
+          calls: [[GITHUB_HTTPS_URL, ...bundle]],
+          memo: [GITHUB_HTTPS_URL],
+        },
+      );
+    });
+  }
+
+  test("TAGS-02, D-SG-20: a github marketplace's failed ssh listing is not retried over https", async (t) => {
+    // arrange
+    unforced(t);
+    const err = new Error("Permission denied (publickey)");
+    const fake = createFakeSeam({ listingThrows: err });
+
+    // act
+    const result = await probeMarketplaceTags(
       options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, auth: auth() }),
     );
 
     // assert
     assert.deepStrictEqual(
-      fake.remoteCalls.map((call) => [call.url, call.auth?.kind, call.auth?.host]),
-      [["https://github.com/acme/marketplace.git", "device-flow", "github.com"]],
+      { result, urls: fake.remoteCalls.map((call) => call.url) },
+      { result: { kind: "tag-listing-failed", cause: err }, urls: [GITHUB_SSH_URL] },
     );
   });
 

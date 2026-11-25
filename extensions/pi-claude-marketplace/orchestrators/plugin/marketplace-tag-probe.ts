@@ -16,6 +16,12 @@
 // repository, so its listing fails and the caller falls back to the current
 // copy (TAGS-02).
 //
+// D-SG-20: a GitHub `owner/repo` marketplace's tags are listed from its SSH
+// address unless HTTPS is forced (`tagReadUrl`), with no probe. A failed
+// listing is not retried: the caller installs the current copy (TAGS-02), the
+// consequence D-SG-20 accepts for a user with no SSH key. The tag commit fetch
+// keeps the checkout's recorded origin.
+//
 // Gate placement. This module is listed in `eslint.config.js`'s
 // `NETWORK_SEAMS`: it names the remote listing itself.
 //
@@ -28,12 +34,14 @@
 // AUTH-09: the auth bundle is composed here and threaded into the listing;
 // no credential value is read, stored, or placed on a returned arm.
 
-import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl } from "../../domain/clone-key.ts";
+import { tagReadUrl } from "../../domain/github-transport.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { listLocalTags, listRemoteTags } from "../../platform/git.ts";
 import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { buildCloneAuth } from "../auth-host.ts";
+import { transportForce } from "../github-transport.ts";
 
 import type { ReleaseTagCandidate, SelectedReleaseTag } from "../../domain/release-tag.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -108,7 +116,8 @@ interface TagListing {
 
 /**
  * The listing a marketplace source reads its tags with: the remote listing of
- * a `github` or `url` marketplace's wire URL, with the auth bundle of its
+ * a `github` or `url` marketplace at `tagReadUrl`'s address, which also keys
+ * the memo, with the auth bundle of its
  * host, or the local listing of a directory marketplace's root. Any other
  * source (a hosted catalog, or a source that no longer parses) has no
  * repository to list.
@@ -119,7 +128,7 @@ function tagListingOf(
 ): TagListing | undefined {
   const source = parsePluginSource(options.marketplaceSource);
   if (source.kind === "github" || source.kind === "url") {
-    const url = networkCloneUrl(source);
+    const url = tagReadUrl(source, transportForce(process.env));
     const { auth } = options;
     return {
       key: url,
