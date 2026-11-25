@@ -314,11 +314,37 @@ describe("reservedMarketplaceNameRefusal", () => {
   }
 
   for (const source of [
+    {
+      kind: "url",
+      raw: "git@github.com:anthropics/claude-plugins-official.git",
+      url: "git@github.com:anthropics/claude-plugins-official",
+    },
+    {
+      kind: "url",
+      raw: "ssh://git@github.com/Anthropics/claude-plugins-official",
+      url: "ssh://git@github.com/Anthropics/claude-plugins-official",
+    },
+  ] satisfies ParsedSource[]) {
+    test(`D-SG-23: lets the GitHub url source ${source.raw} of the anthropics organization use a reserved name`, () => {
+      // act
+      const refusal = reservedMarketplaceNameRefusal("claude-plugins-official", source);
+
+      // assert
+      assert.strictEqual(refusal, undefined);
+    });
+  }
+
+  for (const source of [
     { kind: "github", raw: "acme/tools", owner: "acme", repo: "tools" },
     {
       kind: "url",
       raw: "https://git.example.com/anthropics/tools.git",
       url: "https://git.example.com/anthropics/tools",
+    },
+    {
+      kind: "url",
+      raw: "git@github.com:acme/x.git",
+      url: "git@github.com:acme/x",
     },
   ] satisfies ParsedSource[]) {
     test(`MKT-01: refuses a reserved name from the ${source.kind} source ${source.raw} with the github sentence`, () => {

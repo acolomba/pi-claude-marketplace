@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   ensureGitSuffix,
+  gitHubRepositoryOf,
   githubSource,
   parsePluginSource,
   pathSource,
@@ -1939,6 +1940,81 @@ describe("samePlannedSource", () => {
       plannedRaw: "acme/tools",
       sourceOutcome: "unknown-stored",
     },
+    {
+      name: "D-SG-23: matches GitHub sources whose owner and repo differ only by case",
+      stored: { kind: "github", raw: "Acme/Tools", owner: "Acme", repo: "Tools" },
+      plannedRaw: "acme/tools",
+      sourceOutcome: "same",
+    },
+    {
+      name: "D-SG-23: matches a stored scp GitHub url with the planned github source",
+      stored: {
+        kind: "url",
+        raw: "git@github.com:acme/tools.git",
+        url: "git@github.com:acme/tools",
+      },
+      plannedRaw: "acme/tools",
+      sourceOutcome: "same",
+    },
+    {
+      name: "D-SG-23: matches a stored github source with a planned ssh GitHub url",
+      stored: { kind: "github", raw: "acme/tools", owner: "acme", repo: "tools" },
+      plannedRaw: "ssh://git@github.com/Acme/Tools.git",
+      sourceOutcome: "same",
+    },
+    {
+      name: "D-SG-23: distinguishes a stored scp GitHub url by its reference",
+      stored: {
+        kind: "url",
+        raw: "git@github.com:acme/tools.git#v1",
+        url: "git@github.com:acme/tools",
+        ref: "v1",
+      },
+      plannedRaw: "acme/tools#v2",
+      sourceOutcome: "different",
+    },
+    {
+      name: "D-SG-23: distinguishes a stored scp GitHub url of another repository",
+      stored: {
+        kind: "url",
+        raw: "git@github.com:acme/other.git",
+        url: "git@github.com:acme/other",
+      },
+      plannedRaw: "acme/tools",
+      sourceOutcome: "different",
+    },
+    {
+      name: "D-SG-23: distinguishes a GitHub url from a non-GitHub url",
+      stored: {
+        kind: "url",
+        raw: "https://gitlab.example/acme/tools",
+        url: "https://gitlab.example/acme/tools",
+      },
+      plannedRaw: "git@github.com:acme/tools.git",
+      sourceOutcome: "different",
+    },
+    {
+      name: "D-SG-23: keeps the scp and https forms of a non-GitHub host apart",
+      stored: {
+        kind: "url",
+        raw: "git@gitlab.example:o/r.git",
+        url: "git@gitlab.example:o/r",
+      },
+      plannedRaw: "https://gitlab.example/o/r.git",
+      sourceOutcome: "different",
+    },
+    {
+      name: "D-SG-23: compares a github owner Claude Code does not fold exactly",
+      stored: { kind: "github", raw: "a_b/c", owner: "a_b", repo: "c" },
+      plannedRaw: "A_b/c",
+      sourceOutcome: "different",
+    },
+    {
+      name: "D-SG-23: distinguishes a github source from a path source",
+      stored: { kind: "github", raw: "acme/tools", owner: "acme", repo: "tools" },
+      plannedRaw: "./local",
+      sourceOutcome: "different",
+    },
   ];
 
   for (const { name, stored, plannedRaw, sourceOutcome } of comparisons) {
@@ -1951,6 +2027,50 @@ describe("samePlannedSource", () => {
 
       // assert
       assert.strictEqual(comparison, expectedOutcome);
+    });
+  }
+});
+
+describe("gitHubRepositoryOf", () => {
+  for (const { source, expectedRepository } of [
+    {
+      source: { kind: "github", raw: "Acme/Tools", owner: "Acme", repo: "Tools" },
+      expectedRepository: "acme/tools",
+    },
+    {
+      source: {
+        kind: "url",
+        raw: "git@github.com:Acme/Tools.git",
+        url: "git@github.com:Acme/Tools",
+      },
+      expectedRepository: "acme/tools",
+    },
+    {
+      source: { kind: "github", raw: "a_b/c", owner: "a_b", repo: "c" },
+      expectedRepository: undefined,
+    },
+    {
+      source: {
+        kind: "url",
+        raw: "https://gitlab.example/acme/tools",
+        url: "https://gitlab.example/acme/tools",
+      },
+      expectedRepository: undefined,
+    },
+    {
+      source: { kind: "path", raw: "./local", logical: "./local" },
+      expectedRepository: undefined,
+    },
+  ] as const satisfies readonly {
+    source: ParsedSource;
+    expectedRepository: string | undefined;
+  }[]) {
+    test(`D-SG-23: folds the ${source.kind} source ${source.raw} to ${String(expectedRepository)}`, () => {
+      // act
+      const repository = gitHubRepositoryOf(source);
+
+      // assert
+      assert.strictEqual(repository, expectedRepository);
     });
   }
 });

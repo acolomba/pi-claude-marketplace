@@ -2466,6 +2466,42 @@ void test("SEED-02: a path marketplace derives its canonical URL from the local 
   assert.equal(await pathExists(mirrorRoot), true);
 });
 
+for (const originUrl of ["git@github.com:Owner/Repo.git", "ssh://git@github.com/owner/repo"]) {
+  void test(`D-SG-23: a path marketplace whose origin is ${originUrl} seeds the github plugin owner/repo`, async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    const marketplaceRoot = await buildMarketplaceCheckout(t, {
+      originUrl,
+      plugins: [{ name: "github", source: "owner/repo" }],
+    });
+    await saveMarketplace(locations, marketplaceRoot, marketplaceRoot);
+
+    // act
+    await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace" });
+    const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(GITHUB_REPO_URL));
+
+    // assert
+    assert.equal(await pathExists(mirrorRoot), true);
+  });
+}
+
+void test("D-SG-23: a path marketplace whose ssh origin names another GitHub repository seeds nothing", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: "git@github.com:owner/other.git",
+    plugins: [{ name: "github", source: "owner/repo" }],
+  });
+  await saveMarketplace(locations, marketplaceRoot, marketplaceRoot);
+
+  // act
+  await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace" });
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(GITHUB_REPO_URL));
+
+  // assert
+  assert.equal(await pathExists(mirrorRoot), false);
+});
+
 void test("SEED-02: a path marketplace without an origin remote leaves the clone cache empty", async (t) => {
   // arrange
   const locations = await freshLocations(t);

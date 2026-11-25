@@ -13,7 +13,8 @@
  * earlier version made with `isomorphic-git`, and find them kept (SG-MIG-01).
  *
  * The setup steps also plant a checkout that an interrupted add left, with
- * the ownership marker and a stale file (MA-12), and a read step lists the
+ * the ownership marker and a stale file (MA-12), its origin the marketplace's
+ * source or another spelling of it (D-SG-23), and a read step lists the
  * files a checkout holds outside `.git/`. A setup step also plants a
  * directory of the user's own at a checkout path (MA-13). A refused add must
  * leave that directory exactly as it was, so one read step lists every entry
@@ -191,6 +192,34 @@ Then(
   },
 );
 
+// Q-01 / MA-12: plants at `sources/<name>` the checkout an interrupted add
+// leaves: a clone of the published marketplace whose `origin` is `origin`,
+// with the ownership marker `marketplace add` writes into every clone it
+// creates, a stale file, and no record.
+async function plantInterruptedAddCheckout(
+  world: ScenarioWorld,
+  scope: string,
+  name: string,
+  origin: string,
+): Promise<void> {
+  const published = world.requirePublished(name);
+  if (published.kind !== "url" && published.kind !== "github") {
+    assert.fail(`the marketplace ${name} is not published as a git source`);
+  }
+
+  const sources = path.join(extensionRootOf(world, scope), "sources");
+  const checkout = path.join(sources, name);
+  assert.equal(existsSync(checkout), false);
+  await mkdir(sources, { recursive: true });
+  await runGit(sources, published.gitHome, "clone", "--quiet", published.bareRepository, name);
+  await runGit(checkout, published.gitHome, "remote", "set-url", "origin", origin);
+  const marker = path.join(checkout, ".git", "pi-claude-marketplace.json");
+  await writeFile(marker, JSON.stringify({ generatedBy: "pi-claude-marketplace" }));
+  await writeFile(path.join(checkout, "stale.txt"), "left behind");
+  assert.equal(await runGit(checkout, published.gitHome, "remote", "get-url", "origin"), origin);
+  assert.equal(existsSync(marker), true);
+}
+
 Given(
   "the {word} scope holds a checkout of the marketplace {string} that an interrupted add left",
   async function (this: ScenarioWorld, scope: string, name: string) {
@@ -199,21 +228,16 @@ Given(
       assert.fail(`the marketplace ${name} is not published as a url source`);
     }
 
-    const sources = path.join(extensionRootOf(this, scope), "sources");
-    const checkout = path.join(sources, name);
-    assert.equal(existsSync(checkout), false);
-    await mkdir(sources, { recursive: true });
-    await runGit(sources, published.gitHome, "clone", "--quiet", published.bareRepository, name);
-    await runGit(checkout, published.gitHome, "remote", "set-url", "origin", published.source);
-    // Q-01: the ownership marker `marketplace add` writes into every clone it creates.
-    const marker = path.join(checkout, ".git", "pi-claude-marketplace.json");
-    await writeFile(marker, JSON.stringify({ generatedBy: "pi-claude-marketplace" }));
-    await writeFile(path.join(checkout, "stale.txt"), "left behind");
-    assert.equal(
-      await runGit(checkout, published.gitHome, "remote", "get-url", "origin"),
-      published.source,
-    );
-    assert.equal(existsSync(marker), true);
+    await plantInterruptedAddCheckout(this, scope, name, published.source);
+  },
+);
+
+// D-SG-23: the origin may be another spelling of the marketplace's source,
+// such as its ssh address.
+Given(
+  "the {word} scope holds a checkout of the marketplace {string} with the origin {string} that an interrupted add left",
+  async function (this: ScenarioWorld, scope: string, name: string, origin: string) {
+    await plantInterruptedAddCheckout(this, scope, name, origin);
   },
 );
 

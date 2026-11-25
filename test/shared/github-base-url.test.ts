@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { InvalidGitHubBaseUrlError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  gitHubAddressOf,
   gitHubInsteadOfPairs,
   gitHubOverrideHost,
   gitHubWireUrl,
@@ -97,17 +98,55 @@ describe("gitHubWireUrl", () => {
     });
   }
 
+  for (const { url, expectedWireUrl } of [
+    { url: "git@github.com:acme/ghp.git", expectedWireUrl: "https://mirror.example/acme/ghp.git" },
+    {
+      url: "https://GitHub.com/acme/tools.git",
+      expectedWireUrl: "https://mirror.example/acme/tools.git",
+    },
+    {
+      url: "https://www.github.com/Acme/Tools/",
+      expectedWireUrl: "https://mirror.example/Acme/Tools/",
+    },
+    {
+      url: "https://github.com:443/acme/tools.git",
+      expectedWireUrl: "https://mirror.example/acme/tools.git",
+    },
+    {
+      url: "ssh://git@github.com/acme/tools.git",
+      expectedWireUrl: "https://mirror.example/acme/tools.git",
+    },
+    {
+      url: "git+ssh://git@ssh.github.com:443/acme/tools",
+      expectedWireUrl: "https://mirror.example/acme/tools",
+    },
+    {
+      url: "git@ssh.github.com:/acme/tools.GIT",
+      expectedWireUrl: "https://mirror.example/acme/tools.GIT",
+    },
+  ]) {
+    test(`D-SG-21: sends the GitHub spelling ${url} to ${expectedWireUrl}`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "https://mirror.example");
+
+      // act
+      const wireUrl = gitHubWireUrl(url);
+
+      // assert
+      assert.strictEqual(wireUrl, expectedWireUrl);
+    });
+  }
+
   for (const url of [
-    "https://GitHub.com/acme/tools.git",
-    "https://www.github.com/acme/tools.git",
-    "https://github.com:443/acme/tools.git",
     "https://github.com.evil.example/acme/tools.git",
     "https://evil.example/github.com/acme/tools.git",
     "https://gitlab.com/acme/tools.git",
     "https://github.com",
     "https://mirror.example/acme/tools.git",
+    "ssh+git://git@github.com/acme/tools",
+    "git@gitlab.example:acme/tools.git",
   ]) {
-    test(`returns ${url} unchanged because it lacks the exact github.com prefix`, (t) => {
+    test(`returns ${url} unchanged because it is no GitHub address`, (t) => {
       // arrange
       setGitHubBaseUrl(t, "https://mirror.example");
 
@@ -225,30 +264,160 @@ describe("gitHubInsteadOfPairs", () => {
     });
   }
 
-  test("GHB-04: gives a URL outside github.com no pair and does not read an invalid variable", (t) => {
+  for (const { url, expectedPair } of [
+    {
+      url: "git@github.com:acme/ghp.git",
+      expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=git@github.com:",
+    },
+    {
+      url: "org-1@GitHub.com:acme/ghp.git",
+      expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=org-1@GitHub.com:",
+    },
+    {
+      url: "git@ssh.github.com:/acme/ghp.git",
+      expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=git@ssh.github.com:/",
+    },
+    {
+      url: "ssh://git@github.com/acme/ghp.git",
+      expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=ssh://git@github.com/",
+    },
+    {
+      url: "git+ssh://git@ssh.github.com:443/acme/ghp",
+      expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=git+ssh://git@ssh.github.com:443/",
+    },
+    {
+      url: "https://www.github.com/acme/ghp",
+      expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=https://www.github.com/",
+    },
+  ]) {
+    test(`D-SG-21: rewrites the prefix of ${url} to the base as its own pair`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "https://127.0.0.1:4443/base");
+
+      // act
+      const pairs = gitHubInsteadOfPairs(url);
+
+      // assert
+      assert.deepStrictEqual(pairs, [expectedPair]);
+    });
+  }
+
+  test("D-SG-21: gives an scp GitHub address no pair while the variable is unset", (t) => {
     // arrange
-    setGitHubBaseUrl(t, "http://mirror.example");
+    setGitHubBaseUrl(t, undefined);
 
     // act
-    const pairs = gitHubInsteadOfPairs("https://gitlab.com/x.git");
+    const pairs = gitHubInsteadOfPairs("git@github.com:acme/ghp.git");
 
     // assert
     assert.deepStrictEqual(pairs, []);
   });
 
-  test("GHB-03: refuses a base with an equals sign, which would break the config key", (t) => {
-    // arrange
-    setGitHubBaseUrl(t, "https://h.example/a=b");
+  for (const url of ["https://gitlab.com/x.git", "git@gitlab.example:acme/ghp.git"]) {
+    test(`GHB-04: gives ${url} no pair and does not read an invalid variable`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
 
-    // act & assert
-    assert.throws(
-      () => gitHubInsteadOfPairs(GITHUB_URL),
-      (error: unknown) => {
-        assert.ok(error instanceof InvalidGitHubBaseUrlError);
-        assert.strictEqual(error.problem, "equals-sign");
-        return true;
-      },
-    );
+      // act
+      const pairs = gitHubInsteadOfPairs(url);
+
+      // assert
+      assert.deepStrictEqual(pairs, []);
+    });
+  }
+
+  for (const url of [GITHUB_URL, "git@github.com:acme/ghp.git"]) {
+    test(`GHB-03: refuses a base with an equals sign for ${url}, which would break the config key`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "https://h.example/a=b");
+
+      // act & assert
+      assert.throws(
+        () => gitHubInsteadOfPairs(url),
+        (error: unknown) => {
+          assert.ok(error instanceof InvalidGitHubBaseUrlError);
+          assert.strictEqual(error.problem, "equals-sign");
+          return true;
+        },
+      );
+    });
+  }
+});
+
+describe("gitHubAddressOf", () => {
+  for (const { address, prefix } of [
+    { address: "https://github.com/acme/tools.git", prefix: "https://github.com/" },
+    { address: "https://www.github.com/Acme/Tools/", prefix: "https://www.github.com/" },
+    { address: "http://github.com/acme/tools", prefix: "http://github.com/" },
+    { address: "git+https://github.com/acme/tools", prefix: "git+https://github.com/" },
+    { address: "git+http://github.com./acme/tools", prefix: "git+http://github.com./" },
+    { address: "git://github.com/acme/tools", prefix: "git://github.com/" },
+    { address: "ssh://git@github.com/acme/tools.git", prefix: "ssh://git@github.com/" },
+    {
+      address: "git+ssh://git@ssh.github.com:443/acme/tools",
+      prefix: "git+ssh://git@ssh.github.com:443/",
+    },
+    { address: "https://github.com/acme/tools?tab=readme", prefix: "https://github.com/" },
+    { address: "git@github.com:Acme/Tools.git", prefix: "git@github.com:" },
+    { address: "org-1@github.com:acme/tools.git", prefix: "org-1@github.com:" },
+    { address: "github.com:acme/tools", prefix: "github.com:" },
+    { address: "git@ssh.github.com:/acme/tools.GIT", prefix: "git@ssh.github.com:/" },
+  ]) {
+    test(`D-SG-23: folds ${address} to acme/tools after ${prefix}`, () => {
+      // arrange
+      const expectedAddress = { prefix, repository: "acme/tools" };
+
+      // act
+      const gitHubAddress = gitHubAddressOf(address);
+
+      // assert
+      assert.deepStrictEqual(gitHubAddress, expectedAddress);
+    });
+  }
+
+  for (const { address, reason } of [
+    { address: "ssh+git://git@github.com/acme/tools", reason: "ssh+git is no folding protocol" },
+    { address: "https://gitlab.com/acme/tools", reason: "its host is not GitHub" },
+    { address: "https://ssh.github.com/acme/tools", reason: "ssh.github.com serves only ssh" },
+    { address: "https://github.com/acme", reason: "its path has one segment" },
+    { address: "https://github.com/acme/tools/extra", reason: "its path has three segments" },
+    { address: "https://github.com/-acme/tools", reason: "its owner starts with a dash" },
+    { address: "https://github.com/acme/tools/.", reason: "its path ends in /." },
+    { address: "https://github.com/acme/..", reason: "its path ends in /.." },
+    { address: "https://github.com", reason: "it has no path" },
+    { address: "https://github.com?acme/tools", reason: "a query follows its authority" },
+    { address: "https://git%68ub.com/acme/tools", reason: "its host is percent-encoded" },
+    { address: "https://[::1]/acme/tools", reason: "it holds a bracket" },
+    { address: "git@github.com:acme/[tools]", reason: "it holds a bracket" },
+    { address: "https://github.com\\@evil.example/acme/tools", reason: "it holds a backslash" },
+    { address: "https://gïthub.com/acme/tools", reason: "its host is not ASCII" },
+    { address: "https://github.com/acme/tools\u0000", reason: "it holds a control character" },
+    { address: "https://github.com/acme%00/tools", reason: "it holds %00" },
+    { address: "acme:x@github.com/acme/tools", reason: "its scp @ follows its colon" },
+    { address: "evil.example/x:acme/tools", reason: "a / precedes its scp colon" },
+    { address: "git@git%68ub.com:acme/tools", reason: "its scp host is percent-encoded" },
+    { address: "git@gitlab.example:acme/tools.git", reason: "its scp host is not GitHub" },
+    { address: "acme/tools", reason: "it is a bare owner/repo" },
+    { address: "http://", reason: "it is no URL" },
+  ]) {
+    test(`D-SG-23: folds no repository from ${JSON.stringify(address)} because ${reason}`, () => {
+      // act
+      const gitHubAddress = gitHubAddressOf(address);
+
+      // assert
+      assert.strictEqual(gitHubAddress, undefined);
+    });
+  }
+
+  test("reads no variable, so an invalid base does not affect the fold", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+
+    // act
+    const gitHubAddress = gitHubAddressOf("git@github.com:acme/tools.git");
+
+    // assert
+    assert.deepStrictEqual(gitHubAddress, { prefix: "git@github.com:", repository: "acme/tools" });
   });
 });
 

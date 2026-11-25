@@ -616,9 +616,10 @@ interface Ma12RecognizedOrigin {
   readonly origin: string;
 }
 
-// MA-12 / Q-03: an owned leftover is recognized when its origin names the
-// source, with the host compared case-insensitively and github spellings
-// folded through the parser.
+// MA-12 / Q-03 / D-SG-23: an owned leftover is recognized when its origin
+// names the source, with the host compared case-insensitively and every
+// GitHub spelling folded to one owner/repo, ssh forms and letter case
+// included.
 const MA12_RECOGNIZED_ORIGINS: readonly Ma12RecognizedOrigin[] = [
   {
     rawSource: "anthropics/claude-plugins-official",
@@ -635,6 +636,14 @@ const MA12_RECOGNIZED_ORIGINS: readonly Ma12RecognizedOrigin[] = [
   {
     rawSource: "https://gitlab.example.com/team/mp",
     origin: "https://GitLab.Example.com/team/mp",
+  },
+  {
+    rawSource: "anthropics/claude-plugins-official",
+    origin: "https://github.com/Anthropics/claude-plugins-official.git",
+  },
+  {
+    rawSource: "anthropics/claude-plugins-official",
+    origin: "git@github.com:anthropics/claude-plugins-official.git",
   },
 ];
 
@@ -833,8 +842,8 @@ test("IN-06: a destination that disappears before recognition reads it proceeds 
 });
 
 // MA-13: every non-matching listRemotes arm of an owned leftover still refuses
-// as stale clone, and the leftover tree stays on disk. The path compares
-// exactly (D-3-01), so a near-miss origin refuses exactly like a foreign tree.
+// as stale clone, and the leftover tree stays on disk. The folded owner/repo
+// compares exactly, so a near-miss origin refuses exactly like a foreign tree.
 
 interface Ma13RefusalArm {
   readonly title: string;
@@ -859,19 +868,10 @@ const MA13_REFUSAL_ARMS: readonly Ma13RefusalArm[] = [
     },
   },
   {
-    // D-3-01: the path compares exactly, so an owner letter-case difference
-    // refuses even where the host folds.
-    title: "origin differs from the identity only by owner letter case",
+    title: "origin is an ssh-form remote of another repository",
     listRemotesResult: {
       kind: "origin",
-      url: "https://github.com/Anthropics/claude-plugins-official.git",
-    },
-  },
-  {
-    title: "origin is an ssh-form remote",
-    listRemotesResult: {
-      kind: "origin",
-      url: "git@github.com:anthropics/claude-plugins-official.git",
+      url: "git@github.com:anthropics/other-repo.git",
     },
   },
   {

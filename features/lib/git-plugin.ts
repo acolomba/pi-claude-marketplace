@@ -13,7 +13,10 @@
  * names the host's loopback address, unpinned or pinned to the repository's
  * latest revision, and its entry may declare dependencies. The `ssh` kind is a
  * `url` source whose url is the scp address `git@127.0.0.1:<owner>/<name>.git`,
- * which the ssh stand-in serves from the git host's repositories (D-SG-17). A url marketplace
+ * which the ssh stand-in serves from the git host's repositories (D-SG-17). The
+ * `github ssh` kind is a `url` source whose url is the scp address
+ * `git@github.com:<owner>/<name>.git`, which the GitHub base override sends to
+ * the git host over https (D-SG-21). A url marketplace
  * can also offer a plugin of its own repository as a `git-subdir` source,
  * unpinned or pinned to the marketplace's latest commit (D-SEED-01).
  */
@@ -61,17 +64,21 @@ export interface GitPluginRepository {
 }
 
 /** A kind of git source a marketplace offers a plugin as. */
-export type GitPluginSourceKind = "github" | "url" | "git-subdir" | "ssh";
+export type GitPluginSourceKind = "github" | "url" | "git-subdir" | "ssh" | "github ssh";
 
 const GIT_PLUGIN_SOURCE_KINDS: readonly GitPluginSourceKind[] = [
   "github",
   "url",
   "git-subdir",
   "ssh",
+  "github ssh",
 ];
 
 /** The host of the scp address an `ssh` offer names, which a scenario registers with the ssh stand-in. */
 const SSH_SOURCE_HOST = "127.0.0.1";
+
+/** The scp user and host of a `github ssh` offer, the spelling GitHub gives its ssh clone URLs. */
+const GITHUB_SSH_SOURCE_PREFIX = "git@github.com:";
 
 /**
  * A plugin a marketplace offers from the git repository `repository`, as a
@@ -88,7 +95,7 @@ export interface GitPluginOffer {
 
 /** The `source` object of a marketplace entry that offers a git plugin. */
 export interface GitPluginSource {
-  readonly source: Exclude<GitPluginSourceKind, "ssh">;
+  readonly source: Exclude<GitPluginSourceKind, "ssh" | "github ssh">;
   readonly repo?: string;
   readonly url?: string;
   readonly path?: string;
@@ -322,7 +329,8 @@ const OFFER_COLUMNS = ["name", "source kind", "repository", "pinned"] as const;
  * Reads a `| name | source kind | repository | pinned |` table, or one with a
  * last `dependencies` column that `readDependencyCell` reads, throwing on a
  * missing or unknown column, a source kind other than `github`, `url`,
- * `git-subdir`, and `ssh`, and a pinned cell other than `true` and `false`.
+ * `git-subdir`, `ssh`, and `github ssh`, and a pinned cell other than `true`
+ * and `false`.
  */
 export function readGitPluginOffers(table: DataTable): GitPluginOffer[] {
   const declaresDependencies = table.raw()[0]?.length === OFFER_COLUMNS.length + 1;
@@ -350,7 +358,7 @@ function latestRevision(repository: GitPluginRepository): string {
 
 /**
  * Returns the marketplace entry that offers the plugin of `offer` from
- * `repository` on `host`. A github, url, or ssh source clones the whole
+ * `repository` on `host`. A github, url, ssh, or github ssh source clones the whole
  * repository, so it needs the plugin at the root; a git-subdir source names the plugin's
  * path. A pinned offer carries the repository's latest revision as its `sha`,
  * and an offer that declares dependencies carries them on the entry.
@@ -401,6 +409,12 @@ function gitPluginSource(
       return {
         source: "url",
         url: `git@${SSH_SOURCE_HOST}:${repository.owner}/${repository.name}.git`,
+        ...sha,
+      };
+    case "github ssh":
+      return {
+        source: "url",
+        url: `${GITHUB_SSH_SOURCE_PREFIX}${repository.owner}/${repository.name}.git`,
         ...sha,
       };
   }

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   canonicalCloneUrl,
+  gitHubRepositoriesMatch,
   networkCloneUrl,
   originMatchesSource,
   pluginCloneKey,
@@ -187,6 +188,22 @@ describe("canonicalCloneUrl", () => {
 
     // assert
     assert.strictEqual(cloneUrl, "https://github.com/acme/tools");
+  });
+
+  test("D-SG-23: keys a github source by its own owner and repo spelling, unfolded", () => {
+    // arrange
+    const source = {
+      kind: "github",
+      raw: "Acme/Tools",
+      owner: "Acme",
+      repo: "Tools",
+    } as const satisfies GitHubSource;
+
+    // act
+    const cloneUrl = canonicalCloneUrl(source);
+
+    // assert
+    assert.strictEqual(cloneUrl, "https://github.com/Acme/Tools");
   });
 });
 
@@ -387,6 +404,23 @@ describe("originMatchesSource", () => {
     owner: "o",
     repo: "r",
   } as const satisfies GitHubSource;
+  const GITHUB_ACME_TOOLS = {
+    kind: "github",
+    raw: "acme/tools",
+    owner: "acme",
+    repo: "tools",
+  } as const satisfies GitHubSource;
+  const UNFOLDED_GITHUB = {
+    kind: "github",
+    raw: "a_b/c",
+    owner: "a_b",
+    repo: "c",
+  } as const satisfies GitHubSource;
+  const SCP_MP = {
+    kind: "url",
+    raw: "git@gitlab.example:team/mp.git",
+    url: "git@gitlab.example:team/mp",
+  } as const satisfies UrlSource;
 
   const MATCHING_ORIGINS: ReadonlyArray<{
     readonly originUrl: string;
@@ -399,6 +433,16 @@ describe("originMatchesSource", () => {
       source: OFFICIAL,
     },
     { originUrl: "https://GitLab.Example.com/team/mp.git", source: GITLAB_MP },
+    {
+      originUrl: "https://github.com/Anthropics/claude-plugins-official.git",
+      source: OFFICIAL,
+    },
+    { originUrl: "git@github.com:anthropics/claude-plugins-official.git", source: OFFICIAL },
+    { originUrl: "git@github.com:acme/tools.git", source: GITHUB_ACME_TOOLS },
+    { originUrl: "ssh://git@github.com/Acme/Tools", source: GITHUB_ACME_TOOLS },
+    { originUrl: "https://github.com:8443/o/r", source: GITHUB_O_R },
+    { originUrl: "https://github.com/a_b/c.git", source: UNFOLDED_GITHUB },
+    { originUrl: "git@gitlab.example:team/mp.git", source: SCP_MP },
   ];
 
   for (const { originUrl, source } of MATCHING_ORIGINS) {
@@ -420,11 +464,6 @@ describe("originMatchesSource", () => {
     readonly source: GitHubSource | UrlSource;
   }> = [
     {
-      kind: "an owner that differs only by letter case",
-      originUrl: "https://github.com/Anthropics/claude-plugins-official.git",
-      source: OFFICIAL,
-    },
-    {
       kind: "another repository",
       originUrl: "https://github.com/anthropics/other-repo.git",
       source: OFFICIAL,
@@ -435,19 +474,24 @@ describe("originMatchesSource", () => {
       source: OFFICIAL,
     },
     {
-      kind: "an ssh-form remote",
-      originUrl: "git@github.com:anthropics/claude-plugins-official.git",
-      source: OFFICIAL,
+      kind: "an ssh-form remote of another repository",
+      originUrl: "git@github.com:acme/other.git",
+      source: GITHUB_ACME_TOOLS,
+    },
+    {
+      kind: "a GitHub address for a non-GitHub source",
+      originUrl: "https://github.com/team/mp.git",
+      source: GITLAB_MP,
+    },
+    {
+      kind: "the https form of an scp non-GitHub source",
+      originUrl: "https://gitlab.example/team/mp.git",
+      source: SCP_MP,
     },
     { kind: "a string that is not a url", originUrl: "not a url", source: OFFICIAL },
     { kind: "the empty string", originUrl: "", source: OFFICIAL },
     { kind: "a local path", originUrl: "/srv/git/claude-plugins-official", source: OFFICIAL },
     { kind: "a url that does not parse", originUrl: "https://exa mple/team/mp", source: GITLAB_MP },
-    {
-      kind: "an explicit non-default port",
-      originUrl: "https://github.com:8443/o/r",
-      source: GITHUB_O_R,
-    },
   ];
 
   test("GHB-02 / D-01: recognizes the github.com origin with the override set", (t) => {
@@ -474,6 +518,65 @@ describe("originMatchesSource", () => {
 
       // act
       const matches = originMatchesSource(originUrl, source);
+
+      // assert
+      assert.strictEqual(matches, expectedMatch);
+    });
+  }
+});
+
+describe("gitHubRepositoriesMatch", () => {
+  for (const spelling of [
+    "https://github.com/acme/tools.git",
+    "https://www.github.com/Acme/Tools/",
+    "http://github.com/acme/tools",
+    "git+https://github.com/acme/tools",
+    "git://github.com/acme/tools",
+    "ssh://git@github.com/acme/tools.git",
+    "git+ssh://git@ssh.github.com:443/acme/tools",
+    "git@github.com:Acme/Tools.git",
+    "org-1@github.com:acme/tools.git",
+    "git@ssh.github.com:/acme/tools.GIT",
+  ]) {
+    test(`D-SG-23: folds ${spelling} to the github source acme/tools`, () => {
+      // act
+      const matches = gitHubRepositoriesMatch(spelling, "https://github.com/acme/tools");
+
+      // assert
+      assert.strictEqual(matches, true);
+    });
+  }
+
+  for (const { identity, other, expectedMatch } of [
+    {
+      identity: "https://github.com/acme/tools",
+      other: "git@github.com:Acme/Tools.git",
+      expectedMatch: true,
+    },
+    {
+      identity: "https://github.com/acme/tools",
+      other: "https://github.com/acme/other",
+      expectedMatch: false,
+    },
+    {
+      identity: "https://github.com/acme/tools",
+      other: "https://gitlab.example/acme/tools",
+      expectedMatch: false,
+    },
+    {
+      identity: "https://gitlab.example/acme/tools",
+      other: "git@github.com:acme/tools.git",
+      expectedMatch: false,
+    },
+    {
+      identity: "https://gitlab.example/acme/tools",
+      other: "https://gitlab.example/acme/tools",
+      expectedMatch: undefined,
+    },
+  ] as const) {
+    test(`D-SG-23: compares ${identity} with ${other} as ${String(expectedMatch)}`, () => {
+      // act
+      const matches = gitHubRepositoriesMatch(identity, other);
 
       // assert
       assert.strictEqual(matches, expectedMatch);

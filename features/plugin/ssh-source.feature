@@ -54,3 +54,54 @@ Feature: Plugin ssh source
       | gits             | project           | extp@gits | extp | unavailable | unsupported source |
     Then the user's ssh receives no launch
     Then the git host receives no request
+
+  Scenario: Installing a plugin from a git@github.com address reaches the GitHub base over https
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github ssh  | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the user's ssh receives no launch
+
+  Scenario: Installing a plugin from a git@github.com address reaches the GitHub base over https for its pinned commit
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github ssh  | ghp        | true   |
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the user's ssh receives no launch

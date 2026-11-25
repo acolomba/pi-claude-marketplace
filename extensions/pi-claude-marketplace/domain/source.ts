@@ -21,6 +21,8 @@
 // This parser is the syntactic gate; downstream containment checks are the
 // semantic gate.
 
+import { GITHUB_ORIGIN, gitHubAddressOf } from "../shared/github-base-url.ts";
+
 import { gitUrlRefusal, isScpGitAddress } from "./git-url.ts";
 
 export interface PathSource {
@@ -851,6 +853,64 @@ export function githubSource(raw: string): GitHubSource {
 export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
 
 /**
+ * D-SG-23: the lower-cased `owner/repo` that `gitHubAddressOf` folds from a
+ * github source's canonical URL or a url source's url, such as `acme/tools`
+ * for `git@github.com:Acme/Tools`. Undefined for every other source, and for
+ * a github source whose `owner/repo` is not one Claude Code folds.
+ */
+export function gitHubRepositoryOf(source: ParsedSource): string | undefined {
+  if (source.kind === "github") {
+    return gitHubAddressOf(`${GITHUB_ORIGIN}/${source.owner}/${source.repo}`)?.repository;
+  }
+
+  return source.kind === "url" ? gitHubAddressOf(source.url)?.repository : undefined;
+}
+
+/** A source as a GitHub repository and ref, the form the D-SG-23 comparison reads. */
+interface GitHubIdentity {
+  readonly repository: string;
+  readonly ref: string | undefined;
+}
+
+/**
+ * D-SG-23: `source` as a GitHub repository, like Claude Code's comparison
+ * form: a github source always, with its `owner/repo` exact when it does not
+ * fold, and a url source when its url folds.
+ */
+function gitHubIdentityOf(source: ParsedSource): GitHubIdentity | undefined {
+  const repository = gitHubRepositoryOf(source);
+  if (source.kind === "github") {
+    return { repository: repository ?? `${source.owner}/${source.repo}`, ref: source.ref };
+  }
+
+  return source.kind === "url" && repository !== undefined
+    ? { repository, ref: source.ref }
+    : undefined;
+}
+
+/**
+ * D-SG-23: a github source and a url source that spells a GitHub address
+ * compare as one repository and ref, whatever their kind and spelling, and
+ * never match any other source. Undefined when neither source is a GitHub
+ * repository.
+ */
+function gitHubComparison(
+  planned: ParsedSource,
+  current: ParsedSource,
+): SamePlannedSourceResult | undefined {
+  const plannedGitHub = gitHubIdentityOf(planned);
+  const currentGitHub = gitHubIdentityOf(current);
+  if (plannedGitHub === undefined && currentGitHub === undefined) {
+    return undefined;
+  }
+
+  return plannedGitHub?.repository === currentGitHub?.repository &&
+    plannedGitHub?.ref === currentGitHub?.ref
+    ? "same"
+    : "different";
+}
+
+/**
  * Compare a stored source record against a planned raw source string for
  * semantic equality.
  *
@@ -888,18 +948,18 @@ export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlan
     return "unknown-stored";
   }
 
-  if (planned.kind !== current.kind) {
+  const gitHubOutcome = gitHubComparison(planned, current);
+  if (gitHubOutcome !== undefined) {
+    return gitHubOutcome;
+  }
+
+  // A github source always has a GitHub identity, so `gitHubComparison`
+  // answered for it; the kind test says so to the switch below.
+  if (planned.kind === "github" || planned.kind !== current.kind) {
     return "different";
   }
 
   switch (planned.kind) {
-    case "github":
-      return current.kind === "github" &&
-        planned.owner === current.owner &&
-        planned.repo === current.repo &&
-        planned.ref === current.ref
-        ? "same"
-        : "different";
     case "path":
       return current.kind === "path" && planned.logical === current.logical ? "same" : "different";
     // MURL-06: url identity is `sourceLogical` equality, which is ref-aware

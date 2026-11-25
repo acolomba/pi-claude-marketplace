@@ -236,6 +236,42 @@ Feature: Marketplace add
       | source kind | source     |
       | github      | acme/tools |
 
+  Scenario: Adding Acme/Tools after acme/tools reports the marketplace already added
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace add Acme/Tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  | reasons       |
+      | tools | project | skipped | already added |
+    Then the git host receives no request
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source     |
+      | tools | acme/tools |
+
+  Scenario: Adding a github marketplace over a leftover checkout whose origin is its ssh address replaces it
+    Given the marketplace "tools" is published as a github source
+    Given the project scope holds a checkout of the marketplace "tools" with the origin "git@github.com:acme/tools.git" that an interrupted add left
+    When the user runs "/claude:plugin marketplace add acme/tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the checkout of the marketplace "tools" in the project scope holds these files:
+      | file                            |
+      | .claude-plugin/marketplace.json |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
   Scenario Outline: Adding again a marketplace whose checkout is gone restores it and keeps its installed plugins
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" offers these plugins:

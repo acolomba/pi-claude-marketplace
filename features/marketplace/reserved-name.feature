@@ -153,3 +153,23 @@ Feature: Marketplace reserved name
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name                    | source                             |
       | claude-plugins-official | anthropics/claude-plugins-official |
+
+  Scenario: Adding a marketplace from git@github.com:anthropics/... may use a reserved name
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    When the user runs "/claude:plugin marketplace add git@github.com:anthropics/claude-plugins-official.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name                    | scope   | status |
+      | claude-plugins-official | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name                    | source                                                |
+      | claude-plugins-official | git@github.com:anthropics/claude-plugins-official.git |
+    Then the git host receives these requests:
+      | method | path                                                                      | status |
+      | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
+    Then the user's ssh receives no launch
