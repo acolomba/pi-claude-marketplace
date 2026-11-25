@@ -163,8 +163,8 @@ import {
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
   MARKETPLACE_MANIFEST_MARKER,
+  marketplaceRefreshPlans,
   refreshCloneBySwap,
-  swapCloneUrl,
   type CloneSwapResult,
   type RenameOps,
 } from "./clone-swap.ts";
@@ -175,10 +175,12 @@ import {
 } from "./hosted-catalog.ts";
 import {
   DEFAULT_GIT_OPS,
+  DEFAULT_GITHUB_SSH_OPS,
   lacksStoredCredential,
   recordedManifestPath,
   resolveScopeOrNotifyNotAdded,
   type GitAuthBundle,
+  type GitHubSshOps,
   type GitOps,
 } from "./shared.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
@@ -218,6 +220,11 @@ export interface UpdateMarketplaceOptions {
   readonly scope?: Scope;
   readonly cwd: string;
   readonly gitOps?: GitOps;
+  /**
+   * SG-SSH-02: the ssh probe a github refresh plans its transports with.
+   * Defaults to DEFAULT_GITHUB_SSH_OPS, the user's own ssh.
+   */
+  readonly gitHubSsh?: GitHubSshOps;
   /**
    * Autoupdate-cascade injection seam. When omitted, the autoupdate cascade
    * is a NO-OP (tests inject a mock).
@@ -280,6 +287,8 @@ export interface UpdateAllMarketplacesOptions {
   readonly scope?: Scope;
   readonly cwd: string;
   readonly gitOps?: GitOps;
+  /** See `UpdateMarketplaceOptions.gitHubSsh`. */
+  readonly gitHubSsh?: GitHubSshOps;
   readonly pluginUpdate?: PluginUpdateFn;
   /** See `UpdateMarketplaceOptions.installMissingDependencies`. */
   readonly installMissingDependencies?: ScopeDependencyInstallFn;
@@ -329,6 +338,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     cwd: opts.cwd,
     locations: resolved.locations,
     gitOps,
+    gitHubSsh: opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS,
     credentialOps,
     hostedManifestFetch: opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH,
     reportedDependencies: new Set(),
@@ -350,6 +360,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
  */
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
+  const gitHubSsh = opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const hostedManifestFetch = opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
   const removalOps = createRemovalOps();
@@ -396,6 +407,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       cwd: opts.cwd,
       locations: t.locations,
       gitOps,
+      gitHubSsh,
       credentialOps,
       hostedManifestFetch,
       removalOps,
@@ -421,6 +433,7 @@ interface RefreshOneArgs {
   readonly cwd: string;
   readonly locations: ScopedLocations;
   readonly gitOps: GitOps;
+  readonly gitHubSsh: GitHubSshOps;
   readonly pluginUpdate?: PluginUpdateFn;
   readonly installMissingDependencies?: ScopeDependencyInstallFn;
   /**
@@ -538,8 +551,11 @@ function attachStoredCredentialCause(
 
 /**
  * D-SG-10: refresh a github or url checkout by `ls-remote`, re-clone, and swap,
- * inside the caller's state lock (Q13). D-SG-15: a valid checkout whose remote
- * cannot be reached is kept when the keep variable is true.
+ * inside the caller's state lock (Q13). SG-SSH-02: the check and the re-clone
+ * each plan their transports from the declared source, not from the
+ * checkout's recorded origin (CONTEXT [Identity], OQ-5). D-SG-15: a valid
+ * checkout whose remote cannot be reached is kept when the keep variable is
+ * true.
  */
 async function refreshGitSource(
   source: GitHubSource | UrlSource,
@@ -555,7 +571,8 @@ async function refreshGitSource(
       liveDir,
       backupDir: await locations.sourceBackupDir(name),
       stagingDir: await locations.sourceSwapStagingDir(name),
-      url: await swapCloneUrl(liveDir, source, gitOps),
+      ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
+      surface: "marketplace",
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,
       auth,

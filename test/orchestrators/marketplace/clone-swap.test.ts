@@ -4,17 +4,25 @@ import os from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
-import { githubSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { planMarketplaceClone } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
+import {
+  githubSource,
+  parsePluginSource,
+  type UrlSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
   MARKETPLACE_MANIFEST_MARKER,
+  marketplaceRefreshPlans,
+  oneAttemptPlans,
   ownershipMarkerPath,
   refreshCloneBySwap,
-  swapCloneUrl,
   type CloneSwapArgs,
+  type RefreshPlans,
   type RenameOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -138,6 +146,11 @@ function swapArgs(
       | "liveMarker"
       | "ownershipMarker"
       | "carryOver"
+      | "freshness"
+      | "reclone"
+      | "notes"
+      | "subject"
+      | "surface"
     >
   > = {},
 ): CloneSwapArgs {
@@ -145,7 +158,8 @@ function swapArgs(
     liveDir: swap.liveDir,
     backupDir: swap.backupDir,
     stagingDir: swap.stagingDir,
-    url: REMOTE_URL,
+    ...oneAttemptPlans(REMOTE_URL),
+    surface: "marketplace",
     gitOps,
     auth: AUTH,
     liveMarker: MARKETPLACE_MANIFEST_MARKER,
@@ -1137,30 +1151,457 @@ test("D-PL9-10 / NFR-10: the installed roots inside a checkout are its records' 
   assert.deepStrictEqual(roots, [path.join("plugins", "pkp"), ""]);
 });
 
-for (const { title, listRemotesResult, expected } of [
-  {
-    title: "the checkout's recorded origin",
-    listRemotesResult: { kind: "origin", url: "https://git.example/acme/tools.git" },
-    expected: "https://git.example/acme/tools.git",
-  },
-  {
-    title: "the source's clone URL when the checkout records no origin",
-    listRemotesResult: { kind: "not-a-repo" },
-    expected: "https://github.com/acme/market.git",
-  },
-] as const) {
-  test(`D-SG-10: a marketplace refresh clones from ${title}`, async () => {
-    // arrange
-    const git = createGitOpsFake({ boundary: "memory", listRemotesResult });
+const SSH_URL = "git@github.com:acme/tools.git";
+const HTTPS_URL = "https://github.com/acme/tools.git";
 
-    // act
-    const url = await swapCloneUrl(
-      "/scope/sources/market",
-      githubSource("https://github.com/acme/market"),
-      git.gitOps,
-    );
+/**
+ * The plans of an `owner/repo` source whose probe found the user's ssh
+ * authenticated: SSH first, HTTPS after. `made` counts the plans the swap made.
+ */
+function sshFirstPlans(): { readonly plans: RefreshPlans; readonly made: () => number } {
+  let made = 0;
+  const plan: RefreshPlans["freshness"] = () => {
+    made += 1;
+    return planMarketplaceClone({
+      source: githubSource("acme/tools"),
+      probe: () => Promise.resolve("configured"),
+    });
+  };
 
-    // assert
-    assert.strictEqual(url, expected);
-  });
+  return { plans: { freshness: plan, reclone: plan }, made: () => made };
 }
+
+/** An ssh failure of the git host, as GitHub refuses a key it does not know. */
+function sshFailure(operation: string): GitCommandError {
+  return new GitCommandError(
+    { kind: "ssh-auth", detail: "publickey" },
+    { operation, exitCode: 128 },
+  );
+}
+
+/**
+ * A git port over both GitHub URLs whose `ls-remote` and clone of each URL in
+ * `failing` reject with an ssh failure. A failing clone first leaves a file in
+ * its target, as a killed clone can. `log` holds every request in order.
+ */
+function gitOverBoth(options: {
+  readonly localHead: string;
+  readonly remoteHead: string;
+  readonly cloneFrom: string;
+  readonly failing?: { readonly lsRemote?: readonly string[]; readonly clone?: readonly string[] };
+}) {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [SSH_URL, HTTPS_URL],
+    initialOid: options.localHead,
+    remoteHead: options.remoteHead,
+    cloneFixture: { boundary: "local", sourceDir: options.cloneFrom },
+  });
+  const log: { readonly request: string; readonly url: string; readonly auth: boolean }[] = [];
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    async resolveRemoteRef(lsRemoteOptions) {
+      const { url } = lsRemoteOptions;
+      log.push({ request: "ls-remote", url, auth: lsRemoteOptions.auth !== undefined });
+      if (options.failing?.lsRemote?.includes(url) === true) {
+        throw sshFailure("ls-remote");
+      }
+
+      return git.gitOps.resolveRemoteRef(lsRemoteOptions);
+    },
+    async clone(cloneOptions) {
+      const { url } = cloneOptions;
+      log.push({ request: "clone", url, auth: cloneOptions.auth !== undefined });
+      if (options.failing?.clone?.includes(url) === true) {
+        await mkdir(cloneOptions.dir, { recursive: true });
+        await writeFile(path.join(cloneOptions.dir, "half-cloned"), "left by a failed clone\n");
+        throw sshFailure("clone --depth");
+      }
+
+      await git.gitOps.clone(cloneOptions);
+    },
+  };
+  return { gitOps, log };
+}
+
+test("SG-SSH-02: a freshness check over ssh that answers asks nothing over https", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans, made } = sshFirstPlans();
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_A,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps, plans));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "current" });
+  assert.deepStrictEqual(git.log, [{ request: "ls-remote", url: SSH_URL, auth: false }]);
+  assert.strictEqual(made(), 1);
+});
+
+test("SG-SSH-02, OQ-4: a freshness check whose ssh attempt fails asks again over https with the auth bundle", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans } = sshFirstPlans();
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_A,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+    failing: { lsRemote: [SSH_URL] },
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps, plans));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "current" });
+  assert.deepStrictEqual(git.log, [
+    { request: "ls-remote", url: SSH_URL, auth: false },
+    { request: "ls-remote", url: HTTPS_URL, auth: true },
+  ]);
+});
+
+test("SG-SSH-02: a stale checkout makes a second plan and re-clones over ssh first", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans, made } = sshFirstPlans();
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+  const notes = createGitHubCloneNotes();
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { ...plans, notes, subject: "tools" }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
+  assert.deepStrictEqual(git.log, [
+    { request: "ls-remote", url: SSH_URL, auth: false },
+    { request: "clone", url: SSH_URL, auth: false },
+  ]);
+  assert.strictEqual(made(), 2);
+  assert.deepStrictEqual(notes.noteFor("tools"), { note: "via-ssh", url: SSH_URL });
+});
+
+test("SG-SSH-02, NFR-1: a re-clone whose ssh attempt fails empties staging and clones over https", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans } = sshFirstPlans();
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+    failing: { clone: [SSH_URL] },
+  });
+  const notes = createGitHubCloneNotes();
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { ...plans, notes, subject: "tools" }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.deepStrictEqual(await entriesOf(swap.liveDir), [".claude-plugin", ".git"]);
+  assert.deepStrictEqual(git.log, [
+    { request: "ls-remote", url: SSH_URL, auth: false },
+    { request: "clone", url: SSH_URL, auth: false },
+    { request: "clone", url: HTTPS_URL, auth: true },
+  ]);
+  assert.deepStrictEqual(notes.noteFor("tools"), {
+    note: "via-ssh",
+    url: SSH_URL,
+    retries: [HTTPS_URL],
+  });
+});
+
+test("SG-SSH-02: a re-clone that fails over both transports names both and leaves no staging", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans } = sshFirstPlans();
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+    failing: { clone: [SSH_URL, HTTPS_URL] },
+  });
+
+  // act
+  const refresh = refreshCloneBySwap(swapArgs(swap, git.gitOps, { ...plans, surface: "plugin" }));
+
+  // assert
+  await assert.rejects(refresh, {
+    name: "GitHubTransportsFailedError",
+    surface: "plugin",
+  });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
+});
+
+/** A checkout at commit A whose remote fails every request over both transports. */
+async function unreachableOverBoth(t: TestContext) {
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+    failing: { lsRemote: [SSH_URL, HTTPS_URL], clone: [SSH_URL, HTTPS_URL] },
+  });
+  return { swap, git };
+}
+
+test("D-SG-15, OQ-4: a freshness check that no attempt answers keeps a valid checkout under the keep variable", async (t) => {
+  // arrange
+  const { swap, git } = await unreachableOverBoth(t);
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { ...sshFirstPlans().plans, keepOnUnreachable: true }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "kept-stale", cause: sshFailure("ls-remote") });
+  assert.deepStrictEqual(
+    git.log.map(({ request, url }) => `${request} ${url}`),
+    [`ls-remote ${SSH_URL}`, `ls-remote ${HTTPS_URL}`],
+  );
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+});
+
+test("D-SG-15, OQ-4: without the keep variable an unanswered freshness check re-clones over the plan and throws the check's failure", async (t) => {
+  // arrange
+  const { swap, git } = await unreachableOverBoth(t);
+
+  // act
+  const refresh = refreshCloneBySwap(swapArgs(swap, git.gitOps, sshFirstPlans().plans));
+
+  // assert
+  await assert.rejects(refresh, sshFailure("ls-remote"));
+  assert.deepStrictEqual(
+    git.log.map(({ request, url }) => `${request} ${url}`),
+    [`ls-remote ${SSH_URL}`, `ls-remote ${HTTPS_URL}`, `clone ${SSH_URL}`, `clone ${HTTPS_URL}`],
+  );
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
+});
+
+test("D-SG-15, OQ-4: one freshness attempt that answers stale keeps nothing under the keep variable", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans } = sshFirstPlans();
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+    failing: { lsRemote: [SSH_URL] },
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { ...plans, keepOnUnreachable: true }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
+});
+
+test("D-SG-15: a freshness failure that says nothing about the remote is thrown before the next attempt", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans } = sshFirstPlans();
+  const gitMissing = lsRemoteFailure({ kind: "git-missing", detail: "not-found" });
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+  let lsRemotes = 0;
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    resolveRemoteRef: () => {
+      lsRemotes += 1;
+      return Promise.reject(gitMissing);
+    },
+  };
+
+  // act
+  const refresh = refreshCloneBySwap(swapArgs(swap, gitOps, plans));
+
+  // assert
+  await assert.rejects(refresh, gitMissing);
+  assert.strictEqual(lsRemotes, 1);
+});
+
+test("OQ-4: a full-SHA ref makes no freshness plan, so nothing is probed", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const { plans, made } = sshFirstPlans();
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_A,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps, { ...plans, ref: COMMIT_A }));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "current" });
+  assert.strictEqual(made(), 0);
+  assert.deepStrictEqual(git.log, []);
+});
+
+test("OQ-4: one attempt over an scp address carries no auth bundle", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps, oneAttemptPlans(SSH_URL)));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.deepStrictEqual(git.log, [
+    { request: "ls-remote", url: SSH_URL, auth: false },
+    { request: "clone", url: SSH_URL, auth: false },
+  ]);
+});
+
+/** CONTEXT [Identity]: an origin a checkout recorded under a URL its source no longer declares. */
+const EARLIER_ORIGIN = "https://git.example/acme/earlier-name.git";
+
+/** A live checkout whose `origin` is `origin`, or that records none when it is undefined. */
+function checkoutRecording(origin: string | undefined): {
+  readonly liveDir: string;
+  readonly gitOps: GitOps;
+} {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    listRemotesResult:
+      origin === undefined ? { kind: "not-a-repo" } : { kind: "origin", url: origin },
+  });
+  return { liveDir: path.join(os.tmpdir(), "scope", "sources", "tools"), gitOps: git.gitOps };
+}
+
+/** D-PL5-04: a url record an earlier version wrote for a URL that now reads as a hosted catalog. */
+const LEGACY_JSON_SOURCE: UrlSource = {
+  kind: "url",
+  raw: "https://git.example/acme/tools.json",
+  url: "https://git.example/acme/tools.json",
+};
+
+test("OQ-5, D-PL5-04: a url record whose URL now reads as a hosted catalog refreshes once from its checkout's origin", async () => {
+  // arrange
+  const plans = marketplaceRefreshPlans(
+    LEGACY_JSON_SOURCE,
+    { probe: () => Promise.reject(new Error("a url refresh asks no probe")) },
+    checkoutRecording(REMOTE_URL),
+  );
+
+  // act
+  const plan = await plans.freshness();
+
+  // assert
+  assert.deepStrictEqual(plan.first, { transport: "https", url: REMOTE_URL });
+  assert.strictEqual(plan.note, undefined);
+  assert.strictEqual(await plan.after(sshFailure("ls-remote"), plan.first), undefined);
+});
+
+test("OQ-5, D-PL5-04: a legacy url record whose checkout records no origin refreshes from what it declares", async () => {
+  // arrange
+  const plans = marketplaceRefreshPlans(
+    LEGACY_JSON_SOURCE,
+    { probe: () => Promise.reject(new Error("a url refresh asks no probe")) },
+    checkoutRecording(undefined),
+  );
+
+  // act
+  const plan = await plans.reclone();
+
+  // assert
+  assert.deepStrictEqual(plan.first, {
+    transport: "https",
+    url: "https://git.example/acme/tools.json",
+  });
+});
+
+test("CONTEXT [Identity], CONTEXT [Probe]: each plan of an owner/repo marketplace refresh asks the probe once", async () => {
+  // arrange
+  let probes = 0;
+  const plans = marketplaceRefreshPlans(
+    githubSource("acme/tools"),
+    {
+      probe: () => {
+        probes += 1;
+        return Promise.resolve("configured");
+      },
+    },
+    checkoutRecording(EARLIER_ORIGIN),
+  );
+
+  // act
+  const freshness = await plans.freshness();
+  const reclone = await plans.reclone();
+
+  // assert
+  assert.deepStrictEqual(
+    [freshness.first, reclone.first],
+    [
+      { transport: "ssh", url: SSH_URL },
+      { transport: "ssh", url: SSH_URL },
+    ],
+  );
+  assert.deepStrictEqual(await freshness.after(sshFailure("ls-remote"), freshness.first), {
+    transport: "https",
+    url: HTTPS_URL,
+  });
+  assert.strictEqual(probes, 2);
+});
+
+test("OQ-5: a url marketplace refresh lists and clones its clone URL alone and asks no probe", async () => {
+  // arrange
+  const source = parsePluginSource(REMOTE_URL) as UrlSource;
+  let probes = 0;
+  const plans = marketplaceRefreshPlans(
+    source,
+    {
+      probe: () => {
+        probes += 1;
+        return Promise.resolve("configured");
+      },
+    },
+    checkoutRecording(EARLIER_ORIGIN),
+  );
+
+  // act
+  const plan = await plans.reclone();
+
+  // assert
+  assert.deepStrictEqual(plan.first, { transport: "https", url: REMOTE_URL });
+  assert.strictEqual(await plan.after(sshFailure("clone --depth"), plan.first), undefined);
+  assert.strictEqual(probes, 0);
+});

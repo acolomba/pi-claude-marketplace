@@ -149,7 +149,10 @@ function fixtureMarketplaceDir(
   );
 }
 
-async function seedGithubMarketplaceForSync(cwd: string): Promise<void> {
+async function seedGithubMarketplaceForSync(
+  cwd: string,
+  spelling = "https://github.com/test/repo#main",
+): Promise<void> {
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   const cloneDir = await locations.sourceCloneDir("official");
@@ -160,7 +163,7 @@ async function seedGithubMarketplaceForSync(cwd: string): Promise<void> {
       official: {
         name: "official",
         scope: "project",
-        source: githubSource("https://github.com/test/repo#main"),
+        source: githubSource(spelling),
         addedFromCwd: cwd,
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
@@ -1585,6 +1588,92 @@ test("PUP-2 / AUTH-02: the github marketplace sync check carries the github.com 
   });
 });
 
+test("SG-SSH-02, CONTEXT [Identity]: the sync of an owner/repo marketplace whose probe finds ssh authenticated checks it over ssh with no auth bundle", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-ssh-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd, "test/repo");
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      let probes = 0;
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        gitHubSsh: {
+          probe: () => {
+            probes += 1;
+            return Promise.resolve("configured");
+          },
+        },
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          checks: state.resolveRemoteRefCalls.map(({ url, auth }) => ({ url, auth })),
+          clones: state.cloneCalls,
+          probes,
+        },
+        {
+          checks: [{ url: "git@github.com:test/repo.git", auth: undefined }],
+          clones: [],
+          probes: 1,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CONTEXT [Identity]: the sync of a github marketplace checks the declared source's URL, not the origin its checkout records", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-origin-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const fake = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const gitOps: GitOps = {
+        ...fake.gitOps,
+        listRemotes: () =>
+          Promise.resolve({ kind: "origin", url: "https://github.com/test/earlier-name.git" }),
+      };
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        fake.state.resolveRemoteRefCalls.map(({ url }) => url),
+        ["https://github.com/test/repo.git"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("GHB-02: the GitHub marketplace sync under the override binds the override host", async (t) => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-override-");
@@ -2274,7 +2363,7 @@ test("PUP-2 / D-SG-10: a url marketplace whose remote advanced -> update re-clon
 const SYNC_LOCAL_COMMIT = "0000000000000000000000000000000000000001";
 const SYNC_REMOTE_COMMIT = "abcdef0000000000000000000000000000000001";
 
-test("PUP-2 / D-PL9-10: the sync carries the packages of a plugin the state records once the scope lock is held", async () => {
+test("PUP-2 / D-PL9-10: the sync carries the packages of every plugin the state records inside the checkout", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-url-carry-");
     try {
@@ -2293,27 +2382,21 @@ test("PUP-2 / D-PL9-10: the sync carries the packages of a plugin the state reco
         remoteRefs: { "refs/remotes/origin/main": SYNC_REMOTE_COMMIT },
         fixtureSourceDir: remoteTree,
       });
-      // The origin read runs under the scope lock, so a plugin recorded here
-      // stands for one that another process installed before the lock.
-      const gitOps: typeof fake.gitOps = {
-        ...fake.gitOps,
-        async listRemotes(listOptions) {
-          const state = await loadState(locations.extensionRoot);
-          const record = state.marketplaces.mp;
-          const hello = record?.plugins.hello;
-          assert.ok(record !== undefined && hello !== undefined);
-          await saveState(locations.extensionRoot, {
-            ...state,
-            marketplaces: {
-              mp: {
-                ...record,
-                plugins: { ...record.plugins, late: { ...hello, resolvedSource: lateRoot } },
-              },
-            },
-          });
-          return fake.gitOps.listRemotes(listOptions);
+      // A second plugin whose root lies inside the checkout, as one that
+      // another process installed there.
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp;
+      const hello = record?.plugins.hello;
+      assert.ok(record !== undefined && hello !== undefined);
+      await saveState(locations.extensionRoot, {
+        ...state,
+        marketplaces: {
+          mp: {
+            ...record,
+            plugins: { ...record.plugins, late: { ...hello, resolvedSource: lateRoot } },
+          },
         },
-      };
+      });
       const { ctx, run } = makeCtx();
 
       // act
@@ -2323,7 +2406,7 @@ test("PUP-2 / D-PL9-10: the sync carries the packages of a plugin the state reco
         scope: "project",
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-        gitOps,
+        gitOps: fake.gitOps,
         credentialOps: makeCredentialOps(),
       });
 

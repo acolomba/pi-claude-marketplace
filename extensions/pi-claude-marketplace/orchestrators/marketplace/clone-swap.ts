@@ -11,6 +11,13 @@
 // D-SG-15: with `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` true, a
 // checkout whose remote cannot be reached is kept as it is.
 //
+// SG-SSH-02, OQ-4: the freshness check and the re-clone each run over a
+// transport plan, as Claude Code's refresh lists and clones a source's URLs in
+// order. A marketplace refresh plans from the declared source with the
+// marketplace probe rule; the checkout's recorded `origin` picks no URL
+// (CONTEXT [Identity], OQ-5), except for a url record an earlier version wrote
+// under a URL that names no git repository (D-PL5-04).
+//
 // The same swap refreshes a marketplace checkout and a plugin mirror. A
 // marketplace swap writes the MA-12 ownership marker into staging; a mirror
 // swap writes none and never keeps a checkout on failure.
@@ -23,7 +30,8 @@
 import { mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 
-import { networkCloneUrl } from "../../domain/clone-key.ts";
+import { addressTransport, planMarketplaceClone } from "../../domain/github-transport.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -36,10 +44,18 @@ import {
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { upstreamFlagIsTrue } from "../../shared/upstream-flag.ts";
+import {
+  cloneOverGitHubTransports,
+  createGitHubCloneNotes,
+  transportForce,
+  type GitHubCloneNotes,
+} from "../github-transport.ts";
 
+import type { TransportAttempt, TransportPlan } from "../../domain/github-transport.ts";
 import type { GitHubSource, UrlSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { GitAuthBundle, GitOps } from "./shared.ts";
+import type { GitHubTransportsFailedError } from "../../shared/errors.ts";
+import type { GitAuthBundle, GitHubSshOps, GitOps } from "./shared.ts";
 
 /**
  * Q-01: the ownership marker `marketplace add` and a refresh write into `.git/`
@@ -69,20 +85,86 @@ export async function writeOwnershipMarker(stagingDir: string): Promise<void> {
 /** D-SG-10: the file whose presence makes a marketplace checkout valid. */
 export const MARKETPLACE_MANIFEST_MARKER = path.join(".claude-plugin", "marketplace.json");
 
+/** The two plans of a refresh: the freshness check's and the re-clone's. */
+export type RefreshPlans = Pick<CloneSwapArgs, "freshness" | "reclone">;
+
+/** The live checkout of a marketplace refresh, as `legacyCloneUrl` reads it. */
+export interface RefreshCheckout {
+  readonly liveDir: string;
+  readonly gitOps: GitOps;
+}
+
 /**
- * D-SG-10: the URL a refresh of a marketplace checkout clones from: the live
- * checkout's recorded `origin`, which is the URL the checkout was cloned from,
- * or the source's clone URL when the checkout records none. An earlier
- * version recorded some url sources under a URL that is not their clone URL.
- * `marketplace update` and `plugin update`'s marketplace sync (PUP-2) share it.
+ * OQ-5, D-PL5-04: the URL the checkout of a url record that names no git URL
+ * was cloned from. An earlier version recorded a url marketplace under an
+ * https URL ending in `.json`, which now reads as a hosted catalog, so only
+ * the checkout's recorded `origin` says where its repository lives. Any other
+ * source, and such a record whose checkout records no origin, gives undefined.
  */
-export async function swapCloneUrl(
-  liveDir: string,
+async function legacyCloneUrl(
   source: GitHubSource | UrlSource,
-  gitOps: GitOps,
-): Promise<string> {
-  const remotes = await gitOps.listRemotes({ dir: liveDir });
-  return remotes.kind === "origin" ? remotes.url : networkCloneUrl(source);
+  checkout: RefreshCheckout,
+): Promise<string | undefined> {
+  if (source.kind !== "url" || parsePluginSource(source.raw).kind !== "hosted") {
+    return undefined;
+  }
+
+  const remotes = await checkout.gitOps.listRemotes({ dir: checkout.liveDir });
+  if (remotes.kind !== "origin") {
+    return undefined;
+  }
+
+  return remotes.url;
+}
+
+/**
+ * SG-SSH-02, CONTEXT [Identity], OQ-5: the plans of a marketplace refresh of
+ * `source`, which `marketplace update`, the autoupdate pass, and `plugin
+ * update`'s marketplace sync (PUP-2) share. Each plan is the declared source's
+ * (`planMarketplaceClone`), so an `owner/repo` source probes once for the
+ * freshness list and once more for a re-clone, as Claude Code's refresh does
+ * (CONTEXT [Probe]), and a url source lists and clones its clone URL alone;
+ * the checkout's recorded origin picks no URL, except for the legacy url
+ * record `legacyCloneUrl` names. Only a github source reads what forces HTTPS,
+ * so a url refresh never reads the GitHub base (GHB-02).
+ */
+export function marketplaceRefreshPlans(
+  source: GitHubSource | UrlSource,
+  gitHubSsh: GitHubSshOps,
+  checkout: RefreshCheckout,
+): RefreshPlans {
+  const plan = async (): Promise<TransportPlan> => {
+    const legacy = await legacyCloneUrl(source, checkout);
+    if (legacy !== undefined) {
+      return oneAttemptPlan(legacy);
+    }
+
+    return planMarketplaceClone({
+      source,
+      force: source.kind === "github" ? transportForce(process.env) : undefined,
+      probe: () => gitHubSsh.probe(),
+    });
+  };
+
+  return { freshness: plan, reclone: plan };
+}
+
+/** One attempt of `url`, with no note, over the transport git uses for it. */
+function oneAttemptPlan(url: string): TransportPlan {
+  return {
+    first: { transport: addressTransport(url), url },
+    after: () => Promise.resolve(undefined),
+  };
+}
+
+/**
+ * OQ-4: the plans of a refresh that lists and clones `url` once, with no note,
+ * over the transport git uses for it. A plugin mirror whose caller passed no
+ * transport refreshes with them.
+ */
+export function oneAttemptPlans(url: string): RefreshPlans {
+  const plan = (): Promise<TransportPlan> => Promise.resolve(oneAttemptPlan(url));
+  return { freshness: plan, reclone: plan };
 }
 
 /** The rename the swap moves whole checkouts with; tests inject a failing one. */
@@ -133,7 +215,20 @@ export interface CloneSwapArgs {
    * refresh starts is the leftover of an interrupted run.
    */
   readonly stagingDir: string;
-  readonly url: string;
+  /**
+   * SG-SSH-02, OQ-4: the plan the freshness `ls-remote` runs over, made only
+   * when the check asks the remote, so a full-SHA ref or an unreadable `HEAD`
+   * probes nothing. Each attempt runs in turn until one answers.
+   */
+  readonly freshness: () => Promise<TransportPlan>;
+  /** SG-SSH-02: the plan the re-clone runs over, made only when a clone runs. */
+  readonly reclone: () => Promise<TransportPlan>;
+  /** D-SG-22: the collector the re-clone records its note into, under `subject`. */
+  readonly notes?: GitHubCloneNotes;
+  /** The subject of the row that reports the re-clone; the plan's first URL by default. */
+  readonly subject?: string;
+  /** The surface whose words a re-clone that fails over both transports uses. */
+  readonly surface: GitHubTransportsFailedError["surface"];
   readonly ref?: string;
   readonly gitOps: GitOps;
   readonly auth: GitAuthBundle;
@@ -221,11 +316,58 @@ function isUnreachable(err: unknown): boolean {
 }
 
 /**
+ * SG-SSH-02: the auth bundle of one attempt. An HTTPS attempt carries the
+ * refresh's bundle; an SSH attempt carries none, because no bundle answers an
+ * ssh failure.
+ */
+function attemptAuth(
+  args: CloneSwapArgs,
+  attempt: TransportAttempt,
+): { readonly auth?: GitAuthBundle } {
+  return attempt.transport === "https" ? { auth: args.auth } : {};
+}
+
+/** What the freshness `ls-remote` over a plan found. */
+type RemoteAnswer =
+  | { readonly kind: "answered"; readonly oid: string | undefined }
+  | { readonly kind: "unreachable"; readonly cause: unknown };
+
+/**
+ * SG-SSH-02, OQ-4: `ls-remote` over `attempt`, then over each attempt the
+ * plan gives after a failure, until one answers, as Claude Code's refresh
+ * walks its URL list. A failure that says nothing about the remote is thrown
+ * at once; when no attempt answers, the last failure is the cause.
+ */
+async function listRemoteHead(
+  args: CloneSwapArgs,
+  plan: TransportPlan,
+  attempt: TransportAttempt,
+): Promise<RemoteAnswer> {
+  try {
+    const oid = await args.gitOps.resolveRemoteRef({
+      url: attempt.url,
+      ...(args.ref !== undefined && { ref: args.ref }),
+      ...attemptAuth(args, attempt),
+    });
+    return { kind: "answered", oid };
+  } catch (err) {
+    if (!isUnreachable(err)) {
+      throw err;
+    }
+
+    const next = await plan.after(err, attempt);
+    return next === undefined
+      ? { kind: "unreachable", cause: err }
+      : listRemoteHead(args, plan, next);
+  }
+}
+
+/**
  * D-SG-10: the freshness of the checkout. A full-SHA ref compares with `HEAD`
- * and asks the remote nothing. Otherwise `ls-remote` gives the commit of
- * `HEAD`, or of the ref as a branch, then a peeled tag, then a tag; a ref the
- * remote does not advertise, or an unreadable `HEAD`, is stale, and a failed
- * `ls-remote` is unreachable.
+ * and asks the remote nothing. Otherwise `ls-remote` over the freshness plan
+ * gives the commit of `HEAD`, or of the ref as a branch, then a peeled tag,
+ * then a tag; a ref the remote does not advertise, or an unreadable `HEAD`, is
+ * stale, and a check that no attempt answered is unreachable.
  */
 async function checkFreshness(args: CloneSwapArgs): Promise<Freshness> {
   const local = await readLocalHead(args);
@@ -238,22 +380,13 @@ async function checkFreshness(args: CloneSwapArgs): Promise<Freshness> {
     return local === ref.toLowerCase() ? CURRENT : STALE;
   }
 
-  let remote: string | undefined;
-  try {
-    remote = await args.gitOps.resolveRemoteRef({
-      url: args.url,
-      ...(ref !== undefined && { ref }),
-      auth: args.auth,
-    });
-  } catch (err) {
-    if (!isUnreachable(err)) {
-      throw err;
-    }
-
-    return { kind: "unreachable", cause: err };
+  const plan = await args.freshness();
+  const answer = await listRemoteHead(args, plan, plan.first);
+  if (answer.kind === "unreachable") {
+    return answer;
   }
 
-  return remote === local ? CURRENT : STALE;
+  return answer.oid === local ? CURRENT : STALE;
 }
 
 /**
@@ -291,21 +424,33 @@ async function restoreInterruptedBackup(args: CloneSwapArgs): Promise<void> {
 }
 
 /**
- * D-SG-10 / MA-12: clone into the staging directory and mark it as
- * this extension's own. A failed clone removes the staging directory and
- * leaves the live checkout untouched (MA-9: a leak is appended, not masked).
- * After an unreachable check the clone fails the same way, so the check's
- * failure is the one thrown: it names the cause before git's own credential
- * helpers acted on it, as a stored credential the host rejected (GAUTH-04).
+ * D-SG-10 / MA-12: clone into the staging directory over the re-clone plan
+ * and mark it as this extension's own. SG-SSH-02: the staging directory is
+ * removed before the plan's next attempt, so each attempt starts with none
+ * (NFR-1), and the plan's note goes to `notes` under `subject`. A failed clone
+ * removes the staging directory and leaves the live checkout untouched (MA-9:
+ * a leak is appended, not masked). After an unreachable check the clone fails
+ * the same way, so the check's failure is the one thrown: it names the cause
+ * before git's own credential helpers acted on it, as a stored credential the
+ * host rejected (GAUTH-04).
  */
 async function cloneIntoStaging(args: CloneSwapArgs, freshness: Freshness): Promise<string> {
-  const { stagingDir } = args;
+  const { stagingDir, removalOps } = args;
   try {
-    await args.gitOps.clone({
-      dir: stagingDir,
-      url: args.url,
-      ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
-      auth: args.auth,
+    const plan = await args.reclone();
+    await cloneOverGitHubTransports({
+      plan,
+      attempt: (attempt) =>
+        args.gitOps.clone({
+          dir: stagingDir,
+          url: attempt.url,
+          ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
+          ...attemptAuth(args, attempt),
+        }),
+      beforeRetry: () => removalOps.rm(stagingDir, { recursive: true, force: true }),
+      notes: args.notes ?? createGitHubCloneNotes(),
+      subject: args.subject ?? plan.first.url,
+      surface: args.surface,
     });
     if (args.ownershipMarker) {
       await writeOwnershipMarker(stagingDir);
@@ -460,7 +605,7 @@ async function swapIn(args: CloneSwapArgs, stagingDir: string): Promise<CloneSwa
 }
 
 /**
- * D-SG-10: refresh the checkout at `liveDir` from `url`. An interrupted swap
+ * D-SG-10: refresh the checkout at `liveDir` over its plans. An interrupted swap
  * is put back first. A current checkout is left alone. A stale one is cloned
  * again into staging and swapped in; a failed clone leaves the live checkout
  * untouched, and a failed move-in puts the old checkout back. The caller holds

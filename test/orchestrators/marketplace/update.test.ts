@@ -69,7 +69,10 @@ import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  GitHubSshOps,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { UpdateNotification } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import type {
   PluginUpdateFn,
@@ -295,6 +298,8 @@ async function seedGithubMarketplace(opts: {
   fixture?: "valid-marketplace" | "invalid-manifest";
   legacy?: boolean;
   lastSuccessfulManifest?: string;
+  /** SG-SSH-02: the source as the user typed it, such as `owner/repo`; a github.com URL by default. */
+  spelling?: string;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -310,7 +315,10 @@ async function seedGithubMarketplace(opts: {
       [opts.name]: {
         name: opts.name,
         scope: "project",
-        source: makeGithubSource(opts.ref, opts.owner),
+        source:
+          opts.spelling === undefined
+            ? makeGithubSource(opts.ref, opts.owner)
+            : githubSource(opts.spelling),
         addedFromCwd: opts.cwd,
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
@@ -1078,6 +1086,96 @@ for (const { kind, seed } of [
   });
 }
 
+const OFFICIAL_SSH_URL = "git@github.com:anthropics/claude-plugins-official.git";
+const OFFICIAL_HTTPS_URL = "https://github.com/anthropics/claude-plugins-official.git";
+
+/** SG-SSH-02: a probe that finds the user's ssh authenticated to GitHub. */
+const SSH_CONFIGURED: GitHubSshOps = { probe: () => Promise.resolve("configured") };
+
+test("D-SG-15, OQ-4: an owner/repo marketplace keeps its checkout only once neither transport's freshness check answers", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      spelling: "anthropics/claude-plugins-official",
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const lsRemoteError = unreachableRemote();
+    const { gitOps, state } = createGitOps({ remoteThrows: lsRemoteError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      gitHubSsh: SSH_CONFIGURED,
+      environment: KEEP_ENVIRONMENT,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations need attention.\n\n● official [project] (skipped) {network unreachable}\n  ⊘ official (skipped) {network unreachable}\n    cause: Marketplace remote unreachable, keeping existing clone (CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE) -> ${lsRemoteError.message}`,
+        severity: "warning",
+      },
+    ]);
+    assert.deepStrictEqual(
+      { lsRemote: state.lsRemoteCalls.map(({ url }) => url), clones: state.cloneCalls },
+      { lsRemote: [OFFICIAL_SSH_URL, OFFICIAL_HTTPS_URL], clones: [] },
+    );
+  });
+});
+
+test("D-SG-15, OQ-4: an owner/repo marketplace whose https freshness check answers after ssh failed is refreshed, not kept", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      spelling: "anthropics/claude-plugins-official",
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const fake = createGitOps();
+    const gitOps: GitOps = {
+      ...fake.gitOps,
+      resolveRemoteRef: (lsRemoteOptions) =>
+        lsRemoteOptions.url === OFFICIAL_SSH_URL
+          ? Promise.reject(unreachableRemote())
+          : fake.gitOps.resolveRemoteRef(lsRemoteOptions),
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      gitHubSsh: SSH_CONFIGURED,
+      environment: KEEP_ENVIRONMENT,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● official [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(
+      {
+        lsRemote: fake.state.lsRemoteCalls.map(({ url }) => url),
+        clones: fake.state.cloneCalls.map(({ url }) => url),
+      },
+      { lsRemote: [OFFICIAL_HTTPS_URL], clones: [OFFICIAL_SSH_URL] },
+    );
+  });
+});
+
 test("D-SG-15: two updates in a row with the remote down both keep the checkout and both warn", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -1316,38 +1414,103 @@ test("D-PL9-10: an update carries the packages of installed plugins inside the c
   });
 });
 
-test("D-SG-10: a refresh asks and clones the URL the checkout records as its origin", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
-    const { ctx, run, notifications } = makeCtx();
-    const origin = "https://github.com/anthropics/earlier-name.git";
-    const { gitOps, state } = createGitOps({ origin });
+for (const { kind, name, seed, origin, declared } of [
+  {
+    kind: "github",
+    name: "official",
+    seed: (cwd: string) => seedGithubMarketplace({ cwd, name: "official", ref: "main" }),
+    origin: "https://github.com/anthropics/earlier-name.git",
+    declared: "https://github.com/anthropics/claude-plugins-official.git",
+  },
+  {
+    kind: "url",
+    name: "tools",
+    seed: (cwd: string) => seedUrlMarketplace({ cwd, name: "tools", ref: "main" }),
+    origin: "https://gitlab.example.com/team/earlier-name.git",
+    declared: "https://gitlab.example.com/team/tools",
+  },
+] as const) {
+  test(`CONTEXT [Identity], OQ-5: a ${kind} refresh asks and clones the declared source's URL, not the origin its checkout records`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seed(cwd);
+      const { ctx, run, notifications } = makeCtx();
+      const { gitOps, state } = createGitOps({ origin });
 
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "official",
-      scope: "project",
-      cwd,
-      gitOps,
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: `● ${name} [project] (skipped) {up-to-date}` },
+      ]);
+      assert.deepStrictEqual(
+        {
+          lsRemote: state.lsRemoteCalls.map(({ url }) => url),
+          clone: state.cloneCalls.map(({ url }) => url),
+        },
+        { lsRemote: [declared], clone: [declared] },
+      );
     });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      { message: "● official [project] (skipped) {up-to-date}" },
-    ]);
-    assert.deepStrictEqual(
-      {
-        lsRemote: state.lsRemoteCalls.map(({ url }) => url),
-        clone: state.cloneCalls.map(({ url }) => url),
-      },
-      { lsRemote: [origin], clone: [origin] },
-    );
   });
-});
+}
+
+for (const { probe, first } of [
+  { probe: "configured", first: "git@github.com:anthropics/claude-plugins-official.git" },
+  { probe: "not-configured", first: "https://github.com/anthropics/claude-plugins-official.git" },
+] as const) {
+  test(`SG-SSH-02: an owner/repo marketplace whose probe answers ${probe} refreshes first over ${first}, probing once per plan`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seedGithubMarketplace({
+        cwd,
+        name: "official",
+        spelling: "anthropics/claude-plugins-official",
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const { gitOps, state } = createGitOps();
+      let probes = 0;
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "official",
+        scope: "project",
+        cwd,
+        gitOps,
+        gitHubSsh: {
+          probe: () => {
+            probes += 1;
+            return Promise.resolve(probe);
+          },
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: "● official [project] (skipped) {up-to-date}" },
+      ]);
+      assert.deepStrictEqual(
+        {
+          lsRemote: state.lsRemoteCalls.map(({ url }) => url),
+          clone: state.cloneCalls.map(({ url }) => url),
+          probes,
+        },
+        { lsRemote: [first], clone: [first], probes: 2 },
+      );
+    });
+  });
+}
 
 test("MU-5: a replaced checkout whose manifest cannot be read names the advanced clone", async () => {
   await withHermeticHome(async ({ cwd }) => {
