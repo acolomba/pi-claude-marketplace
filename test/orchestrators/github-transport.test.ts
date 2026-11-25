@@ -5,6 +5,7 @@ import {
   cloneOverGitHubTransports,
   createGitHubCloneNotes,
   createPluginTransportContext,
+  pluginCloneTransport,
   transportForce,
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { GitHubTransportsFailedError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -798,5 +799,84 @@ describe("createPluginTransportContext", () => {
 
     // assert
     assert.strictEqual(second.notes.noteFor("ghp@gits"), undefined);
+  });
+});
+
+describe("pluginCloneTransport", () => {
+  const ghp = { kind: "github", raw: "acme/ghp", owner: "acme", repo: "ghp" } as const;
+
+  test("D-SG-19: asks no check until its plan is made, then plans over the context's checks", async () => {
+    // arrange
+    const port = countingPort({});
+    const context = createPluginTransportContext({ env: {}, ssh: port.ssh, platform: "linux" });
+
+    // act
+    const transport = pluginCloneTransport(context, ghp, "ghp@gits");
+    const before = [...port.calls];
+    const plan = await transport.plan();
+
+    // assert
+    assert.deepStrictEqual(
+      { before, first: plan.first, note: plan.note, calls: port.calls },
+      {
+        before: [],
+        first: { transport: "https", url: "https://github.com/acme/ghp.git" },
+        note: "ssh-not-configured",
+        calls: [
+          "userOverride",
+          "urlRewritten git@github.com:acme/ghp.git",
+          "probe",
+          "showsDirectGitHub",
+        ],
+      },
+    );
+  });
+
+  test("D-SG-22: notes into the context's notes under its subject", () => {
+    // arrange
+    const context = createPluginTransportContext({ env: {}, ssh: countingPort({}).ssh });
+
+    // act
+    const transport = pluginCloneTransport(context, ghp, "ghp@gits");
+
+    // assert
+    assert.deepStrictEqual(
+      { sharesNotes: transport.notes === context.notes, subject: transport.subject },
+      { sharesNotes: true, subject: "ghp@gits" },
+    );
+  });
+
+  test("D-SG-24: plans one HTTPS attempt with no check when the context's environment forces it", async () => {
+    // arrange
+    const port = countingPort({});
+    const context = createPluginTransportContext({
+      env: { CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "true" },
+      ssh: port.ssh,
+      platform: "linux",
+    });
+
+    // act
+    const plan = await pluginCloneTransport(context, ghp, "ghp@gits").plan();
+
+    // assert
+    assert.deepStrictEqual(
+      { first: plan.first, calls: port.calls },
+      { first: { transport: "https", url: "https://github.com/acme/ghp.git" }, calls: [] },
+    );
+  });
+
+  test("SG-SSH-05: plans SSH first on the context's Windows platform", async () => {
+    // arrange
+    const port = countingPort({});
+    const context = createPluginTransportContext({ env: {}, ssh: port.ssh, platform: "win32" });
+
+    // act
+    const plan = await pluginCloneTransport(context, ghp, "ghp@gits").plan();
+
+    // assert
+    assert.deepStrictEqual(
+      { first: plan.first, calls: port.calls },
+      { first: { transport: "ssh", url: "git@github.com:acme/ghp.git" }, calls: [] },
+    );
   });
 });

@@ -126,3 +126,54 @@ Feature: Plugin github transport update
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: Fetching a github plugin with no ssh setting clones it over https first
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin fetch ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
+      | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   |
+    Then the user's ssh receives these launches:
+      | argv                                                                                |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
+      | -G git@github.com                                                                   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: Info with --fetch on a github plugin with no ssh setting clones it over https first
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin info ghp@gits --fetch"
+    Then the result has these fields:
+      | kind                           | plugin-info |
+      | marketplace details autoupdate | false       |
+      | marketplace name               | gits        |
+      | marketplace scope              | project     |
+      | needs reload                   | false       |
+      | plugin components resolved     | true        |
+      | plugin components skills       | ghp-skill   |
+      | plugin id                      | ghp@gits    |
+      | plugin name                    | ghp         |
+      | plugin reasons                 |             |
+      | plugin status                  | available   |
+      | plugin version                 | 1.0.0       |
+      | severity                       | info        |
+    Then the user's ssh receives these launches:
+      | argv                                                                                |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
+      | -G git@github.com                                                                   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |

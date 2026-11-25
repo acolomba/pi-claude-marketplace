@@ -47,6 +47,7 @@ import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -91,6 +92,10 @@ import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification
 import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type {
+  CloneTransport,
+  PluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 import type { McpStatusReaders } from "../../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
@@ -12372,5 +12377,245 @@ test("D-P3-08: a record-only row whose recorded servers are stdio names mcp miss
         ].join("\n"),
       },
     ]);
+  });
+});
+
+// ─── OQ-7, D-SG-19: one GitHub transport context per info --fetch ───────────
+
+/**
+ * OQ-7: a transport context whose user has no ssh setting and whose probe
+ * finds no configured ssh, so an `owner/repo` plan clones over HTTPS first.
+ * `probes` counts the probes.
+ */
+function httpsFirstContext(probes: { count: number }): PluginTransportContext {
+  return createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: () => {
+        probes.count += 1;
+        return Promise.resolve("not-configured");
+      },
+      userOverride: () => Promise.resolve(false),
+      urlRewritten: () => Promise.resolve({ rewritten: false, exitCode: 1 }),
+      showsDirectGitHub: () => Promise.resolve({ kind: "ran", direct: true, exitCode: 0 }),
+      showsDirectGitHubThroughGit: () => Promise.resolve(true),
+    },
+  });
+}
+
+/** What one clone-cache call received as its transport. */
+interface SeenTransport {
+  readonly call: string;
+  readonly subject: string | undefined;
+  readonly sharesNotes: boolean;
+  readonly first: string | undefined;
+}
+
+/**
+ * OQ-7: a seam that clones nothing. Each call records the transport it got
+ * and makes its plan, as a clone step would, so the context's checks run.
+ */
+function transportRecordingSeam(
+  cwd: string,
+  contexts: readonly PluginTransportContext[],
+  seen: SeenTransport[],
+): InfoCloneCacheSeam {
+  const record = async (call: string, transport: CloneTransport | undefined): Promise<void> => {
+    seen.push({
+      call,
+      subject: transport?.subject,
+      sharesNotes: transport !== undefined && transport.notes === contexts[0]?.notes,
+      first: transport === undefined ? undefined : (await transport.plan()).first.url,
+    });
+  };
+
+  return {
+    async materializeOrRefreshPluginMirror(args) {
+      await record("mirror", args.transport);
+      return { pluginRoot: path.join(cwd, "not-written"), resolvedSha: "a".repeat(40) };
+    },
+    async materializePluginClone(args) {
+      await record("clone", args.transport);
+      return path.join(cwd, "not-written");
+    },
+    async resolvePluginPin(args) {
+      await record("resolve", args.transport);
+      return { cloneUrl: "https://github.com/acme/alpha", pin: args.source.sha ?? "missing" };
+    },
+  };
+}
+
+/** OQ-7: `alpha@mp` from github `acme/alpha`, pinned in the user scope and unpinned in the project scope. */
+async function seedGitHubAlphaInBothScopes(home: string, cwd: string): Promise<void> {
+  await seedPathMarketplace({
+    scope: "project",
+    scopeRoot: path.join(cwd, ".pi"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [{ name: "alpha", source: { source: "github", repo: "acme/alpha" } }],
+    },
+  });
+  await seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [
+        { name: "alpha", source: { source: "github", repo: "acme/alpha", sha: "8".repeat(40) } },
+      ],
+    },
+  });
+}
+
+test("OQ-7, D-SG-19: info --fetch makes one transport context, and every clone-cache call of both scopes plans over it", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedGitHubAlphaInBothScopes(home, cwd);
+    const probes = { count: 0 };
+    const contexts: PluginTransportContext[] = [];
+    const seen: SeenTransport[] = [];
+    const getInfo = withDefaultMcpStatus(
+      createGetPluginInfo(NODE_READER, process.env, () => {
+        const context = httpsFirstContext(probes);
+        contexts.push(context);
+        return context;
+      }),
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "alpha",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: transportRecordingSeam(cwd, contexts, seen),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { made: contexts.length, probes: probes.count, seen },
+      {
+        made: 1,
+        probes: 1,
+        seen: [
+          {
+            call: "resolve",
+            subject: "alpha@mp",
+            sharesNotes: true,
+            first: "https://github.com/acme/alpha.git",
+          },
+          {
+            call: "clone",
+            subject: "alpha@mp",
+            sharesNotes: true,
+            first: "https://github.com/acme/alpha.git",
+          },
+          {
+            call: "mirror",
+            subject: "alpha@mp",
+            sharesNotes: true,
+            first: "https://github.com/acme/alpha.git",
+          },
+        ],
+      },
+    );
+    // The seam clones nothing, so each scope's row names its source missing.
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <no autoupdate>",
+          "  ⊘ alpha v#aaaaaaa (unavailable) {source missing}",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ⊘ alpha v#8888888 (unavailable) {source missing}",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("OQ-7: info --fetch given a transport context plans over it and makes none", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedGitHubAlphaInBothScopes(home, cwd);
+    const probes = { count: 0 };
+    const given = httpsFirstContext(probes);
+    let made = 0;
+    const seen: SeenTransport[] = [];
+    const getInfo = withDefaultMcpStatus(
+      createGetPluginInfo(NODE_READER, process.env, () => {
+        made += 1;
+        return httpsFirstContext(probes);
+      }),
+    );
+    const { ctx, run } = makeCtx();
+
+    // act
+    await getInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "project",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: transportRecordingSeam(cwd, [given], seen),
+      transportContext: given,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { made, probes: probes.count, seen },
+      {
+        made: 0,
+        probes: 1,
+        seen: [
+          {
+            call: "mirror",
+            subject: "alpha@mp",
+            sharesNotes: true,
+            first: "https://github.com/acme/alpha.git",
+          },
+        ],
+      },
+    );
+  });
+});
+
+test("NFR-5: info without --fetch makes no transport context", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedGitHubAlphaInBothScopes(home, cwd);
+    let made = 0;
+    const seen: SeenTransport[] = [];
+    const getInfo = withDefaultMcpStatus(
+      createGetPluginInfo(NODE_READER, process.env, () => {
+        made += 1;
+        return httpsFirstContext({ count: 0 });
+      }),
+    );
+    const { ctx, run } = makeCtx();
+
+    // act
+    await getInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "project",
+      cwd,
+      cloneCacheSeam: transportRecordingSeam(cwd, [], seen),
+    });
+
+    // assert
+    assert.deepStrictEqual({ made, seen }, { made: 0, seen: [] });
   });
 });
