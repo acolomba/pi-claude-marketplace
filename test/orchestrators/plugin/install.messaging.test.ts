@@ -1132,16 +1132,44 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["unsupported component"]);
   });
 
-  test("maps a structural non-carve-out component through the source axis", () => {
+  test("SURF-01: maps a component note beside a structural note through the source axis", () => {
     // arrange
-    const reasons = ["contains monitors"];
+    const reasons = ['malformed mcp reference: file not found: "x.mcp.json"', "contains monitors"];
 
     // act
     const narrowedReasons = installFailureReasons(reasons, [], false);
 
     // assert
-    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+    assert.deepStrictEqual(narrowedReasons, ["malformed mcp", "unsupported source"]);
   });
+
+  for (const { notes, reasons } of [
+    { notes: ["contains lspServers"], reasons: ["lsp"] },
+    { notes: ["contains mod"], reasons: ["unsupported component"] },
+    { notes: ["contains themes"], reasons: ["unsupported component"] },
+    { notes: ["contains hooks"], reasons: ["unsupported hooks"] },
+    { notes: ["contains mcpServers"], reasons: ["unsupported mcp"] },
+    {
+      notes: ["required userConfig options have no default: token"],
+      reasons: ["options not set"],
+    },
+    { notes: ["contains hooks", "contains lspServers"], reasons: ["unsupported hooks", "lsp"] },
+    { notes: ["contains monitors", "contains themes"], reasons: ["unsupported component"] },
+  ] satisfies readonly {
+    readonly notes: readonly string[];
+    readonly reasons: readonly ContentReason[];
+  }[]) {
+    test(`D-90-05: maps the unavailable kind notes ${notes.join(" and ")} to ${reasons.join(" and ")}`, () => {
+      // arrange
+      const expectedReasons = reasons;
+
+      // act
+      const narrowedReasons = installFailureReasons(notes, [], false);
+
+      // assert
+      assert.deepStrictEqual(narrowedReasons, expectedReasons);
+    });
+  }
 
   test("gives malformed MCP precedence over an embedded parse-error phrase", () => {
     // arrange
@@ -1247,7 +1275,7 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["options not set"]);
   });
 
-  test("D-PG10-06: maps an unset userConfig note to unsupported source on the structural arm", () => {
+  test("D-PG10-06: maps a lone unset userConfig note to options not set on the unavailable arm", () => {
     // arrange
     const reasons = ["required userConfig options have no default: lspServers, source"];
 
@@ -1255,7 +1283,21 @@ describe("resolver reason narrowing through the install failure row", () => {
     const narrowedReasons = installFailureReasons(reasons);
 
     // assert
-    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+    assert.deepStrictEqual(narrowedReasons, ["options not set"]);
+  });
+
+  test("D-PG10-06: maps an unset userConfig note beside a structural note to unsupported source", () => {
+    // arrange
+    const reasons = [
+      'malformed userConfig: userConfig option "mode" is not an object',
+      "required userConfig options have no default: token",
+    ];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["invalid manifest", "unsupported source"]);
   });
 
   test("maps a source note to unsupported source", () => {

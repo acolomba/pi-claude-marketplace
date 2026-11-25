@@ -69,7 +69,8 @@ export function narrowProbeError(
  * Closed-set REASONS vocabulary shared by the unsupported-classification
  * helpers below. The helpers accept two separate input axes.
  * `narrowResolverNotes` maps resolver notes to hooks, LSP, source, and
- * malformed-MCP reasons. `narrowUnsupportedKinds` maps typed kinds to hooks,
+ * malformed-MCP reasons, or to the kind reasons of `narrowKindNotes` when every
+ * note names a kind. `narrowUnsupportedKinds` maps typed kinds to hooks,
  * LSP, MCP, option, and generic component reasons. `kindToReason` owns the typed-kind
  * mappings.
  */
@@ -108,11 +109,21 @@ export type ResolverNoteReason =
  * Reason `lsp`. Any other unsupported-source note falls through to
  * `unsupported source`. Empty notes -> empty reasons array.
  *
+ * D-90-05: when every note names an unsupported kind, the plugin is
+ * unavailable only for its kinds, and the answer is the kind tokens of
+ * `narrowKindNotes`. A kind note beside a structural note stays on the source
+ * axis and reads `unsupported source` (SURF-01).
+ *
  * Each note classifies into EXACTLY ONE bucket; once a bucket has been
  * pushed, repeated notes for the same bucket are no-ops (and crucially do
  * NOT fall through to the catch-all `unsupported source` arm -- WR-01).
  */
 export function narrowResolverNotes(notes: readonly string[]): readonly ResolverNoteReason[] {
+  const kindReasons = narrowKindNotes(notes);
+  if (kindReasons !== undefined) {
+    return kindReasons;
+  }
+
   const out: ResolverNoteReason[] = [];
   const seen = new Set<string>();
   for (const note of notes) {
@@ -155,6 +166,50 @@ export const USER_CONFIG_MALFORMED_NOTE = "malformed userConfig";
  * options with no default. The note ends with their keys, in declaration order.
  */
 export const USER_CONFIG_UNSET_NOTE = "required userConfig options have no default";
+
+// A whole `contains <kind>` note: one word of letters after the prefix.
+const KIND_NOTE = /^contains ([A-Za-z]+)$/;
+
+/**
+ * D-90-05 / SURF-01 / D-PG10-06: the reason tokens of a plugin that is
+ * unavailable only for its unsupported kinds, or `undefined`.
+ *
+ * An unavailable resolution carries no kind list, only notes, so the kinds
+ * travel in the notes: `decideResolution` in `domain/plugin-resolver.ts`
+ * writes one note for each unsupported kind. A note names a kind in two forms
+ * only: the whole note is `contains <kind>`, or the note starts with
+ * `USER_CONFIG_UNSET_NOTE`, which names `userConfig`. Every structural defect
+ * writes a note that names no kind, so a list in which every note names a kind
+ * comes only from that arm. Each kind note must match as a whole: a structural
+ * note can hold text an author chose, and it must never read as a kind note.
+ *
+ * The answer is `narrowUnsupportedKinds` of the kinds in note order, so the
+ * tokens, their order, and the removal of repeats match a partial row's. An
+ * empty list, or a list with a note that names no kind, gives `undefined`.
+ */
+export function narrowKindNotes(
+  notes: readonly string[],
+): readonly UnsupportedReason[] | undefined {
+  const kinds: string[] = [];
+  for (const note of notes) {
+    const kind = kindOfNote(note);
+    if (kind === undefined) {
+      return undefined;
+    }
+
+    kinds.push(kind);
+  }
+
+  return kinds.length === 0 ? undefined : narrowUnsupportedKinds(kinds);
+}
+
+function kindOfNote(note: string): string | undefined {
+  if (note.startsWith(USER_CONFIG_UNSET_NOTE)) {
+    return "userConfig";
+  }
+
+  return KIND_NOTE.exec(note)?.[1];
+}
 
 /**
  * Classify a single resolver note into exactly one closed-set bucket. The arm
@@ -201,8 +256,8 @@ function classifyResolverNote(note: string): ResolverNoteReason {
   }
 
   // D-PG10-05 / D-PG10-06: both option notes embed option keys, which are
-  // author text, so they too must run before the `lspServers` arm. The unset
-  // note reads as a `contains <kind>` note does on the structural arm.
+  // author text, so they too must run before the `lspServers` arm. Beside a
+  // structural note, the unset note reads as a `contains <kind>` note does.
   if (note.startsWith(USER_CONFIG_MALFORMED_NOTE)) {
     return "invalid manifest";
   }
@@ -240,8 +295,9 @@ function classifyResolverNote(note: string): ResolverNoteReason {
  * Structural reasons (malformed `hooks.json`, NFR-10 source escape) are NOT
  * in this family: a structural defect routes to the `unavailable` arm
  * (D-64-07) and its reason stays on the `notes`/structural path via
- * `narrowResolverNotes`. This helper covers only the partially-available per-kind
- * markers on the `partially-available` arm.
+ * `narrowResolverNotes`. This helper covers the per-kind markers of the
+ * `partially-available` arm, and, through `narrowKindNotes`, those of a plugin
+ * that is unavailable only for its unsupported kinds (D-90-05).
  */
 export function narrowUnsupportedKinds(
   unsupported: readonly string[],
