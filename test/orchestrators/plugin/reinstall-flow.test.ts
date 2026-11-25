@@ -4915,6 +4915,8 @@ test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source 
         marketplace: "mp",
         plugin: "gp",
         cloneCacheSeam: installSeamWith(gitOps),
+        // D-SG-24: one HTTPS attempt, so the 404 is the clone's only answer.
+        transportContext: unplannedTransportContext({ CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "true" }),
       });
 
       // assert
@@ -10573,11 +10575,14 @@ test("AFILE-02: reinstalling a plugin with no MCP servers over an unparseable mc
 
 // ─── D-SG-19: one GitHub transport context per reinstall command ────────────
 
-/** D-SG-19: a transport context whose checks must not run, for a case that never plans. */
-function unplannedTransportContext(): PluginTransportContext {
+/**
+ * D-SG-19: a transport context whose checks must not run, for a case that
+ * never plans or whose `env` forces one HTTPS attempt (D-SG-24).
+ */
+function unplannedTransportContext(env: NodeJS.ProcessEnv = {}): PluginTransportContext {
   const unasked = (): Promise<never> => Promise.reject(new Error("no plan is made"));
   return createPluginTransportContext({
-    env: {},
+    env,
     platform: "linux",
     ssh: {
       probe: unasked,

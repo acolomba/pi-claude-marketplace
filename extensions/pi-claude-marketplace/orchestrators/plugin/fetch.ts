@@ -458,7 +458,6 @@ async function materializeThroughSeam(
     await deps.seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
-      networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
       auth,
       transport,
@@ -473,7 +472,6 @@ async function materializeThroughSeam(
   await deps.seam.materializePluginClone({
     locations,
     cloneUrl,
-    networkUrl: networkCloneUrl(gitSource),
     pin,
     ...(ref !== undefined && { ref }),
     resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, deps),

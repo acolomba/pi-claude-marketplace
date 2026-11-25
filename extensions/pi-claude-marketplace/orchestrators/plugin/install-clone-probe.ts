@@ -1,4 +1,4 @@
-import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl } from "../../domain/clone-key.ts";
 import { buildCloneAuth } from "../auth-host.ts";
 import { pluginCloneTransport } from "../github-transport.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
@@ -110,11 +110,10 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     };
   }
 
-  const pin = await seam.resolvePluginPin({ source });
+  const pin = await seam.resolvePluginPin({ source, transport });
   const cloneRoot = await seam.materializePluginClone({
     locations,
     cloneUrl: pin.cloneUrl,
-    networkUrl: networkCloneUrl(source),
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
     resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),

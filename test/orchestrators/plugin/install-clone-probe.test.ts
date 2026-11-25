@@ -335,7 +335,6 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
     {
       auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
       cloneUrl,
-      networkUrl: rawUrl,
       locations,
       pin: SHA,
       transport: {
@@ -345,6 +344,51 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
       },
     },
   ]);
+});
+
+test("OQ-4: a pinned clone gives its pin resolution the transport its clone runs over", async (testContext) => {
+  // arrange
+  const { locations, root } = await freshLocations(testContext);
+  const cloneUrl = "https://example.com/pinned-plugin";
+  const rawUrl = "https://example.com/pinned-plugin.git";
+  const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl, sha: SHA };
+  const pinTransports: (CloneTransport | undefined)[] = [];
+  const cloneTransports: (CloneTransport | undefined)[] = [];
+  const seam: InstallCloneCacheSeam = {
+    resolvePluginPin({ transport }) {
+      pinTransports.push(transport);
+      return Promise.resolve({ cloneUrl, pin: SHA });
+    },
+    materializePluginClone({ transport }) {
+      cloneTransports.push(transport);
+      return Promise.resolve(root);
+    },
+    materializeOrRefreshPluginMirror() {
+      return Promise.reject(new Error("unexpected mirror materialization"));
+    },
+    materializePluginCommitCopy() {
+      return Promise.reject(new Error("unexpected commit copy"));
+    },
+  };
+
+  // act
+  await probeInstallClone({ source, seam, locations, auth: auth(), subject: "plugin@market" });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      pin: await plannedTransport(pinTransports[0]),
+      sameAsClone: pinTransports[0] === cloneTransports[0],
+    },
+    {
+      pin: {
+        subject: "plugin@market",
+        first: { transport: "https", url: rawUrl },
+        note: undefined,
+      },
+      sameAsClone: true,
+    },
+  );
 });
 
 test("sends the unpinned mirror the identity url and the typed wire url", async (testContext) => {
@@ -413,7 +457,6 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
     {
       auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
       cloneUrl,
-      networkUrl: rawUrl,
       locations,
       ref: "main",
       transport: { ...planned, note: undefined },
@@ -421,7 +464,6 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
     {
       auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
       cloneUrl,
-      networkUrl: rawUrl,
       locations,
       sha: SHA,
       transport: { ...planned, note: undefined },

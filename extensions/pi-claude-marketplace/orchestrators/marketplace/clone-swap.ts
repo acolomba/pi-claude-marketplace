@@ -157,16 +157,6 @@ function oneAttemptPlan(url: string): TransportPlan {
   };
 }
 
-/**
- * OQ-4: the plans of a refresh that lists and clones `url` once, with no note,
- * over the transport git uses for it. A plugin mirror whose caller passed no
- * transport refreshes with them.
- */
-export function oneAttemptPlans(url: string): RefreshPlans {
-  const plan = (): Promise<TransportPlan> => Promise.resolve(oneAttemptPlan(url));
-  return { freshness: plan, reclone: plan };
-}
-
 /** The rename the swap moves whole checkouts with; tests inject a failing one. */
 export interface RenameOps {
   rename(from: string, to: string): Promise<void>;
