@@ -1288,7 +1288,8 @@ export class PluginMirrorInUseError extends Error {
  *
  * `git-missing` records how the lookup failed (D-SG-04): no git on PATH, the
  * macOS xcrun shim in its place, or only a batch launcher. `https-auth`
- * records which authentication failure git reported (D-SG-14, GAUTH-04).
+ * records which authentication failure git reported (D-SG-14, GAUTH-04), and
+ * `ssh-auth` whether ssh confirmed a key refusal.
  */
 export type GitFailure =
   | {
@@ -1310,10 +1311,20 @@ export type GitFailure =
       readonly detail: "no-credential" | "rejected";
     }
   | {
+      readonly kind: "ssh-auth";
+      /**
+       * Whether ssh printed its `Permission denied (publickey` line, so the
+       * host refused every key (`publickey`), or git printed only its
+       * `Could not read from remote repository` line, which also follows a
+       * missing ssh or any other ssh failure (`unconfirmed`). The transport
+       * retry rules read this detail, never stderr text (D-SG-22, SG-SSH-05).
+       */
+      readonly detail: "publickey" | "unconfirmed";
+    }
+  | {
       readonly kind:
         | "git-too-old"
         | "aborted"
-        | "ssh-auth"
         | "ssh-host-key-unknown"
         | "ssh-host-key-changed"
         | "proxy-refused"
@@ -1390,6 +1401,64 @@ function gitCommandMessage(
   return exitCode === null
     ? `git ${operation} failed: ${failure.kind}`
     : `git ${operation} failed: ${failure.kind}, exit code ${exitCode}`;
+}
+
+/** D-SG-22 / OQ-8: one failed attempt to clone a GitHub source over one transport. */
+export interface GitHubTransportAttemptFailure {
+  readonly transport: "ssh" | "https";
+  readonly url: string;
+  readonly error: Error;
+}
+
+/**
+ * D-SG-22 / OQ-8: a GitHub clone failed over both transports. `attempts`
+ * holds the two failures in the order they ran, frozen. `cause` is the last
+ * attempt's error, so the failure classifies by that attempt until SG-ERR-01
+ * gives the case a reason of its own.
+ *
+ * The message is Claude Code's for the surface. A marketplace names each
+ * attempt's transport, URL, and message. A plugin shows the first message,
+ * then the SSH retry's, then the remedy that ends `Then install again.` The
+ * whole text is redacted, so a URL's userinfo never shows (T-04-06).
+ *
+ * As Claude Code does, the caller throws the second error unchanged when the
+ * two messages are equal, so this class always holds two different failures.
+ */
+export class GitHubTransportsFailedError extends Error {
+  readonly surface: "marketplace" | "plugin";
+  readonly attempts: readonly [GitHubTransportAttemptFailure, GitHubTransportAttemptFailure];
+
+  constructor(
+    surface: "marketplace" | "plugin",
+    attempts: readonly [GitHubTransportAttemptFailure, GitHubTransportAttemptFailure],
+  ) {
+    const [first, last] = attempts;
+    super(redactCredentials(gitHubTransportsMessage(surface, first, last)), {
+      cause: last.error,
+    });
+    this.name = "GitHubTransportsFailedError";
+    this.surface = surface;
+    this.attempts = Object.freeze([Object.freeze({ ...first }), Object.freeze({ ...last })]);
+  }
+}
+
+const TRANSPORT_LABELS = { ssh: "SSH", https: "HTTPS" } as const;
+
+function gitHubTransportsMessage(
+  surface: "marketplace" | "plugin",
+  first: GitHubTransportAttemptFailure,
+  last: GitHubTransportAttemptFailure,
+): string {
+  if (surface === "plugin") {
+    // eslint-disable-next-line local/no-github-literal -- GHB-02: Claude Code's user-facing remedy names github.com verbatim
+    return `${first.error.message}\nThe retry over SSH failed too: ${last.error.message}\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.`;
+  }
+
+  return `Fetching the marketplace from GitHub failed on both attempts. ${attemptText(first)}\n\n${attemptText(last)}`;
+}
+
+function attemptText(attempt: GitHubTransportAttemptFailure): string {
+  return `${TRANSPORT_LABELS[attempt.transport]} (${attempt.url}): ${attempt.error.message}`;
 }
 
 function quotedName(name: string): string {

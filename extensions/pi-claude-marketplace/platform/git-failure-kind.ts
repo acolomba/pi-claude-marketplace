@@ -87,7 +87,7 @@ const ROWS: ReadonlyArray<readonly [Trigger, Outcome]> = [
   [/^@ +WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!/m, { kind: "ssh-host-key-changed" }],
   [/^Host key verification failed\./m, { kind: "ssh-host-key-unknown" }],
   [{ wholeStderr: /^remote: access denied by the git proxy/m }, { kind: "proxy-refused" }],
-  [/^\S+: Permission denied \(publickey/m, { kind: "ssh-auth" }],
+  [/^\S+: Permission denied \(publickey/m, { kind: "ssh-auth", detail: "publickey" }],
   // Only `Authentication failed for` proves that the host refused a credential
   // git sent. git prints the bare 401 or 403 status line whether or not a
   // helper gave a credential, so that line reads as no credential sent.
@@ -123,7 +123,9 @@ const ROWS: ReadonlyArray<readonly [Trigger, Outcome]> = [
   [NETWORK_TEXT, networkFailure],
   [/^fatal: unable to access '/m, networkFailure],
   [/^fatal: remote error: /m, { kind: "remote-error" }],
-  [/^fatal: Could not read from remote repository/m, { kind: "ssh-auth" }],
+  // git prints this line after any ssh failure, a missing ssh included, so
+  // only the publickey row above confirms a refused key.
+  [/^fatal: Could not read from remote repository/m, { kind: "ssh-auth", detail: "unconfirmed" }],
   [{ wholeStderr: /^\s*$/ }, { kind: "no-stderr" }],
 ];
 

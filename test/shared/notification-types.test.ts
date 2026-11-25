@@ -7,6 +7,8 @@ import {
   pluginVersion,
   type AsyncRewakeSummarySurface,
   type BackgroundUpdateSurface,
+  type CloneNoteKind,
+  type CloneTransportNote,
   type ContentReason,
   type CascadeNotificationMessage,
   type DeviceFlowPrompt,
@@ -366,6 +368,46 @@ void ({
   reasons: ["lock held"],
   severity: "error",
 } satisfies PluginFailedMessage);
+// D-SG-22: the clone note kinds are exactly upstream's three transport lines.
+void (true satisfies IsExact<CloneNoteKind, "via-ssh" | "via-https" | "ssh-not-configured">);
+// D-SG-22: a marketplace block and each row a GitHub clone produces carry a clone note.
+void ({
+  name: "tools",
+  scope: "user",
+  status: "added",
+  plugins: [],
+  clone: {
+    note: "via-ssh",
+    url: "git@github.com:acme/tools.git",
+    retries: ["https://github.com/acme/tools.git"],
+  },
+} satisfies MarketplaceNotificationMessage);
+void ({
+  ...installedMessage,
+  clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginInstalledMessage);
+void ({
+  status: "failed",
+  name: "ghp",
+  reasons: ["authentication required"],
+  severity: "error",
+  clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginFailedMessage);
+void ({
+  status: "available",
+  name: "ghp",
+  clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginAvailableMessage);
+void ({
+  ...skippedMessage,
+  // @ts-expect-error D-SG-22: a skipped row ran no clone, so it carries no clone note
+  clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginSkippedMessage);
+void ({
+  // @ts-expect-error D-SG-22: a clone note kind outside the closed set is no CloneTransportNote
+  note: "via-git",
+  url: "https://github.com/acme/ghp.git",
+} satisfies CloneTransportNote);
 void ({ kind: "prune-empty", scope: "user" } satisfies NotificationMessage);
 // @ts-expect-error a prune empty result must name its selected scope
 void ({ kind: "prune-empty" } satisfies NotificationMessage);

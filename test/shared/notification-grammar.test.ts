@@ -425,6 +425,118 @@ test("composes descriptions, hints, causes, leaks, and rollback failures in orde
   ]);
 });
 
+test("D-SG-22: renders an installed row's clone note under the row", () => {
+  // arrange
+  const plugin = {
+    status: "installed",
+    severity: "info",
+    needsReload: true,
+    name: "ghp",
+    reasons: [],
+    clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+  } satisfies ResolvedRow<PluginInstalledMessage>;
+
+  // act
+  const lines = composePluginLines(plugin, "user");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ● ghp (installed)",
+    "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+  ]);
+});
+
+test("D-SG-22: renders a marketplace block's clone note and its retry under the header", () => {
+  // arrange
+  const marketplace = {
+    ...MARKETPLACE_BASE,
+    name: "tools",
+    status: "added",
+    clone: {
+      note: "via-ssh",
+      url: "git@github.com:acme/tools.git",
+      retries: ["https://github.com/acme/tools.git"],
+    },
+  } as const satisfies ResolvedMarketplace;
+
+  // act
+  const rendered = composeReconcileAppliedBody([marketplace]);
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● tools [user] (added)",
+      "  Cloning via SSH: git@github.com:acme/tools.git",
+      "  SSH clone failed, retrying with HTTPS: https://github.com/acme/tools.git",
+    ].join("\n"),
+  );
+});
+
+test("D-SG-22: renders a failed row's clone note and each retry before its cause line", () => {
+  // arrange
+  const plugin = {
+    status: "failed",
+    severity: "error",
+    name: "ghp",
+    reasons: ["authentication required"],
+    clone: {
+      note: "via-https",
+      url: "https://github.com/acme/ghp.git",
+      retries: ["git@github.com:acme/ghp.git", "https://github.com/acme/ghp.git"],
+    },
+    failure: {
+      cause: { causeChain: ["both failed"], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } satisfies ResolvedRow<PluginFailedMessage>;
+
+  // act
+  const lines = composePluginLines(plugin, "user");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ⊘ ghp (failed) {authentication required}",
+    "    Cloning via HTTPS: https://github.com/acme/ghp.git",
+    "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghp.git",
+    "    SSH clone failed, retrying with HTTPS: https://github.com/acme/ghp.git",
+    "    cause: both failed",
+  ]);
+});
+
+for (const { retry, transport } of [
+  { retry: "git@github.com:acme/ghp.git", transport: "SSH" },
+  { retry: "ssh://git@github.com/acme/ghp.git", transport: "SSH" },
+  { retry: "git+ssh://git@github.com/acme/ghp.git", transport: "SSH" },
+  { retry: "ssh+git://git@github.com/acme/ghp.git", transport: "SSH" },
+  { retry: "SSH://git@github.com/acme/ghp.git", transport: "SSH" },
+  { retry: "https://github.com/acme/ghp.git", transport: "HTTPS" },
+  { retry: "http://git.example/acme/ghp.git", transport: "HTTPS" },
+]) {
+  test(`D-SG-22: names ${transport} as the transport of a retry over ${retry}`, () => {
+    // arrange
+    const plugin = {
+      status: "installed",
+      severity: "info",
+      needsReload: true,
+      name: "ghp",
+      reasons: [],
+      clone: { note: "via-https", url: "https://github.com/acme/ghp.git", retries: [retry] },
+    } satisfies ResolvedRow<PluginInstalledMessage>;
+
+    // act
+    const lines = composePluginLines(plugin, "user");
+
+    // assert
+    assert.deepStrictEqual(lines, [
+      "  ● ghp (installed)",
+      "    Cloning via HTTPS: https://github.com/acme/ghp.git",
+      `    HTTPS clone failed, retrying with ${transport}: ${retry}`,
+    ]);
+  });
+}
+
 test("renders the remedy cause line of a realized disabled row", () => {
   // arrange
   const row = {

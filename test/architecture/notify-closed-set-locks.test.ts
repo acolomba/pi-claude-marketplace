@@ -2,9 +2,10 @@
  * test/architecture/notify-closed-set-locks.test.ts -- closed-set length
  * tripwires for the notification vocabulary (OUT-08 / SNM-02).
  *
- * `Reason`, `StatusToken`, `PluginStatus`, `MarketplaceStatus`, and
- * `McpServerStatus` are the closed sets the renderer, the catalog, and the per-command
- * `satisfies CommandContext` checks are written against. The compile-time proofs
+ * `Reason`, `StatusToken`, `PluginStatus`, `MarketplaceStatus`,
+ * `McpServerStatus`, and `CloneNoteKind` are the closed sets the renderer, the
+ * catalog, and the per-command `satisfies CommandContext` checks are written
+ * against. The compile-time proofs
  * (`notify-reasons.ts`'s partition gate, the renderer's exhaustive switches) catch
  * a member that is REMOVED or RENAMED, but an ADDITIVE drift -- a new literal
  * appended to a set and given a home everywhere the type system looks -- is
@@ -29,6 +30,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type {
+  CloneNoteKind,
   ContentReason,
   MarketplaceStatus,
   McpServerStatus,
@@ -204,6 +206,12 @@ const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
   "project not trusted": true,
 };
 
+const CLONE_NOTE_KIND_ENROLLMENT: Record<CloneNoteKind, true> = {
+  "via-ssh": true,
+  "via-https": true,
+  "ssh-not-configured": true,
+};
+
 // Standalone notifications have their own discriminator set. Scoped prune
 // results and committed warnings are members; the cascade's absent kind remains optional.
 const NOTIFICATION_KIND_ENROLLMENT: Record<
@@ -286,6 +294,14 @@ test("ASTAT-02: McpServerStatus is the closed 12-entry MCP server status set", (
   assert.strictEqual(memberCount, 12);
 });
 
+test("D-SG-22: CloneNoteKind is the closed 3-entry clone note set", () => {
+  // act
+  const memberCount = Object.keys(CLONE_NOTE_KIND_ENROLLMENT).length;
+
+  // assert
+  assert.strictEqual(memberCount, 3);
+});
+
 test("standalone notification kinds include scoped prune outcomes exactly", () => {
   // act
   const memberCount = Object.keys(NOTIFICATION_KIND_ENROLLMENT).length;
@@ -311,6 +327,7 @@ void (true satisfies IsExact<keyof typeof STATUS_TOKEN_ENROLLMENT, StatusToken>)
 void (true satisfies IsExact<keyof typeof PLUGIN_STATUS_ENROLLMENT, PluginStatus>);
 void (true satisfies IsExact<keyof typeof MARKETPLACE_STATUS_ENROLLMENT, MarketplaceStatus>);
 void (true satisfies IsExact<keyof typeof MCP_SERVER_STATUS_ENROLLMENT, McpServerStatus>);
+void (true satisfies IsExact<keyof typeof CLONE_NOTE_KIND_ENROLLMENT, CloneNoteKind>);
 void (true satisfies IsExact<
   keyof typeof NOTIFICATION_KIND_ENROLLMENT,
   Exclude<NotificationMessage["kind"], undefined>

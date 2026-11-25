@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   appendLeakToError,
   GitCommandError,
+  GitHubTransportsFailedError,
   HostedManifestHttpError,
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
@@ -249,7 +250,14 @@ describe("classifyGitFailure", () => {
           failure: { kind: "https-auth", detail: "no-credential" },
         },
         { label: "an https-auth rejected", failure: { kind: "https-auth", detail: "rejected" } },
-        { label: "an ssh-auth", failure: { kind: "ssh-auth" } },
+        {
+          label: "an ssh-auth publickey",
+          failure: { kind: "ssh-auth", detail: "publickey" },
+        },
+        {
+          label: "an ssh-auth unconfirmed",
+          failure: { kind: "ssh-auth", detail: "unconfirmed" },
+        },
         { label: "an ssh-host-key-unknown", failure: { kind: "ssh-host-key-unknown" } },
         { label: "an ssh-host-key-changed", failure: { kind: "ssh-host-key-changed" } },
       ] satisfies ReadonlyArray<{ label: string; failure: GitFailure }>
@@ -417,6 +425,86 @@ describe("classifyGitFailure", () => {
 
     // assert
     assert.deepStrictEqual(classification, { reason: "source missing" });
+  });
+
+  for (const { title, last, expected } of [
+    {
+      title:
+        "OQ-8: classifies a both-failed GitHub clone whose SSH retry was refused as authentication required",
+      last: gitCommandFailure({ kind: "ssh-auth", detail: "publickey" }),
+      expected: { reason: "authentication required" },
+    },
+    {
+      title:
+        "OQ-8: classifies a both-failed GitHub clone whose last attempt was unreachable as network unreachable",
+      last: gitCommandFailure({ kind: "network" }),
+      expected: { reason: "network unreachable" },
+    },
+  ]) {
+    test(title, () => {
+      // arrange
+      const failure = new GitHubTransportsFailedError("plugin", [
+        {
+          transport: "https",
+          url: "https://github.com/acme/ghp.git",
+          error: gitCommandFailure({ kind: "https-auth", detail: "no-credential" }),
+        },
+        { transport: "ssh", url: "git@github.com:acme/ghp.git", error: last },
+      ]);
+
+      // act
+      const classification = classifyGitFailure(failure, PLUGIN_CLONE_RULE, REMOTE_URL);
+
+      // assert
+      assert.deepStrictEqual(classification, expected);
+    });
+  }
+
+  test("OQ-8: frames a both-failed GitHub clone's HTTP status with the URL its last attempt sent", () => {
+    // arrange
+    const failure = new GitHubTransportsFailedError("marketplace", [
+      {
+        transport: "ssh",
+        url: "git@github.com:acme/tools.git",
+        error: gitCommandFailure({ kind: "ssh-auth", detail: "unconfirmed" }),
+      },
+      {
+        transport: "https",
+        url: "https://github.com/acme/tools.git",
+        error: gitCommandFailure({ kind: "network", httpStatus: 503 }),
+      },
+    ]);
+
+    // act
+    const classification = classifyGitFailure(failure, MARKETPLACE_REFRESH_RULE, REMOTE_URL);
+
+    // assert
+    assert.deepStrictEqual(classification, {
+      reason: "network error",
+      frame: "503 on https://github.com/acme/tools.git",
+    });
+  });
+
+  test("OQ-8: gives a both-failed GitHub clone no frame when the caller names no remote URL", () => {
+    // arrange
+    const failure = new GitHubTransportsFailedError("marketplace", [
+      {
+        transport: "ssh",
+        url: "git@github.com:acme/tools.git",
+        error: gitCommandFailure({ kind: "ssh-auth", detail: "unconfirmed" }),
+      },
+      {
+        transport: "https",
+        url: "https://github.com/acme/tools.git",
+        error: gitCommandFailure({ kind: "network", httpStatus: 503 }),
+      },
+    ]);
+
+    // act
+    const classification = classifyGitFailure(failure, MARKETPLACE_REFRESH_RULE);
+
+    // assert
+    assert.deepStrictEqual(classification, { reason: "network error" });
   });
 });
 

@@ -15,11 +15,13 @@
 // process by its closed `kind` (SG-PRC-05, D-SG-01), `PinnedCommitMissingError`
 // from the pinned fetch, `StoredCredentialRejectedError` from the GAUTH-04
 // refusal in `platform/git.ts`, and `HostedManifestHttpError` from the hosted
-// catalog download (D-PL5-07). Any other error reaches only the `rule.unknown`
-// fallback.
+// catalog download (D-PL5-07). A `GitHubTransportsFailedError` from a GitHub
+// clone that failed over both transports takes its last attempt's rung (OQ-8).
+// Any other error reaches only the `rule.unknown` fallback.
 
 import {
   GitCommandError,
+  GitHubTransportsFailedError,
   HostedManifestHttpError,
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
@@ -50,6 +52,9 @@ const SOURCE_MISSING_HTTP_STATUSES = new Set([404, 410]);
  * D-PL7-01: classify a git clone, fetch, or materialize throw into the closed
  * reason set. The ladder:
  *
+ *   - a `GitHubTransportsFailedError`, a GitHub clone that failed over both
+ *     transports -> the classification of its last attempt, with that
+ *     attempt's URL as `remoteUrl` when the caller passes one (OQ-8);
  *   - a `GitCommandError` from the system git process -> the reason of its
  *     kind (`classifyGitCommandFailure`, SG-PRC-05);
  *   - a `PinnedCommitMissingError`, a pin that the fresh clone does not hold
@@ -95,6 +100,12 @@ export function classifyGitFailure(
     return undefined;
   }
 
+  if (error instanceof GitHubTransportsFailedError) {
+    // OQ-8: the last attempt decides, and a frame names the URL it sent.
+    const [, last] = error.attempts;
+    return classifyGitFailure(last.error, rule, remoteUrl === undefined ? undefined : last.url);
+  }
+
   if (error instanceof GitCommandError) {
     return classifyGitCommandFailure(error.failure, rule, remoteUrl);
   }
@@ -129,7 +140,8 @@ type GitFailureClassification = ReturnType<typeof classifyGitFailure>;
  *   - `git-missing` -> `git missing` (D-SG-07);
  *   - the HTTPS and SSH auth kinds and both host-key kinds ->
  *     `authentication required`; the answer reads the kind, so both
- *     `https-auth` details (D-SG-14, GAUTH-04) give the same reason;
+ *     `https-auth` details (D-SG-14, GAUTH-04) and both `ssh-auth` details
+ *     give the same reason;
  *   - `timeout` -> `network unreachable`;
  *   - `remote-error` -> `network error`: the host answered and refused;
  *   - `commit-missing` and `pin-mismatch` -> `source missing` (INR-03);

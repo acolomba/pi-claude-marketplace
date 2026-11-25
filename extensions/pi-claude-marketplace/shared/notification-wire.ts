@@ -3,6 +3,7 @@ import Type from "typebox";
 import type { Companion } from "./concerns/soft-dep.ts";
 import type { RowHint } from "./notification-resolve.ts";
 import type {
+  CloneNoteKind,
   MarketplaceStatus,
   McpConfigFileNotice,
   McpMigrationFileUnreadableRow,
@@ -178,6 +179,13 @@ const SCOPES = {
   project: true,
 } as const satisfies Record<Scope, true>;
 
+/** D-SG-22: the transport note kinds of a GitHub clone. */
+const CLONE_NOTE_KINDS = {
+  "via-ssh": true,
+  "via-https": true,
+  "ssh-not-configured": true,
+} as const satisfies Record<CloneNoteKind, true>;
+
 const ROW_HINTS = {
   "partial-install": true,
   "partial-update": true,
@@ -266,6 +274,7 @@ const REASON = literalEnum(REASONS);
 const SEVERITY = literalEnum(SEVERITIES);
 const SCOPE = literalEnum(SCOPES);
 const ROW_HINT = literalEnum(ROW_HINTS);
+const CLONE_NOTE_KIND = literalEnum(CLONE_NOTE_KINDS);
 const MCP_SERVER_STATUS = literalEnum(MCP_SERVER_STATUSES);
 const COMPANION = literalEnum(COMPANIONS);
 const MCP_CONFIG_FILE_NOTICE_KIND = literalEnum(MCP_CONFIG_FILE_NOTICE_KINDS);
@@ -279,6 +288,16 @@ const COUNT = Type.Integer({ minimum: 0 });
 /** D-11: one serialized `Error.cause` chain, head first. */
 const CAUSE = Type.Object(
   { causeChain: Type.Array(Type.String()), truncated: Type.Boolean() },
+  { additionalProperties: false },
+);
+
+/**
+ * D-SG-22: the transport note of a GitHub clone. `url` is the first attempt's
+ * URL in github.com terms (GHB-04); `retries` lists the URL of each later
+ * attempt, in order, and is absent when one attempt ran.
+ */
+const CLONE = Type.Object(
+  { note: CLONE_NOTE_KIND, url: Type.String(), retries: Type.Optional(Type.Array(Type.String())) },
   { additionalProperties: false },
 );
 
@@ -311,6 +330,7 @@ const PLUGIN_ROW = Type.Object(
     cause: Type.Optional(CAUSE),
     leaks: Type.Optional(Type.Array(Type.String())),
     rollbackPartial: Type.Optional(Type.Array(ROLLBACK_PHASE)),
+    clone: Type.Optional(CLONE),
   },
   { additionalProperties: false },
 );
@@ -329,6 +349,7 @@ const MARKETPLACE_BLOCK = Type.Object(
     status: Type.Optional(MARKETPLACE_STATUS),
     details: Type.Optional(MARKETPLACE_DETAILS),
     reasons: Type.Optional(Type.Array(REASON)),
+    clone: Type.Optional(CLONE),
   },
   { additionalProperties: false },
 );

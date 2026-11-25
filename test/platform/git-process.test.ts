@@ -1850,7 +1850,10 @@ describe("createGitProcess", () => {
       // assert
       assert.strictEqual(planted, plantedSsh.script);
       await assert.rejects(filled, rejectsAs("https-auth", 128));
-      await assert.rejects(listed, rejectsAs("ssh-auth", 128));
+      await assert.rejects(
+        listed,
+        rejectsWithFailure({ kind: "ssh-auth", detail: "unconfirmed" }, 128),
+      );
       await access(userSsh.record);
       await assert.rejects(access(helper.record), { code: "ENOENT" });
       await assert.rejects(access(plantedSsh.record), { code: "ENOENT" });
@@ -3503,7 +3506,10 @@ exec '${stub}' "$@"
     });
 
     // assert
-    await assert.rejects(fetched, rejectsAs("ssh-auth", 128));
+    await assert.rejects(
+      fetched,
+      rejectsWithFailure({ kind: "ssh-auth", detail: "unconfirmed" }, 128),
+    );
     assert.strictEqual(await readFile(record, "utf8"), `${fixture.root}\n${fixture.root}\n`);
   });
 });
@@ -3598,7 +3604,10 @@ exit 255
     const listed = git.run({ ...SSH_LIST, timeoutMs: 10_000 });
 
     // assert
-    await assert.rejects(listed, rejectsAs("ssh-auth", 128));
+    await assert.rejects(
+      listed,
+      rejectsWithFailure({ kind: "ssh-auth", detail: "unconfirmed" }, 128),
+    );
     // git's `-G` check fails, so the transport launch runs as the simple variant.
     assert.deepStrictEqual((await readFile(record, "utf8")).split("\n"), [
       "no-tty",

@@ -1195,6 +1195,74 @@ describe("resolveRows", () => {
     ]);
   });
 
+  test("D-SG-22: carries the clone note of a block and of a failed and an installed row unchanged", () => {
+    // arrange
+    const marketplaces: readonly MarketplaceNotificationMessage[] = [
+      {
+        name: "tools",
+        scope: "user",
+        status: "added",
+        clone: { note: "via-ssh", url: "git@github.com:acme/tools.git" },
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "ghp",
+            dependencies: [],
+            clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+          },
+          {
+            status: "failed",
+            severity: "error",
+            name: "lib",
+            reasons: ["authentication required"],
+            clone: {
+              note: "via-https",
+              url: "https://github.com/acme/lib.git",
+              retries: ["git@github.com:acme/lib.git"],
+            },
+          },
+        ],
+      },
+    ];
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved, [
+      {
+        name: "tools",
+        scope: "user",
+        status: "added",
+        clone: { note: "via-ssh", url: "git@github.com:acme/tools.git" },
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "ghp",
+            reasons: [],
+            clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+          },
+          {
+            status: "failed",
+            severity: "error",
+            name: "lib",
+            reasons: ["authentication required"],
+            clone: {
+              note: "via-https",
+              url: "https://github.com/acme/lib.git",
+              retries: ["git@github.com:acme/lib.git"],
+            },
+            failure: { leaks: [], rollbackPartial: [] },
+          },
+        ],
+      },
+    ] satisfies readonly ResolvedMarketplace[]);
+  });
+
   test("copies a non-failure row without a failure or dependencies key", () => {
     // arrange
     const marketplaces = marketplaceWith([
