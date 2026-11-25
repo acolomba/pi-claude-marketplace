@@ -5,7 +5,10 @@
 // probe, and only a probe that found the user's ssh authenticated puts SSH
 // first; any other answer clones over HTTPS first (OQ-1). A forced transport
 // clones once over HTTPS and asks nothing (D-SG-24, D-SG-21). Every other
-// source clones once, as written.
+// source clones once, as written. A url source whose address names a GitHub
+// repository notes the transport of its scheme (D-SG-22, OQ-3); Claude Code
+// notes no url clone, so this is the recorded decision that every GitHub
+// clone names its transport.
 //
 // The module is pure: the probe is a function the caller passes, called at
 // most once, and only when the plan needs its answer.
@@ -19,7 +22,7 @@
 // would hide the refusal's remedy.
 
 import { DeviceFlowUnavailableError, GitCommandError } from "../shared/errors.ts";
-import { GITHUB_HOST } from "../shared/github-base-url.ts";
+import { GITHUB_HOST, gitHubAddressOf } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
 import { isScpGitAddress } from "./git-url.ts";
@@ -76,6 +79,9 @@ export interface MarketplaceClonePlanInput {
 // An `ssh:`, `git+ssh:`, or `ssh+git:` URL, which git reaches over ssh.
 const SSH_URL = /^(?:ssh|git\+ssh|ssh\+git):/i;
 
+// An `https:` or `http:` URL.
+const HTTPS_URL = /^https?:/i;
+
 /**
  * OQ-1: whether a GitHub source was written as `owner/repo` (with a ref or
  * not), the one spelling Claude Code probes for. A GitHub URL clones as
@@ -122,13 +128,32 @@ function addressTransport(url: string): GitHubTransport {
 }
 
 /**
+ * D-SG-22, OQ-3: the note of a url source clone of `url` over `transport`.
+ * An address that folds to a GitHub repository (`gitHubAddressOf`) is noted
+ * by its scheme: `via-ssh` for an scp address or an ssh scheme, `via-https`
+ * for `https:` or `http:`. Any other scheme, and any other host, has none.
+ */
+function urlSourceNote(url: string, transport: GitHubTransport): CloneNoteKind | undefined {
+  if (gitHubAddressOf(url) === undefined) {
+    return undefined;
+  }
+
+  if (transport === "ssh") {
+    return "via-ssh";
+  }
+
+  return HTTPS_URL.test(url) ? "via-https" : undefined;
+}
+
+/**
  * SG-SSH-02, SG-SSH-03: the plan of a marketplace clone of `source`. A forced
  * transport gives one HTTPS attempt with the `via-https` note. A GitHub URL
  * gives one attempt as written, with the same note. An `owner/repo` source
  * asks the probe: `configured` puts SSH first with the `via-ssh` note, and any
  * other answer puts HTTPS first with the `ssh-not-configured` note. Either
  * order has the other transport behind its first attempt. A url source gives
- * one attempt as written and no note.
+ * one attempt as written, with the note `urlSourceNote` gives it, even while
+ * a transport is forced: the address clones as written (D-SG-21).
  */
 export async function planMarketplaceClone(
   input: MarketplaceClonePlanInput,
@@ -136,7 +161,13 @@ export async function planMarketplaceClone(
   const { source } = input;
   const written = networkCloneUrl(source);
   if (source.kind === "url") {
-    return { first: { transport: addressTransport(written), url: written }, after: noRetry };
+    const transport = addressTransport(written);
+    const note = urlSourceNote(written, transport);
+    return {
+      first: { transport, url: written },
+      ...(note !== undefined && { note }),
+      after: noRetry,
+    };
   }
 
   const https: TransportAttempt = { transport: "https", url: written };

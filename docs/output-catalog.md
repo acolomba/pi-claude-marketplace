@@ -2771,7 +2771,10 @@ A path-source marketplace with no `autoupdate` value takes the default for its n
 
 ```text
 ● claude-plugins-official [user] (added)
+  SSH not configured, cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git
 ```
+
+The line under the header names the transport the clone used, as Claude Code does (D-SG-22): `Cloning via SSH: <url>` when the user's ssh authenticates to github.com, `SSH not configured, cloning via HTTPS: <url>` otherwise, or `Cloning via HTTPS: <url>` when a GitHub URL or a forced https clone made no choice. A clone that retried adds one `<T1> clone failed, retrying with <T2>: <url>` line, and a failed add keeps the lines of the attempts it made. An add that cloned nothing (already added, a path source, a hosted catalog, a host that is not GitHub) has no such line.
 
 `marketplace add` writes no `autoupdate` value for any source kind (github or path). Without a value, a marketplace takes the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). Otherwise autoupdate is opt-in -- enabled later via an explicit `marketplace autoupdate`. The `added` state-change arm carries `(added)`; subsequent `marketplace list` surfaces show the `<autoupdate>` marker on the SUB-BRANCH B list-surface header only once autoupdate is on, by a set value or by the default. No reload-hint: a marketplace record is not a Pi-visible resource (SNM-33 / D-22-01).
 
