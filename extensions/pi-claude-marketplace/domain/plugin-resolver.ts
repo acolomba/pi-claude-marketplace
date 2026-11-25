@@ -2,7 +2,7 @@
 //
 // Plugin compatibility resolver. Returns the discriminated `ResolvedPlugin`
 // union locked by NFR-7: TypeScript refuses to compile any code that reads
-// `pluginRoot` from the structurally-broken `unavailable` variant.
+// `pluginRoot` from the `unavailable` variant.
 //
 // Strict resolution combines entry, manifest, conventional, and standalone declarations.
 //
@@ -14,8 +14,9 @@
 // discriminator. The three-way `state` field keeps the secondary
 // `"installable" | "partially-available" | "unavailable"` detail. Both true
 // arms carry `pluginRoot` + component lists (D-64-06); the false `unavailable`
-// arm is the minimal structural-defect arm and never carries `pluginRoot`
-// (D-64-05, NFR-7). Structural precedence
+// arm is the minimal arm of a plugin that cannot install: a structural
+// defect, or no supported component (D-NSC-01). It never carries
+// `pluginRoot` (D-64-05, NFR-7). Structural precedence
 // (D-64-07): a plugin that is both structurally broken AND declares
 // unsupported component kinds resolves `unavailable`.
 //
@@ -902,8 +903,8 @@ async function runStructuralStages(args: {
   return flags.includes(true);
 }
 
-// D-P3-01: a supported kind, or a declared MCP server that at least one MCP
-// implementation runs. `droppedMcpServers` names the servers every
+// D-NSC-01 / D-P3-01: a supported kind, or a declared MCP server that at least
+// one MCP implementation runs. `droppedMcpServers` names the servers every
 // implementation blocks. `mcpServers` is not read, because it holds only the
 // servers pi-mcp-adapter runs (MSEL-04).
 function hasSupportedComponent(partial: PartialResolution): boolean {
@@ -915,7 +916,7 @@ function hasSupportedComponent(partial: PartialResolution): boolean {
   return Object.keys(partial.declaredMcpServers).some((server) => !blocked.has(server));
 }
 
-// D-90-05: one note for each unsupported kind. A kind whose stage writes no
+// D-NSC-01 / D-90-05: one note for each unsupported kind. A kind whose stage writes no
 // note (a dropped hook, a blocked server, a bundle) gets a `contains <kind>`
 // note in front of the plugin's own notes. `userConfig` has its own note, the
 // unset-options note.
@@ -942,7 +943,7 @@ function unsupportedKindNotes(partial: PartialResolution): string[] {
  * is a Pi capability gap: Claude Code installs such a plugin because it hosts
  * LSP servers and hook modules, but Pi hosts none of the plugin's components,
  * so PR-3's partially-available arm would admit an install that writes
- * nothing.
+ * nothing. D-NSC-01 sets this rule and amends PR-3.
  *
  * `resolutionFor` keeps its per-implementation view. A plugin whose servers
  * one implementation blocks still installs a neutral record that works when
@@ -1026,8 +1027,9 @@ export function requireInstallable(
     // IN-02 / RSTATE-05: thread the typed unsupported-kind list so the
     // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
     // via the same `narrowUnsupportedKinds` path `list`/`info` use. Only the
-    // `partially-available` arm carries the field; `unavailable` keeps an empty list so
-    // its structural reasons stay sourced from `notes`.
+    // `partially-available` arm carries the field; `unavailable` keeps an empty list,
+    // and its reasons come from `notes`: a structural note, or the kind notes of
+    // D-NSC-01.
     unsupportedKinds: resolved.unsupported,
   });
 }

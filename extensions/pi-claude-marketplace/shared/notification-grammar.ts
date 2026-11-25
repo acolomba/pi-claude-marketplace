@@ -721,7 +721,7 @@ function pluginInfoStatusGlyph(status: PluginInfoRow["status"]): string {
       return ICON_REMOTE;
     case "partially-available":
       // USTAT-01 / D-64-01: not-installed, partially-available info row -- the
-      // dedicated `⊖` glyph, distinct from the `⊘` structural-unavailable arm.
+      // dedicated `⊖` glyph, distinct from the `⊘` unavailable arm.
       return ICON_PARTIALLY_AVAILABLE;
     case "unavailable":
     case "failed":

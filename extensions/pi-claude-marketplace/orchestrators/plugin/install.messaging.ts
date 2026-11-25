@@ -38,8 +38,9 @@ import type { InstallPluginOutcome } from "../types.ts";
  * install's private status set. A single-target install emits exactly one of
  * these: a success `installed` row, a `failed` row, or -- when the
  * entity-shape classifier narrows a not-installable error -- an `unavailable`
- * row (structural defect) or, per XSURF-01, a `partially-available` row (the
- * partially-available arm, consistent with `list` / `info`).
+ * row (a structural defect, or no supported component, D-NSC-01) or, per
+ * XSURF-01, a `partially-available` row (the partially-available arm,
+ * consistent with `list` / `info`).
  *
  * DFEN-04: `disabled` joins for the install that landed disabled because the
  * plugin's own `defaultEnabled` declaration said so. The install ran to
@@ -112,8 +113,9 @@ export const INSTALL_CONTEXT = {
  * The partially-available arm surfaces as the resolver-state-driven `partially-available`
  * token (XSURF-01: consistent with how `list` / `info` describe the same
  * plugin) and ALSO carries the `--partial` hint trailer (`--partial` can degrade-install
- * it). The structural arm stays the `unavailable` token with NO hint (force
- * cannot degrade-install a structural defect). The split keys on
+ * it). The `unavailable` arm keeps its token with NO hint, because `--partial`
+ * cannot install a structural defect or a plugin with no supported component
+ * (D-NSC-01). The split keys on
  * `entityErrorRow.partialable`, NOT the reason brace -- `{unsupported source}`
  * appears on both arms; only the resolver verdict distinguishes them. Neither
  * message carries a `cause?` field per D-15-01 -- the reason text carries the
@@ -588,11 +590,11 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
   // On the partially-available arm it is a per-kind COMPONENT marker, routed
   // through the SAME shared helper `list`/`info` consume so a multi-kind
   // plugin emits a byte-identical marker set on every surface (CR-01 /
-  // D-64-02 / D-90-05). On the structural `unavailable` arm the note stays on
-  // the SOURCE axis, mirroring `narrowResolverNotes`'s permissive catch-all.
-  // The component axis belongs to the partially-available arm ONLY (D-64-07
-  // structural precedence); leaking it onto the structural arm was the
-  // SURF-01 divergence.
+  // D-64-02 / D-90-05). On the `unavailable` arm this handler sees such a note
+  // only beside a structural note, and there the note stays on the SOURCE
+  // axis, mirroring `narrowResolverNotes`'s permissive catch-all (SURF-01,
+  // D-64-07). For a plugin that is unavailable only for its kinds,
+  // `narrowKindNotes` answers before this handler runs (D-NSC-01).
   if (reason.startsWith(MANIFEST_FIELD_NOTE_PREFIX)) {
     return partialable
       ? narrowUnsupportedKinds([reason.slice(MANIFEST_FIELD_NOTE_PREFIX.length)])
