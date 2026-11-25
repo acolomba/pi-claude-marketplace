@@ -1150,6 +1150,53 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   ]);
 });
 
+test("D-SG-22: notify renders a marketplace's clone note under its header and a plugin's under its row", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  ctx.mode = "print";
+  ctx.hasUI = false;
+  const run = runWithAllLoaded();
+  const msg: NotificationMessage = {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "user",
+        status: "added",
+        clone: { note: "via-ssh", url: "git@github.com:acme/tools.git" },
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "ghp",
+            version: "1.0.0",
+            dependencies: [],
+            clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
+          },
+        ],
+      },
+    ],
+  };
+
+  // act
+  notify(ctx, run, msg);
+
+  // assert
+  assert.deepEqual(
+    ctx.ui.notify.mock.calls.map((call) => call.arguments),
+    [
+      [
+        [
+          "● tools [user] (added)",
+          "  Cloning via SSH: git@github.com:acme/tools.git",
+          "  ● ghp v1.0.0 (installed)",
+          "    Cloning via HTTPS: https://github.com/acme/ghp.git",
+        ].join("\n"),
+      ],
+    ],
+  );
+});
+
 test("notify renders updated plugin with version arrow + mcp dep marker", (t) => {
   // arrange
   const ctx = createContext(t);

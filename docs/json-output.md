@@ -623,14 +623,15 @@ An unexpected command failure or a final outcome when ordinary delivery failed. 
 
 <!-- fields: marketplace-block -->
 
-| Field path | Type                                        | Presence | Meaning                                              |
-| ---------- | ------------------------------------------- | -------- | ---------------------------------------------------- |
-| `name`     | string                                      | required | Marketplace name.                                    |
-| `scope`    | Scope                                       | required | Marketplace scope.                                   |
-| `plugins`  | [Plugin row](#plugin-row)[]                 | required | Plugin rows in model order. An empty array is valid. |
-| `status`   | MarketplaceStatus                           | optional | Result of the marketplace operation.                 |
-| `details`  | [Marketplace details](#marketplace-details) | optional | Autoupdate and last-update information.              |
-| `reasons`  | Reason[]                                    | optional | Resolved marketplace reasons.                        |
+| Field path | Type                                        | Presence | Meaning                                                                  |
+| ---------- | ------------------------------------------- | -------- | ------------------------------------------------------------------------ |
+| `name`     | string                                      | required | Marketplace name.                                                        |
+| `scope`    | Scope                                       | required | Marketplace scope.                                                       |
+| `plugins`  | [Plugin row](#plugin-row)[]                 | required | Plugin rows in model order. An empty array is valid.                     |
+| `status`   | MarketplaceStatus                           | optional | Result of the marketplace operation.                                     |
+| `details`  | [Marketplace details](#marketplace-details) | optional | Autoupdate and last-update information.                                  |
+| `reasons`  | Reason[]                                    | optional | Resolved marketplace reasons.                                            |
+| `clone`    | [Clone note](#clone-note)                   | optional | Transport of the GitHub clone that the command ran for this marketplace. |
 
 <!-- /fields -->
 
@@ -656,6 +657,7 @@ An unexpected command failure or a final outcome when ordinary delivery failed. 
 | `cause`           | [Cause](#cause)                     | optional | Serialized cause line: a failure, a remedy, or the constraint disclosure of an updated, reinstalled, or partially installed row.                                                                                                                                                                                                                                                                    |
 | `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                                                                                                                                                                                                                                                                                                                                               |
 | `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                                                                                                                                                                                                                                                                                                                                                |
+| `clone`           | [Clone note](#clone-note)           | optional | Transport of the GitHub clone that produced this row.                                                                                                                                                                                                                                                                                                                                               |
 
 <!-- /fields -->
 
@@ -910,6 +912,20 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 
 <!-- /fields -->
 
+### Clone note
+
+A GitHub clone names the transport it used first. `retries` names each later attempt, in order. The text form shows the note as lines under its marketplace header or plugin row.
+
+<!-- fields: clone-note -->
+
+| Field path | Type          | Presence | Meaning                                                           |
+| ---------- | ------------- | -------- | ----------------------------------------------------------------- |
+| `note`     | CloneNoteKind | required | How the first attempt chose its transport.                        |
+| `url`      | string        | required | URL of the first attempt, in github.com terms.                    |
+| `retries`  | string[]      | optional | URL of each later attempt, in order. Absent when one attempt ran. |
+
+<!-- /fields -->
+
 ### Tally
 
 All counts are nonnegative integers. The failure and warning counts are always present when the tally exists.
@@ -958,6 +974,8 @@ These are native wire values, including spaces and hyphens. They are not the lab
 `MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`, `will add`, `will remove`.
 
 `RowHint`: `partial-install`, `partial-update`, `catalog-partial-update`, `stale-gate-update`, `enable`.
+
+`CloneNoteKind`: `via-ssh` (`Cloning via SSH`), `via-https` (`Cloning via HTTPS`), `ssh-not-configured` (`SSH not configured, cloning via HTTPS`).
 
 `Reason`: `up-to-date`, `not found`, `already installed`, `already added`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`, `marketplace in local layer only`, `marketplace in base layer only`, `plugin in local layer only`, `plugin in base layer only`, `already installed in base layer`, `already installed in local layer`, `still installed in base layer`, `still installed in local layer`, `disabled in local layer`, `enabled in local layer`, `network error`, `requires mcp`, `requires builtin mcp`, `options not set`, `git missing`.
 

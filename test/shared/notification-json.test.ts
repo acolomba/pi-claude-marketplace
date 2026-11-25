@@ -320,6 +320,13 @@ interface ExpectedRow {
   readonly cause?: ExpectedCause;
   readonly leaks?: readonly string[];
   readonly rollbackPartial?: readonly { readonly phase: string; readonly cause?: ExpectedCause }[];
+  readonly clone?: ExpectedClone;
+}
+
+interface ExpectedClone {
+  readonly note: string;
+  readonly url: string;
+  readonly retries?: readonly string[];
 }
 
 interface ExpectedBlock {
@@ -329,6 +336,7 @@ interface ExpectedBlock {
   readonly status?: MarketplaceStatus;
   readonly details?: { readonly autoupdate: boolean; readonly lastUpdatedAt?: string };
   readonly reasons?: readonly Reason[];
+  readonly clone?: ExpectedClone;
 }
 
 const INFO_ENVELOPE: ResolvedEnvelope = {
@@ -1265,6 +1273,100 @@ test("keeps a cascade row named by its plugin key as the id instead of appending
       },
     ]),
   );
+});
+
+test("D-SG-22: carries the clone notes of a block and its rows and none on a row without one", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "tools",
+      scope: "user",
+      status: "added",
+      clone: {
+        note: "via-ssh",
+        url: "git@github.com:acme/tools.git",
+        retries: ["https://github.com/acme/tools.git"],
+      },
+      plugins: [
+        {
+          status: "installed",
+          name: "ghp",
+          severity: "info",
+          needsReload: true,
+          reasons: [],
+          clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+        },
+        { status: "installed", name: "local", severity: "info", needsReload: true, reasons: [] },
+      ],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "tools",
+        scope: "user",
+        status: "added",
+        clone: {
+          note: "via-ssh",
+          url: "git@github.com:acme/tools.git",
+          retries: ["https://github.com/acme/tools.git"],
+        },
+        plugins: [
+          {
+            status: "installed",
+            name: "ghp",
+            id: "ghp@tools",
+            reasons: [],
+            scope: "user",
+            clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+          },
+          { status: "installed", name: "local", id: "local@tools", reasons: [], scope: "user" },
+        ],
+      },
+    ]),
+  );
+  assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
+});
+
+test("D-SG-22: copies the clone retries so the payload shares no array with the row", () => {
+  // arrange
+  const retries = ["https://github.com/acme/tools.git"];
+  const presentation = presentationOf([
+    {
+      name: "tools",
+      scope: "user",
+      status: "added",
+      clone: { note: "via-ssh", url: "git@github.com:acme/tools.git", retries },
+      plugins: [],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.ok("marketplaces" in payload);
+  const clone = payload.marketplaces[0]?.clone;
+  assert.deepStrictEqual(clone, {
+    note: "via-ssh",
+    url: "git@github.com:acme/tools.git",
+    retries: ["https://github.com/acme/tools.git"],
+  });
+  assert.notStrictEqual(clone?.retries, retries);
 });
 
 test("gives a failed row whose subject is a marketplace its name alone as the id", () => {

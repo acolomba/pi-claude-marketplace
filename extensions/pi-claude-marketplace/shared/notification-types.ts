@@ -419,10 +419,33 @@ export interface TransitionMessageBase extends MessageBase {
   readonly needsReload: boolean;
 }
 
+/**
+ * D-SG-22: how a GitHub clone chose its first transport, in Claude Code's
+ * words. `via-ssh` is its `Cloning via SSH`, `via-https` its `Cloning via
+ * HTTPS`, and `ssh-not-configured` its `SSH not configured, cloning via HTTPS`.
+ * A bare literal union like the other closed sets.
+ */
+export type CloneNoteKind = "via-ssh" | "via-https" | "ssh-not-configured";
+
+/**
+ * D-SG-22: the transport note of a row whose command ran a GitHub clone. `url`
+ * is the first attempt's URL in github.com terms (GHB-04). `retries` holds the
+ * URL of each later attempt, in order, and is absent when one attempt ran. The
+ * text strategy shows the note as lines under the row in Claude Code's words;
+ * SG-ERR-01 settles the final wording.
+ */
+export interface CloneTransportNote {
+  readonly note: CloneNoteKind;
+  readonly url: string;
+  readonly retries?: readonly string[];
+}
+
 /** Installed plugin row. */
 export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly status: "installed";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
@@ -445,6 +468,8 @@ export interface VersionCommits {
 export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly status: "updated";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly from: string;
   readonly to: string;
   /** UPR-02: present only when the producer decided the arrow names commits. */
@@ -478,6 +503,8 @@ export interface RevisionMoveFields {
 export interface PluginReinstalledMessage extends TransitionMessageBase, RevisionMoveFields {
   readonly status: "reinstalled";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
@@ -557,6 +584,8 @@ export interface PluginDisabledMessage extends TransitionMessageBase {
 export interface PluginAvailableMessage extends MessageBase {
   readonly status: "available";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly version?: string;
   readonly description?: string;
   readonly reasons?: readonly ContentReason[];
@@ -575,6 +604,8 @@ export interface PluginRemoteMessage extends MessageBase {
 export interface PluginUnavailableMessage extends MessageBase {
   readonly status: "unavailable";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly description?: string;
@@ -585,6 +616,8 @@ export interface PluginUnavailableMessage extends MessageBase {
 export interface PluginPartiallyAvailableMessage extends MessageBase {
   readonly status: "partially-available";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly description?: string;
@@ -605,6 +638,8 @@ export interface PluginUpgradableMessage extends MessageBase {
 export interface PluginPartiallyInstalledMessage extends MessageBase, RevisionMoveFields {
   readonly status: "partially-installed";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly dependencies?: readonly Dependency[];
   readonly version?: string;
@@ -637,6 +672,8 @@ export interface PluginFailedMessage extends MessageBase, RevisionMoveFields {
   readonly status: "failed";
   readonly severity: "error" | "warning";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
@@ -943,6 +980,8 @@ function settledRowVersion(
 /** Fields shared by every marketplace notification row. */
 export interface MpCommon extends MessageBase {
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly scope: Scope;
   readonly plugins: readonly PluginNotificationMessage[];
 }

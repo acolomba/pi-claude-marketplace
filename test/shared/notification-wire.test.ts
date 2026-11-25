@@ -78,6 +78,11 @@ function failedRow(): Record<string, unknown> {
     cause: { causeChain: ["boom"], truncated: false },
     leaks: ["leak"],
     rollbackPartial: [{ phase: "skills", cause: { causeChain: ["undo"], truncated: true } }],
+    clone: {
+      note: "via-ssh",
+      url: "git@github.com:acme/ghp.git",
+      retries: ["https://github.com/acme/ghp.git"],
+    },
   };
 }
 
@@ -100,6 +105,7 @@ function cascadePayloadWith(row: Record<string, unknown>): Record<string, unknow
         status: "failed",
         details: { autoupdate: true, lastUpdatedAt: "2026-10-03T00:00:00.000Z" },
         reasons: ["lock held"],
+        clone: { note: "ssh-not-configured", url: "https://github.com/acme/mp.git" },
         plugins: [
           row,
           {
@@ -186,6 +192,44 @@ for (const { title, mutate, expectedErrors } of [
       delete row.reasons;
     },
     expectedErrors: [{ keyword: "required", instancePath: ROW }],
+  },
+  {
+    title: "D-SG-22: rejects a clone note kind outside the closed set",
+    mutate: (row: Record<string, unknown>, _payload: Record<string, unknown>): void => {
+      row.clone = { note: "via-git", url: "https://github.com/acme/ghp.git" };
+    },
+    expectedErrors: [{ keyword: "enum", instancePath: `${ROW}/clone/note` }],
+  },
+  {
+    title: "D-SG-22: rejects a clone retry that is not a URL string",
+    mutate: (row: Record<string, unknown>, _payload: Record<string, unknown>): void => {
+      row.clone = { note: "via-https", url: "https://github.com/acme/ghp.git", retries: [1] };
+    },
+    expectedErrors: [{ keyword: "type", instancePath: `${ROW}/clone/retries/0` }],
+  },
+  {
+    title: "D-SG-22: rejects a clone note without its URL",
+    mutate: (row: Record<string, unknown>, _payload: Record<string, unknown>): void => {
+      row.clone = { note: "via-ssh" };
+    },
+    expectedErrors: [{ keyword: "required", instancePath: `${ROW}/clone` }],
+  },
+  {
+    title: "D-SG-22: rejects a clone property the schema does not declare",
+    mutate: (_row: Record<string, unknown>, payload: Record<string, unknown>): void => {
+      payload.marketplaces = [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [],
+          clone: { note: "via-ssh", url: "git@github.com:acme/mp.git", transport: "ssh" },
+        },
+      ];
+    },
+    expectedErrors: [
+      { keyword: "boolean", instancePath: "/marketplaces/0/clone/transport" },
+      { keyword: "additionalProperties", instancePath: "/marketplaces/0/clone" },
+    ],
   },
   {
     title: "rejects schemaVersion 2",

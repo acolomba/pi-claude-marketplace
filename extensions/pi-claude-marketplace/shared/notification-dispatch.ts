@@ -29,6 +29,7 @@
 import { hookDebugLog } from "./debug-log.ts";
 import { resolveCommandError } from "./notification-command-error.ts";
 import {
+  composeMarketplaceCloneLines,
   composePluginLines,
   composeReconcileAppliedBody,
   formatEnvelopeArguments,
@@ -555,13 +556,14 @@ function foldAdvisories(
 }
 
 /**
- * One text block per marketplace: its header, then its plugin lines. It writes
- * the same lines as grammar's `composeMarketplaceBlock`; the dispatch and
- * notify-context owner suites pin the bytes.
+ * One text block per marketplace: its header, its clone note (D-SG-22), then
+ * its plugin lines. It writes the same lines as grammar's
+ * `composeMarketplaceBlock`; the dispatch and notify-context owner suites pin
+ * the bytes.
  */
 function composeContextBlocks(marketplaces: readonly ResolvedMarketplace[]): string[] {
   return marketplaces.map((mp) => {
-    const lines = [renderMpHeader(mp)];
+    const lines = [renderMpHeader(mp), ...composeMarketplaceCloneLines(mp)];
     for (const row of mp.plugins) {
       lines.push(...composePluginLines(row, mp.scope));
     }

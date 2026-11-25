@@ -16,6 +16,7 @@ import type {
 import type { NotificationOrigin } from "./notification-run.ts";
 import type {
   BackgroundUpdatePlugin,
+  CloneTransportNote,
   MarketplaceDetails,
   MarketplaceInfoMessage,
   McpMigrationRow,
@@ -454,6 +455,7 @@ function wireBlock(mp: ResolvedMarketplace) {
     ...(mp.status === undefined ? {} : { status: mp.status }),
     ...("details" in mp ? { details: wireDetails(mp.details) } : {}),
     ...("reasons" in mp ? { reasons: [...mp.reasons] } : {}),
+    ...wireClone(mp.clone),
     plugins: mp.plugins.map((row) => wireRow(row, mp)),
   };
 }
@@ -474,6 +476,22 @@ function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
     ...("partial" in row ? { partial: row.partial } : {}),
     ...(row.hint === undefined ? {} : { hint: row.hint }),
     ...(row.failure === undefined ? {} : wireFailure(row.failure)),
+    ...wireClone("clone" in row ? row.clone : undefined),
+  };
+}
+
+/** D-SG-22: the `clone` member of a block or row whose producer set a clone note, or no member. */
+function wireClone(clone: CloneTransportNote | undefined) {
+  if (clone === undefined) {
+    return {};
+  }
+
+  return {
+    clone: {
+      note: clone.note,
+      url: clone.url,
+      ...(clone.retries === undefined ? {} : { retries: [...clone.retries] }),
+    },
   };
 }
 

@@ -234,6 +234,16 @@
                         },
                         "additionalProperties": false
                       }
+                    },
+                    "clone": {
+                      "type": "object",
+                      "required": ["note", "url"],
+                      "properties": {
+                        "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                        "url": { "type": "string" },
+                        "retries": { "type": "array", "items": { "type": "string" } }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "additionalProperties": false
@@ -349,6 +359,16 @@
                     "git missing"
                   ]
                 }
+              },
+              "clone": {
+                "type": "object",
+                "required": ["note", "url"],
+                "properties": {
+                  "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                  "url": { "type": "string" },
+                  "retries": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": false
@@ -599,6 +619,16 @@
                         },
                         "additionalProperties": false
                       }
+                    },
+                    "clone": {
+                      "type": "object",
+                      "required": ["note", "url"],
+                      "properties": {
+                        "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                        "url": { "type": "string" },
+                        "retries": { "type": "array", "items": { "type": "string" } }
+                      },
+                      "additionalProperties": false
                     }
                   },
                   "additionalProperties": false
@@ -714,6 +744,16 @@
                     "git missing"
                   ]
                 }
+              },
+              "clone": {
+                "type": "object",
+                "required": ["note", "url"],
+                "properties": {
+                  "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                  "url": { "type": "string" },
+                  "retries": { "type": "array", "items": { "type": "string" } }
+                },
+                "additionalProperties": false
               }
             },
             "additionalProperties": false

@@ -20,6 +20,8 @@ import type {
   AutoapplyFileValue,
   AutoapplyStatusSurface,
   BackgroundUpdatePlugin,
+  CloneNoteKind,
+  CloneTransportNote,
   MarketplaceDetails,
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
@@ -1020,7 +1022,7 @@ export function renderPluginInfo(message: PluginInfoMessage): string {
 function composeMarketplaceBlock(mp: ResolvedMarketplace): string {
   // The header formats `mp.reasons` as given; resolve composes soft-dep
   // markers on plugin rows only, so none can leak onto an mp-level row.
-  const lines: string[] = [renderMpHeader(mp)];
+  const lines: string[] = [renderMpHeader(mp), ...composeMarketplaceCloneLines(mp)];
   for (const p of mp.plugins) {
     lines.push(...composePluginLines(p, mp.scope));
   }
@@ -1090,7 +1092,65 @@ function isDescriptionBearingRow(
 }
 
 /**
- * Composes a resolved row, then its description, hint, and failure trailers.
+ * D-SG-22: Claude Code's line for the first transport a GitHub clone chose.
+ * SG-ERR-01 settles the final wording.
+ */
+const CLONE_NOTE_LEADS = {
+  "via-ssh": "Cloning via SSH",
+  "via-https": "Cloning via HTTPS",
+  "ssh-not-configured": "SSH not configured, cloning via HTTPS",
+} as const satisfies Record<CloneNoteKind, string>;
+
+/** An `ssh:`, `git+ssh:`, or `ssh+git:` URL. */
+const SSH_SCHEME_URL = /^(?:ssh|git\+ssh|ssh\+git):\/\//i;
+
+/** An scp address such as `git@github.com:owner/repo.git`: no slash before its first colon. */
+const SCP_ADDRESS = /^[^/:]+:(?!\/\/)/;
+
+/** The transport a clone of `url` runs over, in Claude Code's words. */
+function cloneTransport(url: string): "SSH" | "HTTPS" {
+  return SSH_SCHEME_URL.test(url) || SCP_ADDRESS.test(url) ? "SSH" : "HTTPS";
+}
+
+/**
+ * D-SG-22: the lines of a clone note, each after `indent`: Claude Code's line
+ * for the first attempt, then one `<T1> clone failed, retrying with <T2>:
+ * <url>` line per later attempt, where `<T1>` is the transport of the attempt
+ * before it. A row or block without a note has no lines.
+ */
+function composeCloneNoteLines(clone: CloneTransportNote | undefined, indent: string): string[] {
+  if (clone === undefined) {
+    return [];
+  }
+
+  const lines = [`${indent}${CLONE_NOTE_LEADS[clone.note]}: ${clone.url}`];
+  let previous = clone.url;
+  for (const url of clone.retries ?? []) {
+    const retry = `${cloneTransport(previous)} clone failed, retrying with ${cloneTransport(url)}`;
+    lines.push(`${indent}${retry}: ${url}`);
+    previous = url;
+  }
+
+  return lines;
+}
+
+/**
+ * D-SG-22: the clone note lines of a marketplace block, indented under its
+ * header like its plugin rows. Every block composer writes them right after
+ * `renderMpHeader`.
+ */
+export function composeMarketplaceCloneLines(mp: ResolvedMarketplace): string[] {
+  return composeCloneNoteLines(mp.clone, "  ");
+}
+
+/** The clone note of a row whose status can carry one. */
+function rowCloneNote(row: ResolvedRow): CloneTransportNote | undefined {
+  return "clone" in row ? row.clone : undefined;
+}
+
+/**
+ * Composes a resolved row, then its description, clone note, hint, and
+ * failure trailers.
  *
  * D-13: the argument's type must not contain a producer row that declares
  * `dependencies`, because `resolveRows` composes those markers into `reasons`.
@@ -1108,6 +1168,8 @@ export function composePluginLines<R extends ResolvedRow>(
   if (isDescriptionBearingRow(p) && p.description !== undefined && p.description.length > 0) {
     lines.push(`    ${truncateDescription(p.description)}`);
   }
+
+  lines.push(...composeCloneNoteLines(rowCloneNote(p), "    "));
 
   // D-10: the resolved hint id selects its frozen 4-space-indented trailer.
   // The literals interpolate nothing (T-69-01).
