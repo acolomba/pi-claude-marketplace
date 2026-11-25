@@ -38,6 +38,30 @@ Feature: Marketplace update
       | source kind | source                           | cause chain                                                                                                                      |
       | url         | https://{git host}/acme/zeta.git | Failed to update marketplace "zeta"., marketplace.json schema invalid: /plugins: must be array |
 
+  Scenario Outline: A bare update continues after a github marketplace fails and names its clone transport
+    Given the marketplace "zeta" is published as a <source kind> source
+    Given the marketplace "alpha" is published as a dir source
+    Given the marketplace "beta" is published as a dir source
+    Given the marketplace "zeta" is added to the project scope
+    Given the marketplace "alpha" is added to the project scope
+    Given the marketplace "beta" is added to the user scope
+    Given the manifest of the marketplace "zeta" to update breaks the manifest schema
+    When the user runs "/claude:plugin marketplace update"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                      | tally label        | tally failures | tally warnings | tally success count |
+      | cascade | error    | false        | Some operations have failed. | Marketplace update | 2              | 0              |                     |
+      | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
+      | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id   | name | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated | marketplace clone note | marketplace clone url            |
+      | zeta             | project           | failed             |                     | zeta | zeta | failed | invalid manifest | project |       |                  | <cause chain> | false           | via-https              | https://github.com/acme/zeta.git |
+      | alpha            | project           | skipped            | up-to-date          |      |      |        |                  |         |       |                  |               |                 |                        |                                  |
+      | beta             | user              | skipped            | up-to-date          |      |      |        |                  |         |       |                  |               |                 |                        |                                  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | zeta  | <source>                  |
+      | alpha | {home}/marketplaces/alpha |
+
     @github
     Examples:
       | source kind | source    | cause chain                                                                                                                      |
@@ -72,6 +96,26 @@ Feature: Marketplace update
     Examples:
       | source kind | scope   |
       | url         | project |
+
+  Scenario Outline: A bare update refreshes the only populated scope of a github marketplace and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the <scope> scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"tools","owner":{"name":"features"},"plugins":[],"description":"Updated tools"}
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | <scope>           | updated            | via-https              | https://github.com/acme/tools.git |
 
     @github
     Examples:
@@ -208,6 +252,26 @@ Feature: Marketplace update
       | source kind |
       | url         |
 
+  Scenario Outline: A changed github marketplace refreshes without plugin rows and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"tools","owner":{"name":"features"},"plugins":[],"description":"Updated tools"}
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | via-https              | https://github.com/acme/tools.git |
+
     @github
     Examples:
       | source kind |
@@ -250,6 +314,30 @@ Feature: Marketplace update
     Examples:
       | source kind | published manifest                                        | refreshed manifest                                                              |
       | url         | {"name":"tools","owner":{"name":"features"},"plugins":[]} | {\n  "name": "tools",\n  "owner": { "name": "features" },\n  "plugins": []\n}\n |
+
+  Scenario Outline: Whitespace and object key order do not change a github marketplace, whose refresh names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" publishes this manifest:
+      """
+      <published manifest>
+      """
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      <refreshed manifest>
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | marketplace clone note | marketplace clone url             |
+      | tools            | project           | skipped            | up-to-date          | via-https              | https://github.com/acme/tools.git |
 
     @github
     Examples:
@@ -294,6 +382,30 @@ Feature: Marketplace update
       | source kind | published manifest                                        | refreshed manifest                                                                       |
       | url         | {"name":"tools","owner":{"name":"features"},"plugins":[]} | { "name":"tools", "owner":{"name":"features"}, "plugins":[], "vendor":{"revision":1} }\n |
 
+  Scenario Outline: An unknown manifest field changes the github marketplace, whose refresh names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" publishes this manifest:
+      """
+      <published manifest>
+      """
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      <refreshed manifest>
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | via-https              | https://github.com/acme/tools.git |
+
     @github
     Examples:
       | source kind | published manifest                                        | refreshed manifest                                                                       |
@@ -337,6 +449,30 @@ Feature: Marketplace update
       | source kind | published manifest                                                                                   | refreshed manifest                                                                                           |
       | url         | {"name":"tools","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]} | { "name":"tools", "plugins":[ {"name":"alpha","source":"./alpha"}, {"name":"zebra","source":"./zebra"} ] }\n |
 
+  Scenario Outline: Reordering a manifest array changes the github marketplace, whose refresh names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" publishes this manifest:
+      """
+      <published manifest>
+      """
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      <refreshed manifest>
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | via-https              | https://github.com/acme/tools.git |
+
     @github
     Examples:
       | source kind | published manifest                                                                                   | refreshed manifest                                                                                           |
@@ -375,6 +511,30 @@ Feature: Marketplace update
     Examples:
       | source kind |
       | url         |
+
+  Scenario Outline: An isolated dependency entry of a github marketplace retains its comparison fields, and the refresh names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" publishes this manifest:
+      """
+      {"name":"tools","plugins":[{"name":"broken","source":"./broken","dependencies":["library@~1.0.0"],"vendor":{"revision":1}}]}
+      """
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      { "name":"tools", "plugins":[{"name":"broken","source":"./broken","dependencies":["library@~1.0.0"],"vendor":{"revision":2}}] }
+      """
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | via-https              | https://github.com/acme/tools.git |
 
     @github
     Examples:
@@ -449,6 +609,64 @@ Feature: Marketplace update
       | source kind |
       | url         |
 
+  Scenario Outline: Autoupdate off preserves installed versions of a github marketplace, whose refresh names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.10.0  |
+    Given the marketplace "tools" has the description "A longer refreshed catalog description"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | via-https              | https://github.com/acme/tools.git |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status     | reasons | scope   | version |
+      | tools            | project           | demo@tools | demo | upgradable |         | project | 1.0.0   |
+    When the user runs "/claude:plugin info demo@tools --scope project"
+    Then the result has these fields:
+      | kind                           | plugin-info |
+      | severity                       | info        |
+      | needs reload                   | false       |
+      | marketplace name               | tools       |
+      | marketplace scope              | project     |
+      | marketplace details autoupdate | false       |
+      | plugin status                  | installed   |
+      | plugin name                    | demo        |
+      | plugin id                      | demo@tools  |
+      | plugin reasons                 |             |
+      | plugin scope                   | project     |
+      | plugin version                 | 1.0.0       |
+      | plugin components resolved     | true        |
+      | plugin components skills       | demo-skill  |
+    When the user reloads pi
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id         | name | status      | reasons | scope   | from  | to     |
+      | tools            | project           | demo@tools | demo | will update |         | project | 1.0.0 | 1.10.0 |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
     @github
     Examples:
       | source kind |
@@ -516,6 +734,59 @@ Feature: Marketplace update
     Examples:
       | source kind |
       | url         |
+
+  Scenario Outline: Autoupdate of a github marketplace exposes the offered version after a reload and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.10.0  |
+    Given the marketplace "tools" has the description "A longer refreshed catalog description"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status  | reasons | scope   | from  | to     | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | demo@tools | demo | updated |         | project | 1.0.0 | 1.10.0 | via-https              | https://github.com/acme/tools.git |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace details autoupdate | id         | name | status    | reasons | scope   | version |
+      | tools            | project           | true                           | demo@tools | demo | installed |         | project | 1.10.0  |
+    When the user runs "/claude:plugin info demo@tools --scope project"
+    Then the result has these fields:
+      | kind                           | plugin-info |
+      | severity                       | info        |
+      | needs reload                   | false       |
+      | marketplace name               | tools       |
+      | marketplace scope              | project     |
+      | marketplace details autoupdate | true        |
+      | plugin status                  | installed   |
+      | plugin name                    | demo        |
+      | plugin id                      | demo@tools  |
+      | plugin reasons                 |             |
+      | plugin scope                   | project     |
+      | plugin version                 | 1.10.0      |
+      | plugin components resolved     | true        |
+      | plugin components skills       | demo-skill  |
+    When the user reloads pi
+    Then the session offers these skills:
+      | command           | description             |
+      | /skill:demo-skill | A skill of demo 1.10.0. |
 
     @github
     Examples:
@@ -672,6 +943,45 @@ Feature: Marketplace update
       | source kind |
       | url         |
 
+  Scenario Outline: Autoupdate of a github marketplace does not install newly offered plugins and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name     | version |
+      | existing | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install existing@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name     | version |
+      | existing | 1.0.0   |
+      | new      | 1.0.0   |
+    Given the marketplace "tools" has the description "A catalog with a newly offered plugin"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id             | name     | status  | reasons    | scope   | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | existing@tools | existing | skipped | up-to-date | project | via-https              | https://github.com/acme/tools.git |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 2           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace details autoupdate | id             | name     | status    | reasons | scope   | version |
+      | tools            | project           | true                           | existing@tools | existing | installed |         | project | 1.0.0   |
+      | tools            | project           | true                           | new@tools      | new      | available |         |         | 1.0.0   |
+    When the user reloads pi
+    Then the session offers these skills:
+      | command               | description                |
+      | /skill:existing-skill | A skill of existing 1.0.0. |
+
     @github
     Examples:
       | source kind |
@@ -731,6 +1041,51 @@ Feature: Marketplace update
     Examples:
       | source kind |
       | url         |
+
+  Scenario Outline: Autoupdate of a github marketplace keeps a plugin removed from the catalog and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | other | 1.0.0   |
+    Given the marketplace "tools" has the description "A catalog that no longer offers demo"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status  | reasons         | scope   | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | demo@tools | demo | skipped | not in manifest | project | via-https              | https://github.com/acme/tools.git |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 2           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status    | reasons         | scope   | version |
+      | tools            | project           | true                           | demo@tools  | demo  | installed | not in manifest | project | 1.0.0   |
+      | tools            | project           | true                           | other@tools | other | available |                 |         | 1.0.0   |
+    When the user reloads pi
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id         | name | status | reasons         | scope   | leaks | rollback partial | cause chain                                    | cause truncated |
+      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | Plugin "demo" not found in marketplace "tools" | false           |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
 
     @github
     Examples:
@@ -868,6 +1223,25 @@ Feature: Marketplace update
     Examples:
       | source kind |
       | url         |
+
+  Scenario Outline: A repaired github marketplace can be updated again and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the manifest of the marketplace "tools" to update is not valid json
+    Given updating the marketplace "tools" in the project scope has failed as unparseable
+    Given the marketplace "tools" source is repaired with a changed valid manifest
+    When the user runs "/claude:plugin marketplace update"
+    Then the result has these fields:
+      | kind                | cascade            |
+      | severity            | info               |
+      | needs reload        | false              |
+      | tally label         | Marketplace update |
+      | tally failures      | 0                  |
+      | tally warnings      | 0                  |
+      | tally success count | 1                  |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | project           | updated            | via-https              | https://github.com/acme/tools.git |
 
     @github
     Examples:

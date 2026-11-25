@@ -304,6 +304,27 @@ Feature: Marketplace git source
       | source kind | source                            | cause chain                                                                                                                                                                                                                                   |
       | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve |
 
+  Scenario Outline: Updating a github marketplace whose host now needs a credential fails as authentication required and names the clone it tried
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the user has run "/claude:plugin marketplace add <source> --scope project"
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated | marketplace clone note | marketplace clone url             |
+      | tools            | project           | failed             | tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           | via-https              | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+
     @github
     Examples:
       | source kind | source                        | cause chain                                                                                                                                                                                                                                                                              |
@@ -337,6 +358,29 @@ Feature: Marketplace git source
     Examples:
       | source kind | source                            | cause chain                                                                      |
       | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
+
+  Scenario Outline: Updating a github marketplace whose host rejects the stored credential names the rejection and the clone it tried
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the user has run "/claude:plugin marketplace add <source> --scope project"
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the user has stored a credential for the git host with the user "alice" and the password "expired"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated | marketplace clone note | marketplace clone url             |
+      | tools            | project           | failed             | tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           | via-https              | https://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
 
     @github
     Examples:

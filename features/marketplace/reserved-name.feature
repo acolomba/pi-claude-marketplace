@@ -117,6 +117,23 @@ Feature: Marketplace reserved name
       | source kind | cause chain                                                                                                                                                                                   |
       | url         | Failed to update marketplace "tools"., The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
 
+  Scenario Outline: Updating a github marketplace whose manifest now declares a reserved name fails with Claude Code's refusal and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"claude-plugins-official","owner":{"name":"features"},"plugins":[]}
+      """
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated | marketplace clone note | marketplace clone url             |
+      | tools            | project           | failed             | tools | tools | failed | invalid manifest | project |       |                  | <cause chain> | false           | via-https              | https://github.com/acme/tools.git |
+
     @github
     Examples:
       | source kind | cause chain                                                                                                                                                                                   |
@@ -148,6 +165,23 @@ Feature: Marketplace reserved name
     Examples:
       | source kind | declared name     | cause chain                                                                                                   |
       | url         | claude-plugins-v2 | Failed to update marketplace "tools"., Marketplace name impersonates an official Anthropic/Claude marketplace |
+
+  Scenario Outline: Updating a github marketplace whose manifest now declares a name Claude Code keeps for itself fails with Claude Code's refusal and names its clone transport
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"<declared name>","owner":{"name":"features"},"plugins":[]}
+      """
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated | marketplace clone note | marketplace clone url             |
+      | tools            | project           | failed             | tools | tools | failed | invalid manifest | project |       |                  | <cause chain> | false           | via-https              | https://github.com/acme/tools.git |
 
     @github
     Examples:
