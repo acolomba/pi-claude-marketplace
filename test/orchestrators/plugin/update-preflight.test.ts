@@ -8,6 +8,7 @@ import test from "node:test";
 import lockfile from "proper-lockfile";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   isUpdatePreflightOutcome,
   preparePluginUpdate,
@@ -24,6 +25,7 @@ import {
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
@@ -33,6 +35,10 @@ import type {
   CredentialOps,
   DeviceFlowHttp,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type {
+  CloneTransport,
+  PluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type {
   MaterializationPolicy,
   PreparePluginUpdateOptions,
@@ -190,6 +196,7 @@ async function prepare(
     readonly credentialOps?: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
+    readonly transport?: Pick<PreparePluginUpdateOptions, "transportContext">;
     readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
     readonly move?: Pick<PreparePluginUpdateOptions, "expectVersion" | "requesters">;
     readonly judgeOnly?: true;
@@ -220,6 +227,7 @@ async function prepare(
     ...(options.credentialOps !== undefined && { credentialOps: options.credentialOps }),
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
+    ...options.transport,
     ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
     ...options.move,
     ...(options.judgeOnly !== undefined && { judgeOnly: options.judgeOnly }),
@@ -3117,4 +3125,163 @@ test("GIT-03 / UPR-03: an unpinned update under a held state lock throws lock he
   }
 
   assert.deepStrictEqual(reported, ["1.0.0"]);
+});
+
+/**
+ * D-SG-18: a transport context for a user with no ssh setting whose probe
+ * answers `probe`, and a direct `ssh -G` hop.
+ */
+function transportContextFor(probe: "configured" | "not-configured"): PluginTransportContext {
+  return createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: () => Promise.resolve(probe),
+      userOverride: () => Promise.resolve(false),
+      urlRewritten: () => Promise.resolve({ rewritten: false, exitCode: 1 }),
+      showsDirectGitHub: () => Promise.resolve({ kind: "ran", direct: true, exitCode: 0 }),
+      showsDirectGitHubThroughGit: () => Promise.resolve(true),
+    },
+  });
+}
+
+/** A clone transport's first attempt and note, with the notes and subject it reports under. */
+async function plannedTransport(transport: CloneTransport | undefined): Promise<unknown> {
+  assert.ok(transport !== undefined, "the clone step got a transport");
+  const plan = await transport.plan();
+  return { first: plan.first, note: plan.note, notes: transport.notes, subject: transport.subject };
+}
+
+test("D-SG-19, OQ-4: an unpinned github update source refreshes its mirror and copies its commit over the plan of the command's context", async (t) => {
+  // arrange
+  setGitHubBaseUrl(t, undefined);
+  const sha = "5555555555555555555555555555555555555555";
+  const seed = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const transportContext = transportContextFor("not-configured");
+  const transports: Array<CloneTransport | undefined> = [];
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: (options) => {
+      transports.push(options.transport);
+      return Promise.resolve({ pluginRoot: seed.pluginRoot, resolvedSha: sha });
+    },
+    materializePluginCommitCopy: (options) => {
+      transports.push(options.transport);
+      return Promise.resolve(seed.pluginRoot);
+    },
+  };
+
+  // act
+  const prepared = await prepare(seed, {
+    cloneCacheSeam,
+    transport: { transportContext },
+    constraintGate: ADMITTING_GATE,
+  });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(transports.length, 2);
+  assert.strictEqual(transports[0], transports[1], "the mirror and the copy share one transport");
+  assert.deepStrictEqual(await plannedTransport(transports[0]), {
+    first: { transport: "https", url: "https://github.com/org/repo.git" },
+    note: "ssh-not-configured",
+    notes: transportContext.notes,
+    subject: "hello@mp",
+  });
+});
+
+test("D-SG-19, OQ-4: a pinned github update source resolves its pin and clones over one transport of the command's context", async (t) => {
+  // arrange
+  setGitHubBaseUrl(t, undefined);
+  const sha = "6666666666666666666666666666666666666666";
+  const seed = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo", sha },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const transportContext = transportContextFor("configured");
+  const transports: Array<CloneTransport | undefined> = [];
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: (options) => {
+      transports.push(options.transport);
+      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha });
+    },
+    materializePluginClone: (options) => {
+      transports.push(options.transport);
+      return Promise.resolve(seed.pluginRoot);
+    },
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+  };
+
+  // act
+  const prepared = await prepare(seed, {
+    cloneCacheSeam,
+    transport: { transportContext },
+    constraintGate: ADMITTING_GATE,
+  });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(transports.length, 2);
+  assert.strictEqual(transports[0], transports[1], "the pin and the clone share one transport");
+  assert.deepStrictEqual(await plannedTransport(transports[0]), {
+    first: { transport: "ssh", url: "git@github.com:org/repo.git" },
+    note: "via-ssh",
+    notes: transportContext.notes,
+    subject: "hello@mp",
+  });
+});
+
+test("D-SG-19: an update source with no transport context gives no clone step a transport", async (t) => {
+  // arrange
+  const sha = "7777777777777777777777777777777777777777";
+  const pinned = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo", sha },
+  });
+  const unpinned = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "github", repo: "org/repo" },
+  });
+  t.after(() =>
+    Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
+  );
+  const carried: boolean[] = [];
+  const cloneCacheSeam = (root: string): UpdateCloneCacheSeam => ({
+    resolvePluginPin: (options) => {
+      carried.push("transport" in options);
+      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha });
+    },
+    materializePluginClone: (options) => {
+      carried.push("transport" in options);
+      return Promise.resolve(root);
+    },
+    materializeOrRefreshPluginMirror: (options) => {
+      carried.push("transport" in options);
+      return Promise.resolve({ pluginRoot: root, resolvedSha: sha });
+    },
+    materializePluginCommitCopy: (options) => {
+      carried.push("transport" in options);
+      return Promise.resolve(root);
+    },
+  });
+
+  // act
+  await prepare(pinned, {
+    cloneCacheSeam: cloneCacheSeam(pinned.pluginRoot),
+    constraintGate: ADMITTING_GATE,
+  });
+  await prepare(unpinned, {
+    cloneCacheSeam: cloneCacheSeam(unpinned.pluginRoot),
+    constraintGate: ADMITTING_GATE,
+  });
+
+  // assert
+  assert.deepStrictEqual(carried, [false, false, false, false]);
 });

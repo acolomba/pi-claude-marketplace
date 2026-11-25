@@ -118,6 +118,7 @@ import {
 import {
   DEFAULT_GIT_OPS,
   DEFAULT_GITHUB_SSH_OPS,
+  defaultPluginTransportContext,
   lacksStoredCredential,
 } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
@@ -158,6 +159,7 @@ import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps } from "../auth-host.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginConvergeFn,
@@ -441,6 +443,9 @@ function buildDirectThreePhaseArgs(
     mcpImplementation: opts.run.softDeps.mcpImplementation,
     // LAYER-04: `--local` selects the layer a named update acts on.
     ...(opts.local === true && { local: true }),
+    // D-SG-19: the run's one transport context, which every clone and
+    // `ls-remote` of the target's plugin shares with the rest of the run.
+    ...(opts.transportContext !== undefined && { transportContext: opts.transportContext }),
     // PURL-06: the test-only clone-cache seam for the git-source candidate
     // probe. Undefined in production, which selects the real imports.
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
@@ -487,12 +492,16 @@ function buildDirectThreePhaseArgs(
  * `partition='failed'` outcomes and also fire a direct-path notification
  * BEFORE the cascade is built (the cascade body still names them via the
  * `PluginUpdatedMessage`/`PluginSkippedMessage`/`PluginFailedMessage` rows).
+ *
+ * D-SG-19: `newTransportContext` makes the run's one transport context when
+ * the caller gives none.
  */
 async function updatePluginsWith(
   opts: UpdatePluginsOptions,
   bindings: UpdateBindings,
   runPluginUpdate: UpdatePluginRunner,
   composeCascade: UpdateCascadeComposer,
+  newTransportContext: () => PluginTransportContext,
 ): Promise<void> {
   const { ctx, run } = opts;
   // OUT-04 / D-04: cardinality belongs to the parsed invocation, including
@@ -514,10 +523,13 @@ async function updatePluginsWith(
 
   // D-79-02: ONE authMemo for the whole run, shared by the marketplace syncs
   // and every target's clone and probe auth, so a Device Flow host prompts at
-  // most once. A caller-supplied memo wins.
+  // most once. A caller-supplied memo wins. D-SG-19: beside it, ONE transport
+  // context, so every plugin clone of the run follows one probe. The
+  // marketplace syncs plan their own transports (SG-SSH-02).
   const runOpts: UpdatePluginsOptions = {
     ...opts,
     authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
+    transportContext: opts.transportContext ?? newTransportContext(),
   };
   const syncCloneOnce = makeSyncCloneOnce(runOpts);
   // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
@@ -900,9 +912,10 @@ async function updateSinglePluginWith(
   plugin: string,
   marketplace: string,
   scope: Scope,
-  constraintMemos: {
+  runScoped: {
     readonly tagMemo: Map<string, readonly RemoteTag[]>;
     readonly marketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>;
+    readonly transportContext: PluginTransportContext;
   },
   mcpImplementation: ActiveMcpImplementation,
 ): Promise<PluginUpdateOutcome> {
@@ -936,8 +949,10 @@ async function updateSinglePluginWith(
     // cascade over many plugins of one marketplace lists it once -- see
     // `beginPluginUpdateRun` below for why the pair is allocated per run
     // and not beside the binding.
-    constraintTagMemo: constraintMemos.tagMemo,
-    constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
+    constraintTagMemo: runScoped.tagMemo,
+    constraintMarketplaceTagMemo: runScoped.marketplaceTagMemo,
+    // D-SG-19: the run's one transport context.
+    transportContext: runScoped.transportContext,
     cleanupClones: collectPluginClonesLocked,
   });
 }
@@ -947,11 +962,16 @@ async function updateSinglePluginWith(
  * cascade mode builds stored credentials only and starts no Device Flow
  * (D-3-04), and the converge policy lists no tag (D-23), so no tag memo is
  * allocated. The scope's locations come from the target's own `cwd`.
+ *
+ * D-SG-19: the move clones over the target's transport context, the one of
+ * the command that runs it; a target with none gets one of its own from
+ * `newTransportContext`.
  */
 function convergePluginWith(
   bindings: UpdateBindings,
   runPluginConverge: UpdatePluginRunner,
   target: PluginConvergeTarget,
+  newTransportContext: () => PluginTransportContext,
 ): Promise<PluginUpdateOutcome> {
   return runCascadeTarget(runPluginConverge, {
     plugin: target.plugin,
@@ -968,6 +988,7 @@ function convergePluginWith(
     // and set `partial` from the record's view under it.
     mcpImplementation: target.mcpImplementation,
     cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
+    transportContext: target.transportContext ?? newTransportContext(),
   });
 }
 
@@ -1634,6 +1655,10 @@ async function refuseOtherLayerUpdate(args: ThreePhaseArgs): Promise<void> {
  * D-08-06: `env` is the environment the update stages MCP servers with. It
  * defaults to Pi's process environment here, at the entry point, the way
  * `createGetPluginInfo` binds it.
+ *
+ * D-SG-19: `newTransportContext` makes the one GitHub transport context of an
+ * update command, an autoupdate run, or a converge call that brings none. It
+ * defaults to the user's own ssh and environment.
  */
 export function createPluginUpdateOperations(
   hooksRouting: UpdateHooksRouting,
@@ -1641,6 +1666,7 @@ export function createPluginUpdateOperations(
   stateTransaction?: LockedStateTransactionDeps,
   env: ClaudeEnv = process.env,
   resolveDependencies?: UpdateDependencyResolver,
+  newTransportContext: () => PluginTransportContext = () => defaultPluginTransportContext(),
 ): PluginUpdateOperations {
   const bindings: UpdateBindings = { hooksRouting, completionCache, env };
   const withStateTransaction = (runner: UpdatePluginRunner): UpdatePluginRunner =>
@@ -1667,15 +1693,21 @@ export function createPluginUpdateOperations(
       bindings,
       settling({ ctx: options.ctx, run: options.run }),
       composeUpdateCascade,
+      newTransportContext,
     );
   // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
   // allocates the pair, so the pair's lifetime is the run's and a release tag
   // pushed between two runs is visible to the second. The pair spans every
   // plugin of one run, so a marketplace common to several of them is listed
   // once and the cascade's warm-cache expectation for path sources holds.
+  // D-SG-19: the run's one transport context has the same lifetime, so the
+  // plugin clones of one autoupdate run follow one probe.
   const beginPluginUpdateRun = (notification: UpdateNotification): PluginUpdateFn => {
-    const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
-    const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+    const runScoped = {
+      tagMemo: new Map<string, readonly RemoteTag[]>(),
+      marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
+      transportContext: newTransportContext(),
+    };
     const runner = settling(notification);
     // D-P3-12: the run reads the MCP implementation of its command's run.
     const mcpImplementation = notification.run.softDeps.mcpImplementation;
@@ -1686,13 +1718,18 @@ export function createPluginUpdateOperations(
         plugin,
         marketplace,
         scope,
-        { tagMemo: constraintTagMemo, marketplaceTagMemo: constraintMarketplaceTagMemo },
+        runScoped,
         mcpImplementation,
       );
   };
 
   const convergePlugin: PluginConvergeFn = (target) =>
-    convergePluginWith(bindings, target.rematerialize ? rematerialize : converge, target);
+    convergePluginWith(
+      bindings,
+      target.rematerialize ? rematerialize : converge,
+      target,
+      newTransportContext,
+    );
 
   return { updatePlugins, beginPluginUpdateRun, convergePlugin };
 }

@@ -10,6 +10,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { collectPluginCloneCandidatesLocked } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import {
   failedMoveRow,
@@ -32,6 +33,10 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import { INSTALL_HOST_HEAD, createGitOps, seamWith } from "./install-flow-fixture.ts";
 
+import type {
+  CloneTransport,
+  PluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { DependencyMoveContext } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import type {
   DependencyMoveRequest,
@@ -950,5 +955,87 @@ describe("failedMoveRow", () => {
 
     // assert
     assert.deepStrictEqual(row.status === "failed" && row.cause, new Error("undefined"));
+  });
+});
+
+describe("the operation's transport context", () => {
+  /** D-SG-19: a transport context whose checks must not run, for a case that never plans. */
+  function unplannedTransportContext(): PluginTransportContext {
+    const unasked = (): Promise<never> => Promise.reject(new Error("no plan is made"));
+    return createPluginTransportContext({
+      env: {},
+      platform: "linux",
+      ssh: {
+        probe: unasked,
+        userOverride: unasked,
+        urlRewritten: unasked,
+        showsDirectGitHub: unasked,
+        showsDirectGitHubThroughGit: unasked,
+      },
+    });
+  }
+
+  /**
+   * A move context over a cold pinned git candidate whose clone records the
+   * transport it was given and stops there.
+   */
+  async function cloneRecordingContext(t: TestContext): Promise<{
+    readonly context: DependencyMoveContext;
+    readonly transports: Array<CloneTransport | undefined>;
+    readonly transportContext: PluginTransportContext;
+  }> {
+    const seeded = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    await pinGitCandidate(seeded.context);
+    const transportContext = unplannedTransportContext();
+    const transports: Array<CloneTransport | undefined> = [];
+    const inner = seamWith(
+      createGitOps({ fixtureSourceDir: seeded.pluginRoot, head: INSTALL_HOST_HEAD }).gitOps,
+    );
+    return {
+      transports,
+      transportContext,
+      context: {
+        ...seeded.context,
+        transportContext,
+        cloneCacheSeam: {
+          ...inner,
+          materializePluginClone(args) {
+            transports.push(args.transport);
+            return Promise.reject(new Error("the clone stops here"));
+          },
+        },
+        constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+      },
+    };
+  }
+
+  test("D-SG-19: judging a move clones its candidate over the operation's transport context", async (t) => {
+    // arrange
+    const { context, transports, transportContext } = await cloneRecordingContext(t);
+
+    // act
+    const judgement = await judgeDependencyMove(request(), context);
+
+    // assert
+    assert.deepStrictEqual(judgement, { ok: false, cause: "the clone stops here" });
+    assert.deepStrictEqual(
+      transports.map((transport) => transport && [transport.notes, transport.subject]),
+      [[transportContext.notes, "zcore@mp"]],
+    );
+  });
+
+  test("D-SG-19: making a move clones its candidate over the operation's transport context", async (t) => {
+    // arrange
+    const { context, transports, transportContext } = await cloneRecordingContext(t);
+
+    // act
+    const run = await runDependencyMove(move("2.0.0"), context);
+
+    // assert
+    assert.strictEqual(run.landed, false);
+    assert.deepStrictEqual(
+      transports.map((transport) => transport && [transport.notes, transport.subject]),
+      [[transportContext.notes, "zcore@mp"]],
+    );
   });
 });

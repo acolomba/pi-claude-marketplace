@@ -1,3 +1,4 @@
+import { planPluginClone } from "../../domain/github-plugin-transport.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
@@ -79,6 +80,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { RenameOps } from "../marketplace/clone-swap.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
 import type {
@@ -126,6 +128,12 @@ export interface UpdatePluginsOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-SG-19: the command's GitHub transport context, which every plugin clone
+   * and `ls-remote` of the command shares. The update root creates one when
+   * the caller gives none.
+   */
+  readonly transportContext?: PluginTransportContext;
   /** D-SG-10: the rename the marketplace sync's swap moves a checkout with. */
   readonly renameOps?: RenameOps;
   /** D-SG-15: the environment the keep variable is read from; the process's by default. */
@@ -252,6 +260,12 @@ export interface PreparePluginUpdateOptions {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
+   * D-SG-19, OQ-4: the command's GitHub transport context. With one, the
+   * candidate's clones and its pin's `ls-remote` run over the plan it gives
+   * the source; with none, each runs once on the source's wire URL.
+   */
+  readonly transportContext?: PluginTransportContext;
+  /**
    * D-10-18: the run-scoped tag memos an update run allocates once and
    * threads into every target's gate evaluation, so a repository or
    * marketplace clone shared by several targets is listed once.
@@ -348,6 +362,10 @@ interface UpdateCloneProbe {
  *
  * `refreshSource` is the policy knob the unpinned arm passes to the mirror
  * (D-18-04). The pinned arm never fetches a present clone, so it ignores it.
+ *
+ * D-SG-19, OQ-4: `transportFor` gives both arms the source's clone transport,
+ * so a mirror's clone and freshness check, a copy's clone, and a pin's
+ * `ls-remote` all walk one plan.
  */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
@@ -360,6 +378,7 @@ function makeUpdateCloneProbe(
   },
   refreshSource: boolean,
   cloneCandidates: Set<string> | undefined,
+  transportFor: (source: GitBackedSource) => { readonly transport?: CloneTransport },
 ): UpdateCloneProbe {
   let captured: string | undefined;
   const onCloneCreated = (key: string): void => {
@@ -383,6 +402,7 @@ function makeUpdateCloneProbe(
         auth: cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind),
         refresh: refreshSource,
         onCloneCreated,
+        ...transportFor(gitSource),
       }),
     );
     if (result.kind === "materialized") {
@@ -394,9 +414,11 @@ function makeUpdateCloneProbe(
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const authBundle = cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind);
+    const transport = transportFor(gitSource);
     const pin = await seam.resolvePluginPin({
       source: gitSource,
       auth: authBundle,
+      ...transport,
     });
     const cloneRoot = await seam.materializePluginClone({
       locations,
@@ -406,6 +428,7 @@ function makeUpdateCloneProbe(
       ...(pin.ref !== undefined && { ref: pin.ref }),
       resolveAuth: () => authBundle,
       onCloneCreated,
+      ...transport,
     });
     if (gitSource.kind === "git-subdir") {
       const subdir = await resolveGitSubdirRoot(cloneRoot, gitSource.path);
@@ -1163,6 +1186,37 @@ function buildUpdateAuth(options: PreparePluginUpdateOptions): {
 }
 
 /**
+ * D-SG-19: the clone transport of one update source under the command's
+ * context: the plan reads the context's force, checks, and platform, and the
+ * note goes to its notes under `<plugin>@<marketplace>`. With no context there
+ * is no transport, and each clone and `ls-remote` runs once on the source's
+ * wire URL.
+ */
+function updateCloneTransport(
+  options: PreparePluginUpdateOptions,
+): (source: GitBackedSource) => { readonly transport?: CloneTransport } {
+  const context = options.transportContext;
+  if (context === undefined) {
+    return () => ({});
+  }
+
+  const subject = `${options.plugin}@${options.marketplace}`;
+  return (source) => ({
+    transport: {
+      plan: () =>
+        planPluginClone({
+          source,
+          force: context.force,
+          checks: context.checks,
+          platform: context.platform,
+        }),
+      notes: context.notes,
+      subject,
+    },
+  });
+}
+
+/**
  * The `admits` verdict's disclosure, ready for `PreparedPluginUpdate.constraint`
  * (D-10-17a). `undefined` for an unconstrained or held verdict -- held never
  * reaches this call, since `preparePluginUpdate` returns on it earlier, but
@@ -1279,6 +1333,7 @@ export async function preparePluginUpdate(
     auth,
     options.policy.refreshSource,
     options.cloneCandidates,
+    updateCloneTransport(options),
   );
   const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,

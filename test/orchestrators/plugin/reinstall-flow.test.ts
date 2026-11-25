@@ -24,6 +24,7 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -75,6 +76,10 @@ import {
   startFifoStateServer,
 } from "./state-fifo.ts";
 
+import type {
+  CloneTransport,
+  PluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -10560,6 +10565,160 @@ test("AFILE-02: reinstalling a plugin with no MCP servers over an unparseable mc
         },
       ]);
       assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{ not json");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── D-SG-19: one GitHub transport context per reinstall command ────────────
+
+/** D-SG-19: a transport context whose checks must not run, for a case that never plans. */
+function unplannedTransportContext(): PluginTransportContext {
+  const unasked = (): Promise<never> => Promise.reject(new Error("no plan is made"));
+  return createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: unasked,
+      userOverride: unasked,
+      urlRewritten: unasked,
+      showsDirectGitHub: unasked,
+      showsDirectGitHubThroughGit: unasked,
+    },
+  });
+}
+
+test("D-SG-19: a reinstall clones over the transport context the command gives it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-transport-given-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const locations = locationsFor("project", cwd);
+      await rm(
+        await locations.pluginCloneDir(
+          pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+        ),
+        { recursive: true, force: true },
+      );
+      const transportContext = unplannedTransportContext();
+      const transports: Array<CloneTransport | undefined> = [];
+      const { gitOps } = createGitOps({ cloneThrows: new Error("unexpected clone") });
+      const { ctx, run } = makeCtx();
+
+      // act
+      await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        transportContext,
+        cloneCacheSeam: {
+          ...installSeamWith(gitOps),
+          materializePluginClone: (args) => {
+            transports.push(args.transport);
+            return Promise.reject(new Error("the clone stops here"));
+          },
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        transports.map((transport) => transport && [transport.notes, transport.subject]),
+        [[transportContext.notes, "gp@mp"]],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-19: a bulk reinstall makes one transport context and gives it to every plugin it reinstalls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-transport-bulk-"));
+    try {
+      // arrange
+      for (const pluginName of ["hello", "other"]) {
+        await seedMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          pluginName,
+          resources: { skill: pluginName },
+          install: true,
+        });
+      }
+
+      const contexts: Array<PluginTransportContext | undefined> = [];
+      const single = createReinstallPlugin(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcomes = await createNodeReinstallPlugins((options) => {
+        contexts.push(options.transportContext);
+        return single(options);
+      })({ ctx, run, scope: "project", cwd, target: { kind: "marketplace", marketplace: "mp" } });
+
+      // assert
+      assert.deepStrictEqual(
+        outcomes.map((outcome) => outcome.partition),
+        ["reinstalled", "reinstalled"],
+      );
+      assert.strictEqual(contexts.length, 2);
+      assert.ok(contexts[0] !== undefined, "the bulk reinstall made a context");
+      assert.strictEqual(contexts[0], contexts[1]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-19: a bulk reinstall gives every plugin the transport context its caller gives", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-transport-bulk-given-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "hello",
+        resources: { skill: "hello" },
+        install: true,
+      });
+      const transportContext = unplannedTransportContext();
+      const contexts: Array<PluginTransportContext | undefined> = [];
+      const single = createReinstallPlugin(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await createNodeReinstallPlugins((options) => {
+        contexts.push(options.transportContext);
+        return single(options);
+      })({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        transportContext,
+      });
+
+      // assert
+      assert.deepStrictEqual(contexts, [transportContext]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

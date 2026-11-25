@@ -90,6 +90,12 @@ export function reportedStagingWarnings(
  *
  * D-PL9-12: `packageInstallOps` drives the updated plugin's package install;
  * production callers omit it and get the real package manager.
+ *
+ * D-SG-19: `args.transportContext`, the calling command's one GitHub
+ * transport context, reaches the preflight and the dependency settle, so the
+ * candidate's clones and the moves its dependencies need follow one probe for
+ * the whole command. A caller with no context clones each source once on its
+ * wire URL.
  */
 export async function materializeLatestVersion(
   args: ThreePhaseArgs,

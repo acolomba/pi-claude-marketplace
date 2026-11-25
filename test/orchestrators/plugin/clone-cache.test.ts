@@ -4207,3 +4207,169 @@ void test("GIT-04: an unpinned source copies the mirror's commit and anchors its
   ]);
   assert.deepStrictEqual(created, ["mirror", "copy"]);
 });
+
+/** A stored-credential bundle for the github.com requests of a pin's `ls-remote`. */
+const PIN_AUTH: GitAuthBundle = {
+  credentialOps: {
+    fill: async (): Promise<null> => Promise.resolve(null),
+    approve: async (): Promise<void> => Promise.resolve(),
+    reject: async (): Promise<void> => Promise.resolve(),
+  },
+  host: "github.com",
+  kind: "stored-credential",
+};
+
+/**
+ * A `resolveRemoteRef` double that records each request, fails a request to a
+ * url in `failing`, and answers every other with `advertised`.
+ */
+function pinRemote(
+  failing: ReadonlySet<string>,
+  advertised: string | undefined,
+): {
+  readonly gitOps: GitOps;
+  readonly requests: Array<{ url: string; ref: string | undefined; auth: boolean }>;
+} {
+  const requests: Array<{ url: string; ref: string | undefined; auth: boolean }> = [];
+  return {
+    requests,
+    gitOps: {
+      ...createGitOps().gitOps,
+      resolveRemoteRef(options) {
+        requests.push({ url: options.url, ref: options.ref, auth: options.auth !== undefined });
+        return failing.has(options.url)
+          ? Promise.reject(
+              new GitCommandError({ kind: "network" }, { operation: "ls-remote", exitCode: 128 }),
+            )
+          : Promise.resolve(advertised);
+      },
+    },
+  };
+}
+
+void test("OQ-4: resolvePluginPin over a transport asks ssh for HEAD after its https attempt fails, with no auth over ssh", async () => {
+  // arrange
+  const { gitOps, requests } = pinRemote(new Set([GITHUB_HTTPS.url]), PIN_40);
+  const { transport } = cloneTransport(GITHUB_HTTPS, GITHUB_SSH);
+
+  // act
+  const resolved = await resolvePluginPin({
+    source: githubSource("owner/repo"),
+    gitOps,
+    auth: PIN_AUTH,
+    transport,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, { cloneUrl: "https://github.com/owner/repo", pin: PIN_40 });
+  assert.deepStrictEqual(requests, [
+    { url: GITHUB_HTTPS.url, ref: undefined, auth: true },
+    { url: GITHUB_SSH.url, ref: undefined, auth: false },
+  ]);
+});
+
+void test("OQ-4: resolvePluginPin over a transport asks a named ref of its first attempt only, once it answers", async () => {
+  // arrange
+  const { gitOps, requests } = pinRemote(new Set(), PIN2_40);
+  const { transport } = cloneTransport(GITHUB_SSH, GITHUB_HTTPS);
+
+  // act
+  const resolved = await resolvePluginPin({
+    source: { ...githubSource("owner/repo"), ref: "main" },
+    gitOps,
+    auth: PIN_AUTH,
+    transport,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    cloneUrl: "https://github.com/owner/repo",
+    pin: PIN2_40,
+    ref: "main",
+  });
+  assert.deepStrictEqual(requests, [{ url: GITHUB_SSH.url, ref: "main", auth: false }]);
+});
+
+void test("OQ-4: resolvePluginPin over a transport rethrows the last failure when the plan gives no other attempt", async () => {
+  // arrange
+  const { gitOps, requests } = pinRemote(new Set([GITHUB_SSH.url, GITHUB_HTTPS.url]), PIN_40);
+  const { transport } = cloneTransport(GITHUB_SSH, GITHUB_HTTPS);
+
+  // act
+  const resolving = resolvePluginPin({ source: githubSource("owner/repo"), gitOps, transport });
+
+  // assert
+  await assert.rejects(resolving, (err: unknown) => {
+    assert.ok(err instanceof GitCommandError);
+    assert.strictEqual(err.kind, "network");
+    return true;
+  });
+  assert.deepStrictEqual(
+    requests.map((request) => request.url),
+    [GITHUB_SSH.url, GITHUB_HTTPS.url],
+  );
+});
+
+void test("GHB-01, OQ-4: resolvePluginPin over a transport names the url of the attempt that answered without the ref", async () => {
+  // arrange
+  const { gitOps } = pinRemote(new Set([GITHUB_HTTPS.url]), undefined);
+  const { transport } = cloneTransport(GITHUB_HTTPS, GITHUB_SSH);
+
+  // act
+  const resolving = resolvePluginPin({
+    source: { ...githubSource("owner/repo"), ref: "gone" },
+    gitOps,
+    transport,
+  });
+
+  // assert
+  await assert.rejects(resolving, {
+    message: `remote ${GITHUB_SSH.url} has no ref "gone"`,
+  });
+});
+
+void test("SG-SSH-05, OQ-4: resolvePluginPin over a transport stops after three attempts", async () => {
+  // arrange
+  const { gitOps, requests } = pinRemote(new Set([GITHUB_SSH.url, GITHUB_HTTPS.url]), PIN_40);
+  const plan: TransportPlan = {
+    first: GITHUB_SSH,
+    after: (_failure, failed) =>
+      Promise.resolve(failed.transport === "ssh" ? GITHUB_HTTPS : GITHUB_SSH),
+  };
+  const transport: CloneTransport = {
+    plan: () => Promise.resolve(plan),
+    notes: createGitHubCloneNotes(),
+    subject: "repo@gits",
+  };
+
+  // act
+  const resolving = resolvePluginPin({ source: githubSource("owner/repo"), gitOps, transport });
+
+  // assert
+  await assert.rejects(resolving, GitCommandError);
+  assert.deepStrictEqual(
+    requests.map((request) => request.url),
+    [GITHUB_SSH.url, GITHUB_HTTPS.url, GITHUB_SSH.url],
+  );
+});
+
+void test("NFR-5: resolvePluginPin over a transport with a pinned sha makes no plan and sends nothing", async () => {
+  // arrange
+  const { gitOps, requests } = pinRemote(new Set(), PIN2_40);
+  const transport: CloneTransport = {
+    plan: () => Promise.reject(new Error("a pinned sha needs no plan")),
+    notes: createGitHubCloneNotes(),
+    subject: "repo@gits",
+  };
+
+  // act
+  const resolved = await resolvePluginPin({
+    source: { ...githubSource("owner/repo"), sha: PIN_40 },
+    gitOps,
+    transport,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, { cloneUrl: "https://github.com/owner/repo", pin: PIN_40 });
+  assert.deepStrictEqual(requests, []);
+});

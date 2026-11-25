@@ -20,6 +20,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { UpdateDependencyRow } from "../types.ts";
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
@@ -57,6 +58,8 @@ export interface DependencyCaller {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /** D-SG-19: the command's GitHub transport context, which its moves and installs share. */
+  readonly transportContext?: PluginTransportContext;
 }
 
 /** Where an operation's dependencies land: one scope (D-03-05). */
@@ -78,7 +81,13 @@ function callerFields(
   caller: DependencyCaller,
 ): Pick<
   DependencyMoveContext,
-  "authMemo" | "credentialOps" | "deviceFlowHttp" | "mapModel" | "notification" | "partial"
+  | "authMemo"
+  | "credentialOps"
+  | "deviceFlowHttp"
+  | "mapModel"
+  | "notification"
+  | "partial"
+  | "transportContext"
 > {
   return {
     notification: { ctx: caller.ctx, run: caller.run },
@@ -87,6 +96,7 @@ function callerFields(
     ...(caller.credentialOps !== undefined && { credentialOps: caller.credentialOps }),
     ...(caller.deviceFlowHttp !== undefined && { deviceFlowHttp: caller.deviceFlowHttp }),
     ...(caller.authMemo !== undefined && { authMemo: caller.authMemo }),
+    ...(caller.transportContext !== undefined && { transportContext: caller.transportContext }),
   };
 }
 
@@ -148,6 +158,9 @@ export function updateCaller(
     ...(args.credentialOps !== undefined && { credentialOps: args.credentialOps }),
     ...(args.deviceFlowHttp !== undefined && { deviceFlowHttp: args.deviceFlowHttp }),
     ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
+    // D-SG-19: the update's one transport context reaches its dependency
+    // moves and installs, so the command probes once.
+    ...(args.transportContext !== undefined && { transportContext: args.transportContext }),
   };
 }
 
