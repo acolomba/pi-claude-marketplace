@@ -28,12 +28,14 @@
 // call, and no credential value is read, stored, or placed on a returned arm.
 // The failure arm carries the classified transport cause only.
 
-import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl } from "../../domain/clone-key.ts";
+import { tagReadUrl } from "../../domain/github-transport.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
 import { listRemoteTags } from "../../platform/git.ts";
 import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { buildCloneAuth } from "../auth-host.ts";
+import { transportForce } from "../github-transport.ts";
 
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { RemoteTag } from "../../platform/git.ts";
@@ -145,10 +147,12 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
  * Resolves a constrained dependency to the highest release tag on its source
  * repository that satisfies the constraint.
  *
- * The query URL is the wire form `networkCloneUrl` derives, the same URL a
- * clone of this source sends (D-2-03), and the credential bundle is the host
- * bundle every other clone path already builds -- this adds no second
- * credential acquisition path.
+ * D-SG-20: the query URL, and the memo key of its listing, is `tagReadUrl`'s
+ * answer for the command's transport force: a GitHub `owner/repo` source
+ * lists over SSH unless HTTPS is forced, and every other source lists at the
+ * wire form a clone of it sends (D-2-03). The credential bundle is the host
+ * bundle every other clone path already builds, which an SSH listing never
+ * sends -- this adds no second credential acquisition path.
  */
 export async function probeDependencyTags(
   options: DependencyTagProbeOptions,
@@ -160,7 +164,7 @@ export async function probeDependencyTags(
 
   const listing = await listCandidateTags({
     seam,
-    url: networkCloneUrl(source),
+    url: tagReadUrl(source, transportForce(process.env)),
     auth,
     ...(options.tagMemo !== undefined && { memo: options.tagMemo }),
   });

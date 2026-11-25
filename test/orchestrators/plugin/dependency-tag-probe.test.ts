@@ -12,19 +12,43 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { setGitHubBaseUrl, setPreferHttps } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
-import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type {
+  GitBackedSource,
+  GitHubSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TestContext } from "node:test";
 
 // D-2-01: a url source is queried at the URL as typed, with no `.git` added.
 const PLUGIN_REPO_URL = "https://example.com/formatter";
 
+const GITHUB_DEPENDENCY = {
+  kind: "github",
+  raw: "acme/ghd",
+  owner: "acme",
+  repo: "ghd",
+} satisfies GitHubSource;
+
+// D-SG-20: the two addresses a github owner/repo dependency's tags are listed at.
+const GHD_SSH_URL = "git@github.com:acme/ghd.git";
+const GHD_HTTPS_URL = "https://github.com/acme/ghd.git";
+
+/** Clears both triggers that force https, so a case reads the default transport. */
+function unforced(t: TestContext): void {
+  setGitHubBaseUrl(t, undefined);
+  setPreferHttps(t, undefined);
+}
+
 for (const mode of ["json", "rpc"]) {
-  test(`delivers constrained tag authentication through the parent run in ${mode}`, async () => {
+  test(`delivers constrained tag authentication through the parent run in ${mode}`, async (t) => {
     // arrange
+    setGitHubBaseUrl(t, undefined);
+    setPreferHttps(t, "1");
     const capture = createJsonCapture();
     const ctx = {
       mode,
@@ -450,8 +474,10 @@ test("wraps a listing throw that is not an Error before carrying it on the failu
   });
 });
 
-test("threads the host credential bundle into the listing for a private source", async () => {
+test("threads the host credential bundle into the listing for a private source", async (t) => {
   // arrange
+  setGitHubBaseUrl(t, undefined);
+  setPreferHttps(t, "1");
   const queried: string[] = [];
   let bundled: boolean | undefined;
   const seam: DependencyTagListingSeam = {
@@ -567,4 +593,59 @@ test("a failed listing is never memoized, so a later attempt re-queries instead 
   assert.deepStrictEqual([...tagMemo], []);
   assert.deepStrictEqual(second, first);
   assert.deepStrictEqual(queried, [PLUGIN_REPO_URL, PLUGIN_REPO_URL]);
+});
+
+test("D-SG-20: lists a github owner/repo dependency's tags over ssh and memoizes them under that address", async (t) => {
+  // arrange
+  unforced(t);
+  const queried: string[] = [];
+  const seam = advertising([{ name: "ghd--v1.0.0", oid: "aaa1" }], queried);
+  const tagMemo = new Map<string, readonly RemoteTag[]>();
+
+  // act
+  const outcome = await probeDependencyTags({
+    pluginName: "ghd",
+    source: GITHUB_DEPENDENCY,
+    range: "^1.0.0",
+    seam,
+    tagMemo,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, queried, memo: [...tagMemo.keys()] },
+    {
+      outcome: { kind: "pinned", tag: "ghd--v1.0.0", oid: "aaa1", version: "1.0.0" },
+      queried: [GHD_SSH_URL],
+      memo: [GHD_SSH_URL],
+    },
+  );
+});
+
+test("D-SG-20: serves a github owner/repo dependency from a listing memoized under its ssh address", async (t) => {
+  // arrange
+  unforced(t);
+  const queried: string[] = [];
+  const seam = advertising([], queried);
+  const tagMemo = new Map<string, readonly RemoteTag[]>([
+    [GHD_SSH_URL, [{ name: "ghd--v1.2.0", oid: "bbb2" }]],
+    [GHD_HTTPS_URL, [{ name: "ghd--v1.0.0", oid: "aaa1" }]],
+  ]);
+
+  // act
+  const outcome = await probeDependencyTags({
+    pluginName: "ghd",
+    source: GITHUB_DEPENDENCY,
+    range: "^1.0.0",
+    seam,
+    tagMemo,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { outcome, queried },
+    { outcome: { kind: "pinned", tag: "ghd--v1.2.0", oid: "bbb2", version: "1.2.0" }, queried: [] },
+  );
 });
