@@ -76,6 +76,7 @@ import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyMoveOwners } from "./dependency-bindings.ts";
@@ -254,6 +255,12 @@ export interface InstallPluginOptions {
    * (edge/cascade) owns its lifetime. Undefined = no memo (single install).
    */
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-SG-18: the command's GitHub transport context, which the plugin, its
+   * cascade members, and a retry of the same install share, so the command
+   * probes once. `createInstallPlugin` makes one when the caller gives none.
+   */
+  readonly transportContext?: PluginTransportContext;
   /**
    * UPD-DEP-D1 / MISS-01: a later step of the caller installs the dependencies
    * a moved dependency's new version needs, so the dependency plan installs

@@ -4,6 +4,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { defaultPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -101,7 +102,7 @@ function emptyCapture(): InstallFailureCapture {
   return { rollbackPartials: [], version: undefined };
 }
 
-test("D-P3-11: builds member ledger options from shared and member inputs, gating consent on the run's MCP implementation", () => {
+test("D-P3-11, D-SG-18: builds member ledger options from shared and member inputs, gating consent on the run's MCP implementation", () => {
   // arrange
   const { ctx, run } = makeCtx({ mcpImplementation: "builtin" });
   const credentialOps: CredentialOps = {
@@ -121,6 +122,7 @@ test("D-P3-11: builds member ledger options from shared and member inputs, gatin
     pollToken: () => Promise.resolve({ kind: "expired_token" }),
   };
   const authMemo = new Map<string, AuthAttemptResult>();
+  const transportContext = defaultPluginTransportContext({});
   const cloneCacheSeam = {
     resolvePluginPin,
     materializePluginClone,
@@ -141,6 +143,7 @@ test("D-P3-11: builds member ledger options from shared and member inputs, gatin
       credentialOps,
       deviceFlowHttp,
       authMemo,
+      transportContext,
       cloneCacheSeam,
     },
     {},
@@ -186,9 +189,42 @@ test("D-P3-11: builds member ledger options from shared and member inputs, gatin
     credentialOps,
     deviceFlowHttp,
     authMemo,
+    transportContext,
     marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
     addedMarketplaces,
   });
+  assert.strictEqual(options.transportContext, transportContext);
+});
+
+test("D-SG-18: gives every member of one cascade the caller's one transport context", () => {
+  // arrange
+  const { ctx, run } = makeCtx();
+  const transportContext = defaultPluginTransportContext({});
+  const addedMarketplaces: AddedMarketplaces = [];
+  const member = (plugin: string) =>
+    buildInstallLedgerOptions(
+      { ctx, run, transportContext },
+      {},
+      {
+        scope: "project",
+        cwd: "/project",
+        marketplace: "mp",
+        plugin,
+        provenance: plugin === "app" ? "explicit" : "dependency",
+        marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
+        addedMarketplaces,
+      },
+      REMOVAL_OPS,
+    );
+
+  // act
+  const contexts = ["app", "lib", "util"].map((plugin) => member(plugin).transportContext);
+
+  // assert
+  assert.deepStrictEqual(
+    contexts.map((context) => context === transportContext),
+    [true, true, true],
+  );
 });
 
 test("builds member ledger options with only the required inputs", () => {

@@ -23,6 +23,7 @@ import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { DEFAULT_GIT_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   canonicalCloneUrl,
@@ -40,6 +41,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   GitCommandError,
+  GitHubTransportsFailedError,
   PinnedCommitMissingError,
   PluginMirrorInUseError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -60,10 +62,18 @@ import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { marketplaceRecord, pluginRecord } from "../scope-state-seeds.ts";
 
 import type {
+  TransportAttempt,
+  TransportPlan,
+} from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
+import type {
   GitBackedSource,
   GitSubdirSource,
   UrlSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type {
+  CloneTransport,
+  GitHubCloneNotes,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { RenameOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts";
 import type {
   GitAuthBundle,
@@ -92,6 +102,7 @@ const ALLOWED_CLONE_CACHE_REMOTES = [
   "https://example.com/mono.git",
   "https://example.com/repo",
   "https://github.com/owner/repo.git",
+  "git@github.com:owner/repo.git",
   "https://gitlab.example.com/o/r",
   "https://gitlab.example.com/o/r.git",
 ] as const;
@@ -1373,6 +1384,265 @@ void test("MURL-09: materializeOrRefreshPluginMirror makes exactly one clone att
   );
   assert.equal(state.cloneCalls.length, 1, "no retry after the 404");
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
+});
+
+const GITHUB_CLONE_URL = "https://github.com/owner/repo";
+const GITHUB_HTTPS = { transport: "https", url: "https://github.com/owner/repo.git" } as const;
+const GITHUB_SSH = { transport: "ssh", url: "git@github.com:owner/repo.git" } as const;
+
+/**
+ * D-SG-18: a clone transport whose plan starts with `first` and, when `then`
+ * is given, runs it once after `first` fails, with the notes it records into.
+ */
+function cloneTransport(
+  first: TransportAttempt,
+  then?: TransportAttempt,
+): { readonly transport: CloneTransport; readonly notes: GitHubCloneNotes } {
+  const notes = createGitHubCloneNotes();
+  const plan: TransportPlan = {
+    first,
+    note: then === undefined ? "via-ssh" : "ssh-not-configured",
+    after: (_failure, failed) =>
+      Promise.resolve(
+        then !== undefined && failed.transport === first.transport ? then : undefined,
+      ),
+  };
+  return { notes, transport: { plan: () => Promise.resolve(plan), notes, subject: "repo@gits" } };
+}
+
+/**
+ * The clone double of `createGitOps`, which leaves a file in the staging
+ * directory and fails each clone of a url in `failing`, and records what each
+ * clone found in its directory before it ran.
+ */
+function cloneFailingFor(
+  failing: ReadonlySet<string>,
+  base: ReturnType<typeof createGitOps>,
+): {
+  readonly gitOps: GitOps;
+  readonly clones: Array<{ url: string; auth: boolean; leftover: boolean }>;
+} {
+  const clones: Array<{ url: string; auth: boolean; leftover: boolean }> = [];
+  return {
+    clones,
+    gitOps: {
+      ...base.gitOps,
+      async clone(options) {
+        const leftover = await pathExists(path.join(options.dir, "half-cloned"));
+        clones.push({ url: options.url, auth: options.auth !== undefined, leftover });
+        if (failing.has(options.url)) {
+          await mkdir(options.dir, { recursive: true });
+          await writeFile(path.join(options.dir, "half-cloned"), "");
+          throw new GitCommandError(
+            { kind: "network" },
+            { operation: "clone --depth", exitCode: 128 },
+          );
+        }
+
+        await base.gitOps.clone(options);
+      },
+    },
+  };
+}
+
+void test("D-SG-18: a pinned clone over an https-first transport clears the failed attempt and clones over ssh with no auth", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = createGitOps();
+  const { gitOps, clones } = cloneFailingFor(new Set([GITHUB_HTTPS.url]), base);
+  const { transport, notes } = cloneTransport(GITHUB_HTTPS, GITHUB_SSH);
+
+  // act
+  const cloneRoot = await materializePluginClone({
+    resolveAuth: publicCloneAuth,
+    locations,
+    cloneUrl: GITHUB_CLONE_URL,
+    networkUrl: GITHUB_HTTPS.url,
+    pin: PIN_40,
+    gitOps,
+    transport,
+  });
+
+  // assert
+  assert.deepStrictEqual(clones, [
+    { url: GITHUB_HTTPS.url, auth: true, leftover: false },
+    { url: GITHUB_SSH.url, auth: false, leftover: false },
+  ]);
+  assert.equal(base.state.calls.fetchCommit.length, 1, "the pin is fetched once, after the clone");
+  assert.equal(cloneRoot, await locations.pluginCloneDir(pluginCloneKey(GITHUB_CLONE_URL, PIN_40)));
+  assert.deepStrictEqual(notes.noteFor("repo@gits"), {
+    note: "ssh-not-configured",
+    url: GITHUB_HTTPS.url,
+    retries: [GITHUB_SSH.url],
+  });
+});
+
+void test("SG-SSH-06: an ssh clone fills the directory an https clone of the same source fills", async (t) => {
+  // arrange
+  const overSsh = await freshLocations(t);
+  const overHttps = await freshLocations(t);
+
+  // act
+  const sshRoot = await materializePluginClone({
+    resolveAuth: publicCloneAuth,
+    locations: overSsh,
+    cloneUrl: GITHUB_CLONE_URL,
+    networkUrl: GITHUB_HTTPS.url,
+    pin: PIN_40,
+    gitOps: createGitOps().gitOps,
+    transport: cloneTransport(GITHUB_SSH).transport,
+  });
+  const httpsRoot = await materializePluginClone({
+    resolveAuth: publicCloneAuth,
+    locations: overHttps,
+    cloneUrl: GITHUB_CLONE_URL,
+    networkUrl: GITHUB_HTTPS.url,
+    pin: PIN_40,
+    gitOps: createGitOps().gitOps,
+  });
+
+  // assert
+  assert.equal(
+    path.relative(overSsh.extensionRoot, sshRoot),
+    path.relative(overHttps.extensionRoot, httpsRoot),
+  );
+});
+
+void test("D-SG-18, upstream N1t: a commit fetch that fails after the clone is not retried over another transport", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = createGitOps();
+  const fetchFailure = new GitCommandError(
+    { kind: "network" },
+    { operation: "fetch --depth", exitCode: 128 },
+  );
+  const { clones, gitOps: cloning } = cloneFailingFor(new Set(), base);
+  const gitOps: GitOps = { ...cloning, fetchCommit: () => Promise.reject(fetchFailure) };
+
+  // act & assert
+  await assert.rejects(
+    materializePluginClone({
+      resolveAuth: publicCloneAuth,
+      locations,
+      cloneUrl: GITHUB_CLONE_URL,
+      networkUrl: GITHUB_HTTPS.url,
+      pin: PIN_40,
+      gitOps,
+      transport: cloneTransport(GITHUB_HTTPS, GITHUB_SSH).transport,
+    }),
+    (error: unknown) => error === fetchFailure,
+  );
+  assert.deepStrictEqual(clones, [{ url: GITHUB_HTTPS.url, auth: true, leftover: false }]);
+});
+
+void test("D-SG-18: a pinned clone that fails over both transports reports both and leaves no staging directory", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = createGitOps();
+  const { gitOps, clones } = cloneFailingFor(new Set([GITHUB_HTTPS.url, GITHUB_SSH.url]), base);
+
+  // act & assert
+  await assert.rejects(
+    materializePluginClone({
+      resolveAuth: publicCloneAuth,
+      locations,
+      cloneUrl: GITHUB_CLONE_URL,
+      networkUrl: GITHUB_HTTPS.url,
+      pin: PIN_40,
+      gitOps,
+      transport: cloneTransport(GITHUB_HTTPS, GITHUB_SSH).transport,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof GitHubTransportsFailedError);
+      assert.strictEqual(error.surface, "plugin");
+      return true;
+    },
+  );
+  assert.equal(clones.length, 2);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("D-SG-18: a cold mirror over an ssh-only transport clones the ssh url with no auth", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = mirrorGitOps();
+  const { gitOps, clones } = cloneFailingFor(new Set(), base);
+  const { transport, notes } = cloneTransport(GITHUB_SSH);
+
+  // act
+  const { pluginRoot } = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: GITHUB_CLONE_URL,
+    networkUrl: GITHUB_HTTPS.url,
+    gitOps,
+    transport,
+  });
+
+  // assert
+  assert.deepStrictEqual(clones, [{ url: GITHUB_SSH.url, auth: false, leftover: false }]);
+  assert.equal(pluginRoot, await locations.pluginCloneDir(pluginMirrorKey(GITHUB_CLONE_URL)));
+  assert.deepStrictEqual(notes.noteFor("repo@gits"), { note: "via-ssh", url: GITHUB_SSH.url });
+});
+
+void test("D-SG-18: a cold mirror over an https-first transport removes the failed clone's staging before the ssh clone", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = mirrorGitOps();
+  const { gitOps, clones } = cloneFailingFor(new Set([GITHUB_HTTPS.url]), base);
+
+  // act
+  await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: GITHUB_CLONE_URL,
+    networkUrl: GITHUB_HTTPS.url,
+    ref: "main",
+    gitOps,
+    transport: cloneTransport(GITHUB_HTTPS, GITHUB_SSH).transport,
+  });
+
+  // assert
+  assert.deepStrictEqual(clones, [
+    { url: GITHUB_HTTPS.url, auth: true, leftover: false },
+    { url: GITHUB_SSH.url, auth: false, leftover: false },
+  ]);
+  assert.deepStrictEqual(
+    base.state.calls.clone.map((call) => call.ref),
+    ["main"],
+    "the ssh clone keeps the ref hint",
+  );
+});
+
+void test("D-SG-18: an unpinned source hands its transport to the mirror step and the commit copy", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { transport } = cloneTransport(GITHUB_SSH);
+  const seen: Array<CloneTransport | undefined> = [];
+  const copyRoot = path.join(locations.extensionRoot, "copy");
+
+  // act
+  await materializeUnpinnedSource(
+    {
+      materializeOrRefreshPluginMirror: (args) => {
+        seen.push(args.transport);
+        return Promise.resolve({ pluginRoot: copyRoot, resolvedSha: PIN_40 });
+      },
+      materializePluginCommitCopy: (args) => {
+        seen.push(args.transport);
+        return Promise.resolve(copyRoot);
+      },
+    },
+    {
+      locations,
+      source: githubSource("owner/repo"),
+      auth: publicCloneAuth(),
+      transport,
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(seen, [transport, transport]);
 });
 
 void test("MIRR-02 / D-SG-10: a warm mirror at the remote's commit is checked with one ls-remote and not cloned again", async (t) => {

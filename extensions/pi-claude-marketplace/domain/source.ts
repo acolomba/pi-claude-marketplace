@@ -107,6 +107,14 @@ const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/..."
  */
 const GIT_SUBDIR_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
+/**
+ * D-SG-20: whether a git-subdir `url` is the GitHub `owner/repo` shorthand,
+ * which Claude Code clones from GitHub rather than as a git address.
+ */
+export function isGitSubdirShorthand(url: string): boolean {
+  return GIT_SUBDIR_SHORTHAND.test(url);
+}
+
 /** MM-4: non-relative string sources -- the "fallthrough" reason. */
 function nonRelativeReason(raw: string): string {
   return `non-relative string source ${raw} cannot be classified`;
@@ -285,7 +293,7 @@ function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
     return unknownObjectSource(obj, "git-subdir source is missing url or path");
   }
 
-  const refusal = GIT_SUBDIR_SHORTHAND.test(url)
+  const refusal = isGitSubdirShorthand(url)
     ? undefined
     : gitUrlRefusal(stripSlashAndFragment(url).base);
   if (refusal !== undefined) {

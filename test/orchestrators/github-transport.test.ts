@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   cloneOverGitHubTransports,
   createGitHubCloneNotes,
+  createPluginTransportContext,
   transportForce,
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { GitHubTransportsFailedError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -14,6 +15,7 @@ import type {
   TransportAttempt,
   TransportPlan,
 } from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
+import type { PluginSshOps } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 
 const SSH_ATTEMPT = {
   transport: "ssh",
@@ -443,6 +445,28 @@ describe("cloneOverGitHubTransports", () => {
     );
   });
 
+  test("D-SG-18, upstream zHi: gives a plugin clone that fails over both Claude Code's retry text", async () => {
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan: planOf(HTTPS_ATTEMPT, "ssh-not-configured", SSH_ATTEMPT),
+        notes: createGitHubCloneNotes(),
+        subject: "ghp@gits",
+        surface: "plugin",
+        attempt: (attempt) =>
+          Promise.reject(new Error(attempt.transport === "https" ? "https refused" : "ssh denied")),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubTransportsFailedError);
+        assert.strictEqual(
+          error.message,
+          "https refused\nThe retry over SSH failed too: ssh denied\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.",
+        );
+        return true;
+      },
+    );
+  });
+
   test("D-SG-22: holds a rejection that is not an Error as an Error with its text", async () => {
     // act & assert
     await assert.rejects(
@@ -467,5 +491,189 @@ describe("cloneOverGitHubTransports", () => {
         return true;
       },
     );
+  });
+});
+
+/** A port that answers `answers` and records each call by its name. */
+function countingPort(answers: {
+  readonly userOverride?: boolean;
+  readonly rewritten?: boolean;
+  readonly probe?: Awaited<ReturnType<PluginSshOps["probe"]>>;
+  readonly hop?: Awaited<ReturnType<PluginSshOps["showsDirectGitHub"]>>;
+}): { readonly ssh: PluginSshOps; readonly calls: string[] } {
+  const calls: string[] = [];
+  return {
+    calls,
+    ssh: {
+      showsDirectGitHub: () => {
+        calls.push("showsDirectGitHub");
+        return Promise.resolve(answers.hop ?? { kind: "ran", direct: true, exitCode: 0 });
+      },
+      probe: () => {
+        calls.push("probe");
+        return Promise.resolve(answers.probe ?? "not-configured");
+      },
+      userOverride: () => {
+        calls.push("userOverride");
+        return Promise.resolve(answers.userOverride ?? false);
+      },
+      urlRewritten: (sshUrl) => {
+        calls.push(`urlRewritten ${sshUrl}`);
+        return Promise.resolve({ rewritten: answers.rewritten ?? false, exitCode: 0 });
+      },
+    },
+  };
+}
+
+describe("createPluginTransportContext", () => {
+  test("D-SG-24: reads the force of the environment it is given", () => {
+    // act
+    const context = createPluginTransportContext({
+      env: { CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "true" },
+      ssh: countingPort({}).ssh,
+    });
+
+    // assert
+    assert.strictEqual(context.force, "prefer-https");
+  });
+
+  test("D-SG-18: asks the port each check once for the whole context", async () => {
+    // arrange
+    const { ssh, calls } = countingPort({ probe: "unknown", userOverride: true });
+    const context = createPluginTransportContext({ env: {}, ssh });
+
+    // act
+    const answers = [
+      await context.checks.probe(),
+      await context.checks.probe(),
+      await context.checks.userOverride(),
+      await context.checks.userOverride(),
+    ];
+
+    // assert
+    assert.deepStrictEqual(answers, ["unknown", "unknown", true, true]);
+    assert.deepStrictEqual(calls, ["probe", "userOverride"]);
+  });
+
+  test("D-SG-18: asks the port the rewrite check once per url and logs nothing for an unchanged url", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { ssh, calls } = countingPort({ rewritten: false });
+    const context = createPluginTransportContext({ env: {}, ssh });
+
+    // act
+    const answers = [
+      await context.checks.urlRewritten("git@github.com:acme/one.git"),
+      await context.checks.urlRewritten("git@github.com:acme/one.git"),
+      await context.checks.urlRewritten("git@github.com:acme/two.git"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(answers, [false, false, false]);
+    assert.deepStrictEqual(calls, [
+      "urlRewritten git@github.com:acme/one.git",
+      "urlRewritten git@github.com:acme/two.git",
+    ]);
+    assert.deepStrictEqual(logged, []);
+  });
+
+  test("D-SG-18: logs Claude Code's line with the exit code for a rewritten url", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const context = createPluginTransportContext({
+      env: {},
+      ssh: {
+        ...countingPort({}).ssh,
+        urlRewritten: () => Promise.resolve({ rewritten: true, exitCode: 128 }),
+      },
+    });
+
+    // act
+    const rewritten = await context.checks.urlRewritten("git@github.com:acme/one.git");
+
+    // assert
+    assert.strictEqual(rewritten, true);
+    assert.deepStrictEqual(logged, [
+      "[git] GitHub SSH URL is rewritten by git config, or git could not say (code=128): staying on SSH",
+    ]);
+  });
+
+  test("D-SG-18: answers both ssh -G checks from one launch and logs nothing for a direct hop", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { ssh, calls } = countingPort({ hop: { kind: "ran", direct: true, exitCode: 0 } });
+    const context = createPluginTransportContext({ env: {}, ssh });
+
+    // act
+    const answers = [
+      await context.checks.sshPresent(),
+      await context.checks.showsDirectGitHub(),
+      await context.checks.showsDirectGitHub(),
+    ];
+
+    // assert
+    assert.deepStrictEqual(answers, [true, true, true]);
+    assert.deepStrictEqual(calls, ["showsDirectGitHub"]);
+    assert.deepStrictEqual(logged, []);
+  });
+
+  test("D-SG-18: reads a missing ssh as no ssh present", async () => {
+    // arrange
+    const context = createPluginTransportContext({
+      env: {},
+      ssh: countingPort({ hop: { kind: "missing" } }).ssh,
+    });
+
+    // act
+    const present = await context.checks.sshPresent();
+
+    // assert
+    assert.strictEqual(present, false);
+  });
+
+  for (const { label, hop, line } of [
+    {
+      label: "a hop that is not direct",
+      hop: { kind: "ran", direct: false, exitCode: 0 },
+      line: "[git] ssh -G does not show git@github.com going straight to github.com (code=0): staying on SSH",
+    },
+    {
+      label: "no ssh",
+      hop: { kind: "missing" },
+      line: "[git] ssh -G does not show git@github.com going straight to github.com (code=null): staying on SSH",
+    },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    hop: Awaited<ReturnType<PluginSshOps["showsDirectGitHub"]>>;
+    line: string;
+  }>) {
+    test(`D-SG-18: logs Claude Code's line once for ${label}`, async (t) => {
+      // arrange
+      const logged = captureDebugLog(t);
+      const context = createPluginTransportContext({ env: {}, ssh: countingPort({ hop }).ssh });
+
+      // act
+      const answers = [
+        await context.checks.showsDirectGitHub(),
+        await context.checks.showsDirectGitHub(),
+      ];
+
+      // assert
+      assert.deepStrictEqual(answers, [false, false]);
+      assert.deepStrictEqual(logged, [line]);
+    });
+  }
+
+  test("D-SG-22: starts each context with notes of its own", () => {
+    // arrange
+    const port = countingPort({}).ssh;
+    const first = createPluginTransportContext({ env: {}, ssh: port });
+    const second = createPluginTransportContext({ env: {}, ssh: port });
+
+    // act
+    first.notes.record("ghp@gits", { note: "via-ssh", url: "git@github.com:acme/ghp.git" });
+
+    // assert
+    assert.strictEqual(second.notes.noteFor("ghp@gits"), undefined);
   });
 });

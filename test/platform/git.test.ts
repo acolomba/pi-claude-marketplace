@@ -27,6 +27,9 @@ import {
   resolveRef,
   resolveRemoteRef,
   runWithGitAbortSignal,
+  sshShowsDirectGitHub,
+  sshUrlRewritten,
+  userSshOverride,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import { getAgentDir } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
@@ -2429,6 +2432,251 @@ describe("probeGitHubSsh", () => {
 
     // assert
     assert.strictEqual(probed, "not-configured");
+  });
+});
+
+// A git process whose every run rejects with `failure`.
+function failingGitProcess(failure: Error): GitProcess {
+  return {
+    locate: () => Promise.reject(failure),
+    run: () => Promise.reject(failure),
+  };
+}
+
+// The git config pairs one `GIT_CONFIG_COUNT` block gives a hermetic git.
+function configVariables(pairs: Readonly<Record<string, string>>): NodeJS.ProcessEnv {
+  const entries = Object.entries(pairs);
+  const variables: NodeJS.ProcessEnv = { GIT_CONFIG_COUNT: String(entries.length) };
+  for (const [index, [key, value]] of entries.entries()) {
+    variables[`GIT_CONFIG_KEY_${index}`] = key;
+    variables[`GIT_CONFIG_VALUE_${index}`] = value;
+  }
+
+  return variables;
+}
+
+describe("userSshOverride", () => {
+  for (const { label, env, platform } of [
+    { label: "GIT_SSH_COMMAND set", env: { GIT_SSH_COMMAND: "ssh -i key" }, platform: "linux" },
+    {
+      label: "GIT_SSH_COMMAND set to the empty string",
+      env: { GIT_SSH_COMMAND: "" },
+      platform: "linux",
+    },
+    { label: "GIT_SSH set", env: { GIT_SSH: "/usr/bin/ssh" }, platform: "linux" },
+    { label: "GIT_SSH set to the empty string", env: { GIT_SSH: "" }, platform: "linux" },
+    {
+      label: "a lower-case git_ssh_command on win32",
+      env: { git_ssh_command: "" },
+      platform: "win32",
+    },
+  ] satisfies ReadonlyArray<{ label: string; env: NodeJS.ProcessEnv; platform: NodeJS.Platform }>) {
+    test(`D-SG-18, Pitfall 4: reads ${label} as the user's choice without a config read`, async () => {
+      // arrange
+      const gitProcess = failingGitProcess(new Error("the variable answers first"));
+
+      // act
+      const chosen = await userSshOverride({ env, platform }, gitProcess);
+
+      // assert
+      assert.strictEqual(chosen, true);
+    });
+  }
+
+  test("D-SG-18: reads a lower-case git_ssh_command off Windows as no choice", async (t) => {
+    // arrange
+    const gitProcess = await hermeticGitProcess(t);
+
+    // act
+    const chosen = await userSshOverride(
+      { env: { git_ssh_command: "ssh" }, platform: "linux" },
+      gitProcess,
+    );
+
+    // assert
+    assert.strictEqual(chosen, false);
+  });
+
+  test("D-SG-18: reads core.sshCommand in the user's git config as the user's choice", async (t) => {
+    // arrange
+    const gitProcess = await hermeticGitProcess(
+      t,
+      configVariables({ "core.sshCommand": "ssh -i key" }),
+    );
+
+    // act
+    const chosen = await userSshOverride({ env: {}, platform: "linux" }, gitProcess);
+
+    // assert
+    assert.strictEqual(chosen, true);
+  });
+
+  test("D-SG-18: reads no variable and no core.sshCommand as no choice", async (t) => {
+    // arrange
+    const gitProcess = await hermeticGitProcess(t, configVariables({ "ssh.variant": "ssh" }));
+
+    // act
+    const chosen = await userSshOverride({ env: {} }, gitProcess);
+
+    // assert
+    assert.strictEqual(chosen, false);
+  });
+
+  test("D-SG-18: reads a config read that fails as no choice and logs it without the path", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const gitProcess = failingGitProcess(new Error("cannot read /home/user/.gitconfig"));
+
+    // act
+    const chosen = await userSshOverride({ env: {}, platform: "linux" }, gitProcess);
+
+    // assert
+    assert.strictEqual(chosen, false);
+    assert.deepStrictEqual(logged, [
+      "[git] could not read the user's git ssh settings: cannot read .gitconfig",
+    ]);
+  });
+});
+
+describe("sshUrlRewritten", () => {
+  const SSH_URL = "git@github.com:acme/ghp.git";
+
+  test("D-SG-18: reads a url git prints unchanged as not rewritten, with no Pi request pair", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/base");
+    const { gitProcess, requests } = recordingGitProcess(await hermeticGitProcess(t));
+
+    // act
+    const checked = await sshUrlRewritten(SSH_URL, gitProcess);
+
+    // assert
+    assert.deepStrictEqual(checked, { rewritten: false, exitCode: 0 });
+    assert.deepStrictEqual(requests, [
+      {
+        subcommand: "ls-remote",
+        lane: "local",
+        options: ["--get-url"],
+        operands: [SSH_URL],
+        timeoutMs: 5_000,
+      },
+    ]);
+  });
+
+  test("D-SG-18: reads a url the user's insteadOf rewrites as rewritten", async (t) => {
+    // arrange
+    const gitProcess = await hermeticGitProcess(
+      t,
+      configVariables({ "url.https://github.com/.insteadOf": "git@github.com:" }),
+    );
+
+    // act
+    const checked = await sshUrlRewritten(SSH_URL, gitProcess);
+
+    // assert
+    assert.deepStrictEqual(checked, { rewritten: true, exitCode: 0 });
+  });
+
+  test("D-SG-18: reads a failed read as rewritten, with git's exit code", async () => {
+    // arrange
+    const failure = new GitCommandError(
+      { kind: "failed" },
+      { operation: "ls-remote --get-url", exitCode: 128 },
+    );
+
+    // act
+    const checked = await sshUrlRewritten(SSH_URL, failingGitProcess(failure));
+
+    // assert
+    assert.deepStrictEqual(checked, { rewritten: true, exitCode: 128 });
+  });
+
+  test("D-SG-18: reads a read that gives no exit code as rewritten", async () => {
+    // act
+    const checked = await sshUrlRewritten(SSH_URL, failingGitProcess(new Error("no git")));
+
+    // assert
+    assert.deepStrictEqual(checked, { rewritten: true, exitCode: null });
+  });
+});
+
+describe("sshShowsDirectGitHub", () => {
+  const DIRECT = "host github.com\nuser git\nhostname github.com\nport 22\n";
+
+  for (const { label, run, direct } of [
+    { label: "a direct hop", run: { exitCode: 0, output: `${DIRECT}\n` }, direct: true },
+    {
+      label: "a hostname line in another case with spaces around it",
+      run: { exitCode: 0, output: "  HostName GitHub.com  \n" },
+      direct: true,
+    },
+    {
+      label: "a proxycommand line",
+      run: { exitCode: 0, output: `${DIRECT}proxycommand nc %h %p\n` },
+      direct: false,
+    },
+    {
+      label: "a proxyjump line",
+      run: { exitCode: 0, output: `${DIRECT}ProxyJump bastion\n` },
+      direct: false,
+    },
+    {
+      label: "proxycommand none",
+      run: { exitCode: 0, output: `${DIRECT}proxycommand none\n` },
+      direct: true,
+    },
+    {
+      label: "proxyjump none",
+      run: { exitCode: 0, output: `${DIRECT}proxyjump none\n` },
+      direct: true,
+    },
+    {
+      label: "another hostname",
+      run: { exitCode: 0, output: "hostname ssh.github.com\n" },
+      direct: false,
+    },
+    { label: "a failed ssh -G", run: { exitCode: 255, output: DIRECT }, direct: false },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    run: { exitCode: number; output: string };
+    direct: boolean;
+  }>) {
+    test(`D-SG-18: reads ${label} as ${direct ? "direct" : "not direct"}`, async () => {
+      // arrange
+      const { gitProcess, launches } = sshAnsweringGitProcess(() =>
+        Promise.resolve({ kind: "ran", ...run, timedOut: false }),
+      );
+
+      // act
+      const checked = await sshShowsDirectGitHub(gitProcess);
+
+      // assert
+      assert.deepStrictEqual(checked, { kind: "ran", direct, exitCode: run.exitCode });
+      assert.deepStrictEqual(launches, ["github-config"]);
+    });
+  }
+
+  test("D-SG-18: reads a missing ssh as missing", async () => {
+    // arrange
+    const { gitProcess } = sshAnsweringGitProcess(() => Promise.resolve({ kind: "missing" }));
+
+    // act
+    const checked = await sshShowsDirectGitHub(gitProcess);
+
+    // assert
+    assert.deepStrictEqual(checked, { kind: "missing" });
+  });
+
+  test("D-SG-18: reads a launch that throws as not direct with no exit code", async () => {
+    // arrange
+    const { gitProcess } = sshAnsweringGitProcess(() =>
+      Promise.reject(new Error("spawn ssh EACCES")),
+    );
+
+    // act
+    const checked = await sshShowsDirectGitHub(gitProcess);
+
+    // assert
+    assert.deepStrictEqual(checked, { kind: "ran", direct: false, exitCode: null });
   });
 });
 

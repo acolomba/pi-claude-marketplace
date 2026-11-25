@@ -14,6 +14,7 @@ import {
 import {
   appendLeakToError,
   GitCommandError,
+  GitHubTransportsFailedError,
   InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
@@ -454,6 +455,50 @@ describe("composeInstallFailureMessage", () => {
       reasons: ["authentication required"],
       version: "1.2.3",
       scope: "user",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("D-SG-18: keeps the cause of a clone that failed over both GitHub transports", () => {
+    // arrange
+    const failure = new GitHubTransportsFailedError("plugin", [
+      {
+        transport: "https",
+        url: "https://github.com/acme/ghp.git",
+        error: new GitCommandError(
+          { kind: "repository-not-found" },
+          { operation: "clone", exitCode: 128 },
+        ),
+      },
+      {
+        transport: "ssh",
+        url: "git@github.com:acme/ghp.git",
+        error: new GitCommandError(
+          { kind: "ssh-auth", detail: "publickey" },
+          { operation: "clone", exitCode: 128 },
+        ),
+      },
+    ]);
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "ghp",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "ghp",
+      reasons: ["authentication required"],
+      scope: "project",
+      cause: failure,
       severity: "error",
       needsReload: false,
     });

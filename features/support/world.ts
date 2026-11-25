@@ -269,11 +269,11 @@ type ScenarioPiVariables = Pick<
 /**
  * The variables a profile Pi without the GitHub base override may add to the
  * run's git environment: upstream's switch to https and its remote-session
- * marker (D-SG-24).
+ * marker (D-SG-24), and the user's ssh command or program (D-SG-18).
  */
 export type ProfilePiVariables = Pick<
   RpcGitEnvironment,
-  "CLAUDE_CODE_PLUGIN_PREFER_HTTPS" | "CLAUDE_CODE_REMOTE"
+  "CLAUDE_CODE_PLUGIN_PREFER_HTTPS" | "CLAUDE_CODE_REMOTE" | "GIT_SSH_COMMAND" | "GIT_SSH"
 >;
 
 // What a profile Pi starts with: its profile, whether it starts with

@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { canonicalCloneUrl } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { defaultPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   installedPluginOutcome,
   ledgerDegradationSignals,
@@ -3599,6 +3600,50 @@ test("PURL-09 / VER-01 / D-77-02: a git-source install takes its root from the c
   assert.equal(record?.version, "0.0.1");
   assert.equal(record?.resolvedSha, RESOLVED_SHA);
 });
+
+for (const withContext of [true, false]) {
+  test(`D-SG-18: the clone probe gets the plugin's subject and ${withContext ? "the ledger's" : "no"} transport context`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-outcome-transport-");
+    const seeded = await seedPlugin(environment.cwd, {
+      gitSource: { source: "url", url: "https://example.com/org/repo", sha: RESOLVED_SHA },
+      components: { skills: ["alpha"] },
+    });
+    const locations = locationsFor("project", environment.cwd);
+    const transportContext = defaultPluginTransportContext({});
+    const probed: unknown[] = [];
+
+    // act
+    await runInstallLedger(seeded.state, locations, {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      consentView: "none",
+      removalOps: createRemovalOps(),
+      env: {},
+      ...(withContext && { transportContext }),
+      cloneProbe: (options) => {
+        probed.push({ subject: options.subject, context: options.transportContext });
+        return Promise.resolve({
+          result: {
+            kind: "materialized",
+            pluginRoot: seeded.pluginRoot,
+            resolvedSha: RESOLVED_SHA,
+          },
+          resolvedSha: RESOLVED_SHA,
+        });
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(probed, [
+      { subject: "empty@marketplace", context: withContext ? transportContext : undefined },
+    ]);
+  });
+}
 
 test("GV-01: a git-source install that declares no version records its 12-hex commit", async (t) => {
   // arrange

@@ -36,6 +36,7 @@ import type {
   withLockedStateTransaction,
 } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 import type {
   AddedMarketplaces,
@@ -66,6 +67,8 @@ export interface CascadeInstallOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /** D-SG-18: the command's GitHub transport context, shared by every member. */
+  readonly transportContext?: PluginTransportContext;
   readonly tagProbe?: CascadeTagProbe;
   readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
 }
@@ -90,6 +93,7 @@ export type InstallLedgerCallerOptions = Pick<
   | "credentialOps"
   | "deviceFlowHttp"
   | "authMemo"
+  | "transportContext"
 >;
 
 /**
@@ -106,7 +110,9 @@ export type InstallLedgerCallerOptions = Pick<
  * and a cascade that applied either to the plugin the user typed but not to
  * the plugins installed with it would produce one install under two policies.
  * The auth trio must be shared or a member would authenticate differently from
- * the tag query that selected its pin (AUTH-09).
+ * the tag query that selected its pin (AUTH-09). The transport context is
+ * shared too, and kept apart from the auth trio: one install command probes
+ * the user's ssh once, and its dependencies clone by that answer (D-SG-18).
  *
  * Per-member, necessarily: `sourcePin`, `resolvedVersion` and `pinVersion`.
  * The first two are facts about ONE member -- the commit its constraint
@@ -177,6 +183,7 @@ export function buildInstallLedgerOptions(
     ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+    ...(opts.transportContext !== undefined && { transportContext: opts.transportContext }),
     marketplaceAdd: core.marketplaceAdd,
     addedMarketplaces: core.addedMarketplaces,
   };

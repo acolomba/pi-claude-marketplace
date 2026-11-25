@@ -47,6 +47,16 @@ Given(
   },
 );
 
+// D-SG-18: the user's ssh config sends the host through a proxy, the line
+// `ssh -G` prints, such as `proxycommand nc %h %p`. GitHub refuses every key,
+// so only that line keeps a github plugin install on ssh.
+Given(
+  "the user's ssh is denied for {string} and its config names the proxy {string}",
+  async function (this: ScenarioWorld, host: string, proxy: string): Promise<void> {
+    await this.sshHost.register(host, { probe: { kind: "denied" }, proxy });
+  },
+);
+
 Given(
   "the user's ssh never answers for {string}",
   async function (this: ScenarioWorld, host: string): Promise<void> {

@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   probeInstallClone,
   type InstallCloneCacheSeam,
@@ -22,6 +23,10 @@ import type {
   CredentialOps,
   DeviceFlowHttp,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type {
+  CloneTransport,
+  PluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -75,6 +80,7 @@ for (const mode of ["json", "rpc"]) {
 
       // act
       const outcome = await probeInstallClone({
+        subject: "plugin@market",
         source: {
           kind: "github",
           raw: "owner/repo",
@@ -119,6 +125,16 @@ async function freshLocations(
   return { locations: locationsFor("project", root), root };
 }
 
+/** D-SG-18: the subject and the first attempt and note of a clone transport's plan. */
+async function plannedTransport(transport: CloneTransport | undefined): Promise<unknown> {
+  if (transport === undefined) {
+    return undefined;
+  }
+
+  const plan = await transport.plan();
+  return { subject: transport.subject, first: plan.first, note: plan.note };
+}
+
 function auth(): Parameters<typeof probeInstallClone>[0]["auth"] {
   const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
   const credentialOps: CredentialOps = {
@@ -143,7 +159,12 @@ test("uses the production seam for a warm pinned clone", async (testContext) => 
   };
 
   // act
-  const outcome = await probeInstallClone({ source, locations, auth: auth() });
+  const outcome = await probeInstallClone({
+    source,
+    locations,
+    auth: auth(),
+    subject: "plugin@market",
+  });
 
   // assert
   assert.deepStrictEqual(outcome, {
@@ -187,6 +208,7 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
 
   // act
   const outcome = await probeInstallClone({
+    subject: "plugin@market",
     source,
     seam,
     locations,
@@ -233,7 +255,13 @@ test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid b
   };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: auth() });
+  const outcome = await probeInstallClone({
+    source,
+    seam,
+    locations,
+    auth: auth(),
+    subject: "plugin@market",
+  });
 
   // assert
   assert.deepStrictEqual(outcome, {
@@ -262,13 +290,19 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
     },
     // The bundle carries closures, so the recorded call keeps only the two
     // comparable fields: the bound host and the injected credential ops.
-    materializePluginClone({ resolveAuth, onCloneCreated: _onCloneCreated, ...cloneOptions }) {
+    async materializePluginClone({
+      resolveAuth,
+      onCloneCreated: _onCloneCreated,
+      transport,
+      ...cloneOptions
+    }) {
       const bundle = resolveAuth();
       calls.push({
         ...cloneOptions,
         auth: { credentialOps: bundle.credentialOps, host: bundle.host },
+        transport: await plannedTransport(transport),
       });
-      return Promise.resolve(cloneRoot);
+      return cloneRoot;
     },
     materializeOrRefreshPluginMirror() {
       return Promise.reject(new Error("unexpected mirror materialization"));
@@ -279,7 +313,13 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
   };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: pluginAuth });
+  const outcome = await probeInstallClone({
+    source,
+    seam,
+    locations,
+    auth: pluginAuth,
+    subject: "plugin@market",
+  });
 
   // assert
   assert.deepStrictEqual(outcome, {
@@ -293,6 +333,11 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
       networkUrl: rawUrl,
       locations,
       pin: SHA,
+      transport: {
+        subject: "plugin@market",
+        first: { transport: "https", url: rawUrl },
+        note: undefined,
+      },
     },
   ]);
 });
@@ -315,29 +360,44 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
     materializePluginClone() {
       return Promise.reject(new Error("unexpected pinned materialization"));
     },
-    materializeOrRefreshPluginMirror({
+    async materializeOrRefreshPluginMirror({
       auth: bundle,
       onCloneCreated: _onCloneCreated,
+      transport,
       ...mirrorOptions
     }) {
       calls.push({
         ...mirrorOptions,
         auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+        transport: await plannedTransport(transport),
       });
-      return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
+      return { pluginRoot: mirrorRoot, resolvedSha: SHA };
     },
-    materializePluginCommitCopy({ resolveAuth, onCloneCreated: _onCloneCreated, ...copyOptions }) {
+    async materializePluginCommitCopy({
+      resolveAuth,
+      onCloneCreated: _onCloneCreated,
+      transport,
+      ...copyOptions
+    }) {
       const bundle = resolveAuth();
       calls.push({
         ...copyOptions,
         auth: { credentialOps: bundle.credentialOps, host: bundle.host },
+        transport: await plannedTransport(transport),
       });
-      return Promise.resolve(copyRoot);
+      return copyRoot;
     },
   };
+  const planned = { subject: "plugin@market", first: { transport: "https", url: rawUrl } };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: pluginAuth });
+  const outcome = await probeInstallClone({
+    source,
+    seam,
+    locations,
+    auth: pluginAuth,
+    subject: "plugin@market",
+  });
 
   // assert
   assert.deepStrictEqual(outcome, {
@@ -351,6 +411,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
       networkUrl: rawUrl,
       locations,
       ref: "main",
+      transport: { ...planned, note: undefined },
     },
     {
       auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
@@ -358,6 +419,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
       networkUrl: rawUrl,
       locations,
       sha: SHA,
+      transport: { ...planned, note: undefined },
     },
   ]);
 });
@@ -401,6 +463,7 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
 
   // act
   const outcome = await probeInstallClone({
+    subject: "plugin@market",
     source,
     seam,
     locations,
@@ -448,7 +511,13 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
   };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: pluginAuth });
+  const outcome = await probeInstallClone({
+    source,
+    seam,
+    locations,
+    auth: pluginAuth,
+    subject: "plugin@market",
+  });
 
   // assert
   assert.deepStrictEqual(outcome, {
@@ -485,7 +554,13 @@ test("returns an escaping-subdir result without exposing the mirror sha", async 
   };
 
   // act
-  const outcome = await probeInstallClone({ source, seam, locations, auth: auth() });
+  const outcome = await probeInstallClone({
+    source,
+    seam,
+    locations,
+    auth: auth(),
+    subject: "plugin@market",
+  });
 
   // assert
   assert.deepStrictEqual(outcome, {
@@ -524,7 +599,120 @@ test("propagates a pinned clone failure unchanged", async (testContext) => {
 
   // act & assert
   await assert.rejects(
-    probeInstallClone({ source, seam, locations, auth: auth() }),
+    probeInstallClone({ source, seam, locations, auth: auth(), subject: "plugin@market" }),
     (error: unknown) => error === cloneFailure,
   );
+});
+
+const OWNER_REPO_SOURCE = {
+  kind: "github",
+  raw: "acme/ghp",
+  owner: "acme",
+  repo: "ghp",
+} satisfies GitBackedSource;
+
+/** A seam whose unpinned mirror step keeps the transport it is given. */
+function transportKeepingSeam(root: string): {
+  readonly seam: InstallCloneCacheSeam;
+  readonly transports: (CloneTransport | undefined)[];
+} {
+  const transports: (CloneTransport | undefined)[] = [];
+  return {
+    transports,
+    seam: {
+      resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+      materializePluginClone: () => Promise.reject(new Error("unexpected pinned clone")),
+      materializeOrRefreshPluginMirror({ transport }) {
+        transports.push(transport);
+        return Promise.resolve({ pluginRoot: root, resolvedSha: SHA });
+      },
+      materializePluginCommitCopy: () => Promise.resolve(root),
+    },
+  };
+}
+
+/** A transport context whose user override answers `override`, with no other check. */
+function contextWithOverride(override: boolean): PluginTransportContext {
+  return createPluginTransportContext({
+    env: {},
+    ssh: {
+      probe: () => Promise.reject(new Error("the override keeps the probe from running")),
+      userOverride: () => Promise.resolve(override),
+      urlRewritten: () => Promise.reject(new Error("the override keeps the url check")),
+      showsDirectGitHub: () => Promise.reject(new Error("the override keeps ssh -G")),
+    },
+  });
+}
+
+test("D-SG-18: a clone under a transport context plans with its checks and notes under the subject", async (testContext) => {
+  // arrange
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, undefined);
+  const { seam, transports } = transportKeepingSeam(root);
+  const context = contextWithOverride(true);
+
+  // act
+  await probeInstallClone({
+    source: OWNER_REPO_SOURCE,
+    seam,
+    locations,
+    auth: auth(),
+    transportContext: context,
+    subject: "ghp@gits",
+  });
+
+  // assert
+  const [transport] = transports;
+  assert.strictEqual(transport?.notes, context.notes);
+  assert.deepStrictEqual(await plannedTransport(transport), {
+    subject: "ghp@gits",
+    first: { transport: "ssh", url: "git@github.com:acme/ghp.git" },
+    note: "via-ssh",
+  });
+});
+
+test("D-SG-18: a clone with no transport context stays on ssh when nothing forces https", async (testContext) => {
+  // arrange
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, undefined);
+  const { seam, transports } = transportKeepingSeam(root);
+
+  // act
+  await probeInstallClone({
+    source: OWNER_REPO_SOURCE,
+    seam,
+    locations,
+    auth: auth(),
+    subject: "ghp@gits",
+  });
+
+  // assert
+  assert.deepStrictEqual(await plannedTransport(transports[0]), {
+    subject: "ghp@gits",
+    first: { transport: "ssh", url: "git@github.com:acme/ghp.git" },
+    note: "via-ssh",
+  });
+});
+
+test("D-SG-21: a clone with no transport context clones once over https under the base override", async (testContext) => {
+  // arrange
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, "https://mirror.example/base");
+  const { seam, transports } = transportKeepingSeam(root);
+
+  // act
+  await probeInstallClone({
+    source: OWNER_REPO_SOURCE,
+    seam,
+    locations,
+    auth: auth(),
+    subject: "ghp@gits",
+  });
+
+  // assert
+  assert.deepStrictEqual(await plannedTransport(transports[0]), {
+    subject: "ghp@gits",
+    first: { transport: "https", url: "https://github.com/acme/ghp.git" },
+    note: "via-https",
+  });
 });

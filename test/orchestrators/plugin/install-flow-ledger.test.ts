@@ -32,6 +32,7 @@ import {
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
+import { defaultPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -14139,7 +14140,8 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
       const deviceFlow = installDeviceFlow();
       const { ctx, notifications, run } = makeCtx();
 
-      // act
+      // act: D-SG-24 keeps the clone on its one https attempt, so no ssh
+      // retry follows the sign-in this case is about.
       const outcome = await installPlugin({
         cloneCacheSeam: seamWith(git.gitOps),
         credentialOps: credentials.credentialOps,
@@ -14150,6 +14152,7 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
         run,
         plugin: "private",
         scope: "project",
+        transportContext: defaultPluginTransportContext({ CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" }),
       });
 
       // assert

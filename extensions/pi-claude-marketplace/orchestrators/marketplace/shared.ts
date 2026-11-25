@@ -8,8 +8,10 @@
 //     a plugin mirror refresh by D-SG-10's freshness check, re-clone, and swap
 //     (`clone-swap.ts`), never by a fetch and checkout in place.
 //
-//   - GitHubSshOps + DEFAULT_GITHUB_SSH_OPS (SG-SSH-02): the ssh probe that
-//     orders a GitHub clone's transports.
+//   - GitHubSshOps + DEFAULT_GITHUB_SSH_OPS (SG-SSH-02, D-SG-18): the ssh
+//     probe that orders a GitHub clone's transports, and the user's ssh
+//     settings a plugin clone checks; defaultPluginTransportContext binds a
+//     command's plugin transport context to that port.
 //
 //   - lacksStoredCredential (GAUTH-04): whether an auth failure gains the
 //     line that names how to store a credential.
@@ -63,6 +65,7 @@ import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type MarketplaceRows, type Single } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { createPluginTransportContext } from "../github-transport.ts";
 
 import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
@@ -79,6 +82,7 @@ import type {
   PluginFailedMessage,
 } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { PluginSshOps, PluginTransportContext } from "../github-transport.ts";
 
 /**
  * CR-06: AG-5 foreign-content failure carries the structured per-agent
@@ -246,12 +250,33 @@ export interface GitHubSshOps {
 }
 
 /**
- * SG-SSH-02: the default port, on the system ssh through `platform/git.ts`.
- * NFR-5: only a `NETWORK_SEAMS` module may name it (BLOCK F).
+ * D-SG-18: the port a plugin clone's checks read, the probe plus the user's
+ * own ssh settings (`PluginSshOps`). The marketplace path reads the probe
+ * only, so its callers keep the narrower `GitHubSshOps`.
  */
-export const DEFAULT_GITHUB_SSH_OPS: GitHubSshOps = {
+export type GitHubPluginSshOps = GitHubSshOps & PluginSshOps;
+
+/**
+ * SG-SSH-02, D-SG-18: the default port, on the system ssh and git through
+ * `platform/git.ts`; `userOverride` reads this process's environment. NFR-5:
+ * only a `NETWORK_SEAMS` module may name it (BLOCK F).
+ */
+export const DEFAULT_GITHUB_SSH_OPS: GitHubPluginSshOps = {
   probe: () => defaultGit.probeGitHubSsh(),
+  userOverride: () => defaultGit.userSshOverride({ env: process.env }),
+  urlRewritten: (sshUrl) => defaultGit.sshUrlRewritten(sshUrl),
+  showsDirectGitHub: () => defaultGit.sshShowsDirectGitHub(),
 };
+
+/**
+ * D-SG-18: a new transport context bound to `DEFAULT_GITHUB_SSH_OPS`, for a
+ * command root outside `NETWORK_SEAMS`, which may not name the port.
+ */
+export function defaultPluginTransportContext(
+  env: NodeJS.ProcessEnv = process.env,
+): PluginTransportContext {
+  return createPluginTransportContext({ env, ssh: DEFAULT_GITHUB_SSH_OPS });
+}
 
 /**
  * D-PL8-24: the git abort scope, re-exported here so `index.ts` hands it to the

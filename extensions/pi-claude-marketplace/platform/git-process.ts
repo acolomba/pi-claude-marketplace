@@ -223,9 +223,11 @@ export interface GitProcess {
 
 /**
  * SG-SSH-02: the ssh launches the module runs. `github-probe` is Claude Code's
- * check of whether the user's ssh authenticates to GitHub.
+ * check of whether the user's ssh authenticates to GitHub. D-SG-18:
+ * `github-config` is its `ssh -G` read of the config the user's ssh resolves
+ * for GitHub, which prints that config and connects to nothing.
  */
-export type SshLaunch = "github-probe";
+export type SshLaunch = "github-probe" | "github-config";
 
 /**
  * What one ssh launch did. `output` is stdout, a newline, and stderr, as
@@ -480,8 +482,9 @@ const LANES: Readonly<Record<GitLane, LaneRules>> = {
 // local lane without a working directory, so it runs in the neutral
 // directory, and a repository's own config never answers it. Exit 1 means
 // that neither key is set. IN-02: `--null` ends each record with NUL, so a
-// value that holds a newline cannot pose as another key.
-const SSH_CONFIG_READ = {
+// value that holds a newline cannot pose as another key. D-SG-18: the plugin
+// clone's `core.sshCommand` check reads the same keys.
+export const SSH_CONFIG_READ = {
   subcommand: "config",
   lane: "local",
   options: ["--get-regexp", "--null"],
@@ -555,7 +558,7 @@ function userValue(env: NodeJS.ProcessEnv, name: string, rules: PlatformRules): 
 // newline, and the value, and ends with NUL; a key set with no value has no
 // newline. A CR before the newline goes with it. The last record of a key
 // wins, and an empty or missing value counts as unset.
-function configValues(stdout: string): ReadonlyMap<string, string> {
+export function configValues(stdout: string): ReadonlyMap<string, string> {
   const values = new Map<string, string>();
   for (const record of stdout.split("\0")) {
     const newline = record.indexOf("\n");
@@ -686,6 +689,7 @@ const SSH_LAUNCHES: Readonly<Record<SshLaunch, SshLaunchSpec>> = {
     ],
     timeoutMs: 3_000,
   },
+  "github-config": { args: ["-G", `git@${GITHUB_HOST}`], timeoutMs: 5_000 },
 };
 
 // The answer of a probe is a line or two; the tail keeps ssh's last words.

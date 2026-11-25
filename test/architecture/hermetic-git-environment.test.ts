@@ -510,6 +510,37 @@ describe("rpcChildEnvironment", () => {
     });
   });
 
+  test("D-SG-18: adds a scenario Pi's GIT_SSH_COMMAND and GIT_SSH, not the shell's", (t) => {
+    // arrange
+    inheritVariables(t);
+    const git = {
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      GIT_SSH_COMMAND: "ssh",
+      GIT_SSH: "",
+    } satisfies RpcGitEnvironment;
+
+    // act
+    const environment = rpcChildEnvironment(sandbox, git);
+
+    // assert
+    assert.deepStrictEqual(environment, {
+      HOME: "/sandbox/home",
+      PI_CODING_AGENT_DIR: "/sandbox/agent",
+      PI_OFFLINE: "1",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      GIT_SSH_COMMAND: "ssh",
+      GIT_SSH: "",
+    });
+  });
+
   test("omits the GitHub base override when the run's git environment has none", (t) => {
     // arrange
     inheritVariables(t);

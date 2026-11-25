@@ -209,6 +209,7 @@ import type {
   StagingWarning,
 } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
 /** Controls how install orchestration surfaces notifications. */
@@ -304,6 +305,12 @@ export interface InstallLedgerOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
+  /**
+   * D-SG-18: the command's GitHub transport context, which every git clone of
+   * the ledger runs through, so one command probes once. Omitted (enable), a
+   * GitHub clone stays on SSH unless the environment forces HTTPS.
+   */
+  readonly transportContext?: PluginTransportContext;
   /**
    * LAYER-07 / D-MF-04: adds a marketplace the target scope does not record
    * yet, through the `marketplace add` code. Mirrors `cloneProbe`: a real
@@ -835,6 +842,8 @@ async function preflightInstallResolve(
         ...(opts.cloneCacheSeam !== undefined && { seam: opts.cloneCacheSeam }),
         auth,
         ...(opts.cloneCandidates !== undefined && { cloneCandidates: opts.cloneCandidates }),
+        ...(opts.transportContext !== undefined && { transportContext: opts.transportContext }),
+        subject: `${plugin}@${marketplace}`,
       });
       resolvedSha = clone.resolvedSha;
       return clone.result;
