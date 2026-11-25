@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 25
+open_count: 27
 waived_count: 52
 fixed_count: 48
-total_count: 125
-last_updated: 2026-11-24T10:40:23.053Z
+total_count: 127
+last_updated: 2026-11-25T20:05:15.637Z
 ---
 
 # Broken Windows Ledger
@@ -140,6 +140,8 @@ last_updated: 2026-11-24T10:40:23.053Z
 | 123 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts |  | [system-git] the Device Flow retry's '!'-prefixed one-shot credential helper runs through Git for Windows' sh with a Windows path in single quotes; the manual Windows check covers it (A4) | open |  | 2026-11-24T05:05:07.972Z |  |
 | 124 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts |  | [system-git] a marketplace checkout held open by another process (EBUSY/EPERM on rename) is kept and retried on the next update; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T08:44:49.906Z |  |
 | 125 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts |  | [system-git] a plugin mirror held open by another process (EBUSY/EPERM on rename) fails the plugin's row as permission denied and is retried by the next command; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T10:40:23.053Z |  |
+| 126 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/github-transport.ts |  | [system-git] The 'SSH configured for GitHub, using SSH for <subject>' debug line keys on the via-ssh note, so it now prints for an scp GitHub url add that ran no probe; key it on the probe (04-04 note) | open |  | 2026-11-25T20:05:15.462Z |  |
+| 127 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts |  | [system-git] A bootstrap add that fails after its clone shows no clone note, because notifyAddFailure has no collector; marketplace add of the same source shows it (D-SG-22) | open |  | 2026-11-25T20:05:15.637Z |  |
 
 ````json
 [
@@ -1709,6 +1711,32 @@ last_updated: 2026-11-24T10:40:23.053Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-24T10:40:23.053Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 126,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/github-transport.ts",
+    "line": null,
+    "description": "[system-git] The 'SSH configured for GitHub, using SSH for <subject>' debug line keys on the via-ssh note, so it now prints for an scp GitHub url add that ran no probe; key it on the probe (04-04 note)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-25T20:05:15.462Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 127,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts",
+    "line": null,
+    "description": "[system-git] A bootstrap add that fails after its clone shows no clone note, because notifyAddFailure has no collector; marketplace add of the same source shows it (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-25T20:05:15.637Z",
     "resolved_at": null,
     "milestone": null
   }
