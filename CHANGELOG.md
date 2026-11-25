@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A plugin with no component that Pi supports, such as an LSP-only plugin, is now `unavailable`, and `--partial` cannot install it.
+
 - Plugin agents, MCP servers, skills, commands, workflows, and hooks now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x. (#324)
 
   - These versions fix plugin MCP grants and shorten long tool names for Pi's 64-character limit.

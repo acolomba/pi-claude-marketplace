@@ -145,6 +145,8 @@ También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y
 
 Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema, un servidor MCP que la implementación de MCP que ejecuta Pi no puede ejecutar (pi-mcp-adapter o el MCP integrado de Pi) o un paquete MCP. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
 
+Un complemento sin ningún componente compatible no está disponible. La opción `--partial` no puede instalarlo.
+
 Lista los complementos parcialmente disponibles.
 
 ```text

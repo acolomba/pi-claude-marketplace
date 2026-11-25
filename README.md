@@ -145,6 +145,8 @@ You can also install the same plugin in both the user and project scopes. Then t
 
 Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that the MCP implementation Pi runs cannot run (pi-mcp-adapter or Pi's built-in MCP), or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
 
+A plugin with no supported component is unavailable. The `--partial` option cannot install it.
+
 List partially available plugins.
 
 ```text
