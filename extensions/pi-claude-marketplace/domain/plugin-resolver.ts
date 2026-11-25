@@ -134,9 +134,10 @@ function emptyResolution(): PartialResolution {
   };
 }
 
-// D-64-05: the minimal structural-defect arm. Takes only the structural
-// notes; never spreads `pluginRoot` / component lists / `componentPaths` /
-// `mcpServers` so NFR-7 holds by construction.
+// D-64-05: the minimal unavailable arm, for a structural defect or for a
+// plugin with nothing to install. Takes only the notes; never spreads
+// `pluginRoot` / component lists / `componentPaths` / `mcpServers` so NFR-7
+// holds by construction.
 function unavailable(name: string, notes: string[]): ResolvedPluginUnavailable {
   return {
     state: "unavailable",
@@ -839,8 +840,9 @@ function materializableViewFor(
  * resolver's own `state`, `unsupported` kind list, and `droppedMcpServers`
  * are the neutral verdict (D-P3-01); this gives the ones the named implementation
  * sees, so a server only one implementation blocks counts under that one.
- * `"none"` gives the neutral verdict back. An `unavailable` resolution is a
- * structural defect that no implementation changes, so it returns as is.
+ * `"none"` gives the neutral verdict back. No implementation changes an
+ * `unavailable` resolution: a structural defect, or a plugin that has nothing
+ * any implementation installs. So it returns as is.
  * Every caller names the implementation: there is no default.
  */
 export function resolutionFor(
@@ -900,11 +902,53 @@ async function runStructuralStages(args: {
   return flags.includes(true);
 }
 
+// D-P3-01: a supported kind, or a declared MCP server that at least one MCP
+// implementation runs. `droppedMcpServers` names the servers every
+// implementation blocks. `mcpServers` is not read, because it holds only the
+// servers pi-mcp-adapter runs (MSEL-04).
+function hasSupportedComponent(partial: PartialResolution): boolean {
+  if (partial.supported.length > 0) {
+    return true;
+  }
+
+  const blocked = new Set((partial.droppedMcpServers ?? []).map(({ server }) => server));
+  return Object.keys(partial.declaredMcpServers).some((server) => !blocked.has(server));
+}
+
+// D-90-05: one note for each unsupported kind. A kind whose stage writes no
+// note (a dropped hook, a blocked server, a bundle) gets a `contains <kind>`
+// note in front of the plugin's own notes. `userConfig` has its own note, the
+// unset-options note.
+function unsupportedKindNotes(partial: PartialResolution): string[] {
+  const added = partial.unsupported
+    .filter((kind) => kind !== "userConfig" && !partial.notes.includes(`contains ${kind}`))
+    .map((kind) => `contains ${kind}`);
+  return [...added, ...partial.notes];
+}
+
 /**
- * D-64-01 / D-64-07: the three-way resolver decision. Structural
- * precedence -- a structural defect (`structuralDirty`) wins over any
- * unsupported-component signal, so a both-defects plugin resolves
- * `unavailable` and never leaks `pluginRoot` through the `partially-available` arm.
+ * D-64-01 / D-64-07: the three-way resolver decision, the neutral verdict.
+ * Structural precedence: a structural defect (`structuralDirty`) wins over
+ * any unsupported-component signal, so a plugin with both resolves
+ * `unavailable` with its structural notes first and never leaks `pluginRoot`
+ * through the `partially-available` arm. A plugin with no unsupported kind
+ * is `installable`.
+ *
+ * A plugin with an unsupported kind and no supported component also resolves
+ * `unavailable`. A supported component is a kind in `supported` (skills,
+ * commands, agents, workflows, hooks) or a declared MCP server that at least
+ * one MCP implementation runs (D-P3-01). The notes of this arm name each
+ * unsupported kind, so a row can show the kind's own reason (D-90-05). This
+ * is a Pi capability gap: Claude Code installs such a plugin because it hosts
+ * LSP servers and hook modules, but Pi hosts none of the plugin's components,
+ * so PR-3's partially-available arm would admit an install that writes
+ * nothing.
+ *
+ * `resolutionFor` keeps its per-implementation view. A plugin whose servers
+ * one implementation blocks still installs a neutral record that works when
+ * the other implementation is active (D-P3-01, D-P3-03), so the view still
+ * answers partially available there, and no implementation changes an
+ * `unavailable` resolution.
  */
 function decideResolution(
   name: string,
@@ -917,11 +961,15 @@ function decideResolution(
     return unavailable(name, partial.notes);
   }
 
-  if (partial.unsupported.length > 0) {
-    return partiallyAvailable(name, pluginRoot, partial, metadata);
+  if (partial.unsupported.length === 0) {
+    return installable(name, pluginRoot, partial, metadata);
   }
 
-  return installable(name, pluginRoot, partial, metadata);
+  if (!hasSupportedComponent(partial)) {
+    return unavailable(name, unsupportedKindNotes(partial));
+  }
+
+  return partiallyAvailable(name, pluginRoot, partial, metadata);
 }
 
 /**
@@ -970,9 +1018,10 @@ export function requireInstallable(
     kind: op === "update" ? "no-longer-installable" : "not-installable",
     plugin: resolved.name,
     reasons: refusalReasons(resolved),
-    // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable` is
-    // a structural defect `--partial` cannot help -- carry the distinction the
-    // render row uses to condition the `--partial` hint.
+    // SEV-02 / D-69-03: `partially-available` is partially-available; `unavailable`
+    // (a structural defect, or a plugin with nothing to install) is one
+    // `--partial` cannot help -- carry the distinction the render row uses to
+    // condition the `--partial` hint.
     partialable: true,
     // IN-02 / RSTATE-05: thread the typed unsupported-kind list so the
     // failure-row composer renders per-kind markers (e.g. `unsupported hooks`)
@@ -987,8 +1036,8 @@ export function requireInstallable(
  * D-64-04 (RSTATE-04): the `--partial` narrowing gate. Admits both
  * `installable` and `partially-available` (`--partial` can degrade past the
  * unsupported parts)
- * but still rejects `unavailable` (structural defect -- `--partial` cannot help,
- * NFR-7). Throw shape mirrors `requireInstallable`; `resolved.notes` exists on all
+ * but still rejects `unavailable` (a structural defect, or a plugin with nothing
+ * to install -- `--partial` cannot help, NFR-7). Throw shape mirrors `requireInstallable`; `resolved.notes` exists on all
  * three arms so `reasons` compiles.
  *
  * BFILL-01 / D-18-06: reinstall resolves through this gate (the shared
