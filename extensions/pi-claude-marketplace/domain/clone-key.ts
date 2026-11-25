@@ -15,7 +15,7 @@
 
 import { createHash } from "node:crypto";
 
-import { GITHUB_ORIGIN } from "../shared/github-base-url.ts";
+import { GITHUB_ORIGIN, gitHubAddressOf } from "../shared/github-base-url.ts";
 
 import { ensureGitSuffix, parsePluginSource, stripSlashAndFragment } from "./source.ts";
 
@@ -108,29 +108,45 @@ export function networkCloneUrl(source: UrlSource | GitSubdirSource | GitHubSour
 }
 
 /**
- * Q-03 / MA-12: whether a leftover clone's recorded `origin` url names the same
- * repository as `source`. Both sides reduce to their `canonicalCloneUrl`
- * identity and compare after WHATWG URL normalization, so the host compares
- * case-insensitively (RFC 3986 section 3.2.2). github spellings fold through
- * the parser (D-76-02), so a leftover created before that fold is recognized.
- * A trailing `.git` and a `#<ref>` strip through the identity composition. The
- * path compares exactly (D-3-01), so `owner/Repo` and `owner/repo` differ even
- * where GitHub treats them as one repository (the IN-05 limitation). An origin
- * that parses to another kind, or whose identity is not a URL, never matches.
+ * D-SG-23: whether two repository identities name one GitHub repository, the
+ * way Claude Code folds them: true or false when either folds through
+ * `gitHubAddressOf` (a GitHub identity never matches a non-GitHub one), and
+ * undefined when neither does, so the caller runs its own exact compare.
+ */
+export function gitHubRepositoriesMatch(identity: string, other: string): boolean | undefined {
+  const repository = gitHubAddressOf(identity)?.repository;
+  const otherRepository = gitHubAddressOf(other)?.repository;
+  return repository === undefined && otherRepository === undefined
+    ? undefined
+    : repository === otherRepository;
+}
+
+/**
+ * Q-03 / MA-12 / D-SG-23: whether a leftover clone's recorded `origin` url
+ * names the same repository as `source`. Every GitHub spelling folds first
+ * (`gitHubRepositoriesMatch`), so `git@github.com:Acme/Tools.git`,
+ * `ssh://git@github.com/acme/tools`, and the github source `acme/tools` are
+ * one repository, the owner and repo compared without case (closes IN-05). A
+ * non-GitHub origin reduces to its `canonicalCloneUrl` identity, which strips
+ * a trailing `.git` and a `#<ref>`, and compares exactly with the source's:
+ * after WHATWG URL normalization when both are URLs, so the host compares
+ * case-insensitively (RFC 3986 section 3.2.2), and as text when either is an
+ * scp address. An origin that parses to another kind never matches.
  */
 export function originMatchesSource(originUrl: string, source: GitHubSource | UrlSource): boolean {
+  const sourceIdentity = canonicalCloneUrl(source);
+  const gitHubMatch = gitHubRepositoriesMatch(originUrl, sourceIdentity);
+  if (gitHubMatch !== undefined) {
+    return gitHubMatch;
+  }
+
   const origin = parsePluginSource(originUrl);
   if (origin.kind !== "github" && origin.kind !== "url") {
     return false;
   }
 
-  const originIdentity = normalizedIdentity(canonicalCloneUrl(origin));
-  return (
-    originIdentity !== undefined && originIdentity === normalizedIdentity(canonicalCloneUrl(source))
-  );
-}
-
-/** The WHATWG-normalized `href` of a clone identity, or undefined when it is not a URL. */
-function normalizedIdentity(identity: string): string | undefined {
-  return URL.canParse(identity) ? new URL(identity).href : undefined;
+  const originIdentity = canonicalCloneUrl(origin);
+  return URL.canParse(originIdentity) && URL.canParse(sourceIdentity)
+    ? new URL(originIdentity).href === new URL(sourceIdentity).href
+    : originIdentity === sourceIdentity;
 }

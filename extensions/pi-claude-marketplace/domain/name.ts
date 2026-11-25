@@ -14,6 +14,7 @@ import {
 } from "../shared/errors.ts";
 
 import { OFFICIAL_MARKETPLACE_NAMES } from "./official-marketplaces.ts";
+import { gitHubRepositoryOf } from "./source.ts";
 
 import type { ParsedSource } from "./source.ts";
 
@@ -88,11 +89,16 @@ const RESERVED_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
   "claude-plugin-directory",
 ]);
 
+/** The GitHub organization whose repositories may use a reserved marketplace name. */
+const ANTHROPICS_OWNER = "anthropics";
+
 /**
  * MKT-01 / D-PL5-01 / D-PL5-02: Claude Code's refusal of a reserved
  * marketplace `name` declared by a manifest from `source`, or undefined when
- * the name is not reserved or the source is a github repository of the
+ * the name is not reserved or the source is a GitHub repository of the
  * anthropics organization. Both comparisons ignore case, as upstream's do.
+ * D-SG-23: the repository is the one `gitHubRepositoryOf` folds, so a url
+ * source such as `git@github.com:anthropics/<repo>.git` may use the name too.
  */
 export function reservedMarketplaceNameRefusal(
   name: string,
@@ -102,7 +108,7 @@ export function reservedMarketplaceNameRefusal(
     return undefined;
   }
 
-  if (source.kind === "github" && source.owner.toLowerCase() === "anthropics") {
+  if (gitHubRepositoryOf(source)?.startsWith(`${ANTHROPICS_OWNER}/`) === true) {
     return undefined;
   }
 

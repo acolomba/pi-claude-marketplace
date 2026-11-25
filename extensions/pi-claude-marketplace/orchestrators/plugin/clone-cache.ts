@@ -25,6 +25,7 @@ import path from "node:path";
 
 import {
   canonicalCloneUrl,
+  gitHubRepositoriesMatch,
   networkCloneUrl,
   pluginCloneKey,
   pluginMirrorKey,
@@ -719,7 +720,9 @@ async function readOriginRemoteUrl(checkoutRoot: string): Promise<string | undef
  * canonicalization). A github/url marketplace source canonicalizes its own
  * record; a path source's URL is read fs-only from the checkout's `.git/config`
  * origin remote (network-free, NFR-5) and reparsed through the SAME
- * `parsePluginSource` + `canonicalCloneUrl` the plugin sources use. Returns
+ * `parsePluginSource` + `canonicalCloneUrl` the plugin sources use, so an scp
+ * origin such as `git@github.com:acme/tools.git` is a url source whose
+ * identity the seeding compare folds (D-SG-17, D-SG-23). Returns
  * undefined when no same-repo URL can be discovered (a non-git dir, no origin,
  * or an origin that does not canonicalize to a git source) -- nothing to seed.
  */
@@ -900,8 +903,11 @@ export async function seedSameRepoPluginMirrors(args: {
     // SEED-03: a different-repo git source is unaffected -- skip it so it keeps
     // its normal `(remote)` -> network-clone behavior. A git-subdir url compares
     // in identity form, so `repo`, `repo/`, `repo.git`, and `repo.git/` name one
-    // repo (D-SEED-01).
-    if (repositoryIdentity(src) !== marketplaceUrl) {
+    // repo (D-SEED-01). D-SG-23: GitHub spellings fold, so a checkout whose
+    // origin is `git@github.com:acme/tools.git` is the github plugin
+    // `acme/tools`; other identities compare exactly.
+    const identity = repositoryIdentity(src);
+    if (!(gitHubRepositoriesMatch(identity, marketplaceUrl) ?? identity === marketplaceUrl)) {
       continue;
     }
 
