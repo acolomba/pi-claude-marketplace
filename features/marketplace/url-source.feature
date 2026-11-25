@@ -179,6 +179,20 @@ Feature: Marketplace url source
       | method | path                                              | status  |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
 
+  Scenario: Adding a marketplace from an http:// git address reaches git instead of being refused
+    Given the marketplace "tools" is published as a url source
+    When the user runs "/claude:plugin marketplace add http://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                             | scope   | status | reasons             |
+      | http://{git host}/acme/tools.git | project | failed | network unreachable |
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the git host accepts 1 connection and receives no request
+
   Scenario Outline: Adding a url marketplace the git host answers with a server error fails as network error
     Given the marketplace "tools" is published as a url source
     Given the git host answers <status> for the marketplace "tools"

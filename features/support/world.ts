@@ -87,6 +87,8 @@ import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 import type { ScriptStep } from "../lib/scripted-model/script.ts";
+import type { SshGitHost } from "../lib/ssh-git-host/host.ts";
+import type { SshLaunchRecord } from "../lib/ssh-git-host/launch.ts";
 
 // Starting Pi takes most of a second and a command a tenth of that; the
 // margin covers a loaded CI runner.
@@ -174,10 +176,11 @@ export interface PiProfile {
    * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and a terminal session the
    * scenario starts afterwards gets the same environment and loads the same
    * `extraExtensions` (D-BG-01). `usePiWithProfile()` refuses it when
-   * `extraExtensions` lacks the GitHub redirect, because such a Pi would reach
-   * GitHub's real address with nothing to keep its requests on this machine.
-   * It also refuses it with `leadingExtensions`, which the terminal session
-   * cannot load ahead of the real extension.
+   * `extraExtensions` lacks the GitHub redirect, or when `httpsProxy` names no
+   * CONNECT proxy, because such a Pi or its system git would reach GitHub's
+   * real address with nothing to keep its requests on this machine (03-SECURITY
+   * F-5). It also refuses it with `leadingExtensions`, which the terminal
+   * session cannot load ahead of the real extension.
    */
   readonly withoutGitHubBaseOverride?: true;
   /**
@@ -321,6 +324,8 @@ export class ScenarioWorld extends World {
   npmRegistry: NpmRegistry | undefined = undefined;
   // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
   npmRequestWindow: number | undefined = undefined;
+  // The ssh stand-in's launch count when the last `When` step started; `support/ssh-git-host.ts` sets it.
+  sshLaunchWindow: number | undefined = undefined;
   // The line count of each log in the profile Pi's harness directory when the
   // last `When` step started; `support/github-device-flow.ts` sets it.
   harnessLogWindow: ReadonlyMap<string, number> | undefined = undefined;
@@ -403,6 +408,11 @@ export class ScenarioWorld extends World {
   /** The run's https git host, which the `Before()` hook has reset for this scenario. */
   get gitHost(): HttpsGitHost {
     return currentRun().gitHost;
+  }
+
+  /** The run's ssh stand-in, first on every Pi's PATH, which the `Before()` hook has reset. */
+  get sshHost(): SshGitHost {
+    return currentRun().sshHost;
   }
 
   /** Where the marketplace steps publish marketplaces of every source kind. */
@@ -591,6 +601,16 @@ export class ScenarioWorld extends World {
     }
 
     return this.gitHost.requestsSince(window);
+  }
+
+  /** Returns the launches of the ssh stand-in since the last `When` step started. */
+  async sshLaunchesOfLastCommand(): Promise<SshLaunchRecord[]> {
+    const window = this.sshLaunchWindow;
+    if (window === undefined) {
+      throw new Error("no command has run in this scenario");
+    }
+
+    return this.sshHost.launchesSince(window);
   }
 
   /**
@@ -846,6 +866,14 @@ export class ScenarioWorld extends World {
     }
 
     if (profile.withoutGitHubBaseOverride === true) {
+      // 03-SECURITY F-5: without the CONNECT proxy, the system git of a Pi
+      // that has no base override would reach the real github.com.
+      if (profile.httpsProxy === undefined) {
+        throw new Error(
+          "a profile Pi without the GitHub base override needs the harness CONNECT proxy as its https_proxy",
+        );
+      }
+
       this.keepTerminalSessionLocal(profile);
     } else if (profile.httpsProxy !== undefined) {
       throw new Error("only a profile Pi without the GitHub base override takes a proxy");

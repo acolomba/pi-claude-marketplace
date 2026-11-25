@@ -454,6 +454,15 @@ Then("the git host receives no request", function (this: ScenarioWorld) {
   assert.deepStrictEqual(this.requestsOfLastCommand(), { requests: [], connections: 0 });
 });
 
+// A plain-http attempt on the host's TLS port is a connection that never
+// becomes a request, so it proves the command reached the host (D-SG-17).
+Then(
+  "the git host accepts {int} connection(s) and receives no request",
+  function (this: ScenarioWorld, connections: number) {
+    assert.deepStrictEqual(this.requestsOfLastCommand(), { requests: [], connections });
+  },
+);
+
 // SG-PRC-02: the product never runs the user's askpass program.
 Then(
   "the askpass program has recorded no run",

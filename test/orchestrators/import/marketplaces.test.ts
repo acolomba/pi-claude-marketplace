@@ -670,6 +670,10 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
       source: { source: "github", repo: "acme/marketplace", ref: "v2.0" },
     },
     directory: { source: { source: "directory", path: "/opt/acme/marketplace" } },
+    git: { source: { source: "git", url: "ssh://git@h.example/acme/marketplace.git" } },
+    "git-ref": {
+      source: { source: "git", url: "ssh://git@h.example/acme/marketplace.git", ref: "v1" },
+    },
   };
 
   // act
@@ -683,6 +687,8 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
           "gamma@github": true,
           "delta@github-ref": true,
           "epsilon@directory": true,
+          "zeta@git": true,
+          "eta@git-ref": true,
         },
         extraKnownMarketplaces,
       },
@@ -716,6 +722,16 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
             marketplace: "directory",
             source: "/opt/acme/marketplace",
           },
+          {
+            scope: "user",
+            marketplace: "git",
+            source: "ssh://git@h.example/acme/marketplace.git",
+          },
+          {
+            scope: "user",
+            marketplace: "git-ref",
+            source: "ssh://git@h.example/acme/marketplace.git#v1",
+          },
         ],
         diagnostics: [],
         pluginsToInstall: [
@@ -735,6 +751,11 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
           {
             scope: "user",
             ref: { marketplace: "directory", plugin: "epsilon", raw: "epsilon@directory" },
+          },
+          { scope: "user", ref: { marketplace: "git", plugin: "zeta", raw: "zeta@git" } },
+          {
+            scope: "user",
+            ref: { marketplace: "git-ref", plugin: "eta", raw: "eta@git-ref" },
           },
         ],
         skippedPlugins: [],

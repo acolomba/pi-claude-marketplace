@@ -103,13 +103,20 @@ describe("hostFromCloneUrl", () => {
     assert.strictEqual(host, "git.example:8443");
   });
 
-  test("rejects an invalid URL source", () => {
-    // arrange
-    const cloneUrl = "not a valid URL";
+  for (const { cloneUrl, expectedHost } of [
+    { cloneUrl: "git@127.0.0.1:acme/tools", expectedHost: "127.0.0.1" },
+    { cloneUrl: "git@[::1]:acme/tools.git", expectedHost: "[::1]" },
+    { cloneUrl: "git@[::1", expectedHost: "[::1" },
+    { cloneUrl: "git@host.example", expectedHost: "host.example" },
+  ]) {
+    test(`D-SG-17: binds the scp address ${cloneUrl} to ${expectedHost}`, () => {
+      // act
+      const host = hostFromCloneUrl(cloneUrl, "url");
 
-    // act & assert
-    assert.throws(() => hostFromCloneUrl(cloneUrl, "url"), TypeError);
-  });
+      // assert
+      assert.strictEqual(host, expectedHost);
+    });
+  }
 
   test("GHB-02: binds a GitHub source to the override host", (t) => {
     // arrange

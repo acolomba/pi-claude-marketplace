@@ -1860,6 +1860,39 @@ test("classifies a malformed manifest through a staging-cleanup leak and preserv
   });
 });
 
+test("D-SG-17: an add typed on the command line refuses an ssh:// source before any git access", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "ssh://h.example/acme/tools.git",
+      gitOps,
+      commandLine: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((note) => ({ message: note.message, severity: note.severity })),
+      [
+        {
+          message:
+            "A marketplace operation has failed.\n\n" +
+            "⊘ ssh://h.example/acme/tools.git [project] (failed) {unsupported source}",
+          severity: "error",
+        },
+      ],
+    );
+    assert.equal(state.cloneCalls.length, 0);
+  });
+});
+
 test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
@@ -1874,7 +1907,7 @@ test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}
       run,
       scope: "project",
       cwd,
-      rawSource: "git@github.com:foo/bar.git",
+      rawSource: "git://github.com/foo/bar.git",
       gitOps,
     });
 
@@ -1884,7 +1917,7 @@ test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}
     assert.equal(
       note.message,
       "A marketplace operation has failed.\n\n" +
-        "⊘ git@github.com:foo/bar.git [project] (failed) {unsupported source}",
+        "⊘ git://github.com/foo/bar.git [project] (failed) {unsupported source}",
     );
     assert.equal(note.severity, "error");
 
@@ -2031,6 +2064,86 @@ for (const { form, ref } of [
       url: "https://h.example/acme/tools",
       ref,
     });
+  });
+}
+
+for (const rawSource of [
+  "ssh://git@h.example/acme/tools.git",
+  "git+ssh://git@h.example/acme/tools.git",
+  "ssh+git://git@h.example/acme/tools.git",
+  "git://h.example/acme/tools.git",
+  "file:///srv/tools.git",
+  "HTTPS://h.example/acme/tools.git",
+]) {
+  test(`D-SG-17: the command-line form refuses ${rawSource} with Claude Code's format text`, () => {
+    // arrange
+    const expectedMessage = `Cannot add marketplace from "${rawSource}": Invalid marketplace source format. Try: owner/repo, https://..., or ./path`;
+
+    // act & assert
+    assert.throws(
+      () => parseAddableSource(rawSource, "command-line"),
+      (error: unknown) => {
+        assert.ok(error instanceof UnsupportedSourceError);
+        assert.strictEqual(error.message, expectedMessage);
+        return true;
+      },
+    );
+  });
+}
+
+test("D-SG-17: a recorded ssh:// source parses as a url source", () => {
+  // arrange
+  const rawSource = "ssh://git@h.example/acme/tools.git";
+
+  // act
+  const source = parseAddableSource(rawSource);
+
+  // assert
+  assert.deepStrictEqual(source, {
+    kind: "url",
+    raw: rawSource,
+    url: "ssh://git@h.example/acme/tools",
+  });
+});
+
+for (const { rawSource, source } of [
+  {
+    rawSource: "git@h.example:acme/tools.git#main",
+    source: {
+      kind: "url",
+      raw: "git@h.example:acme/tools.git#main",
+      url: "git@h.example:acme/tools",
+      ref: "main",
+    },
+  },
+  {
+    rawSource: "http://h.example/acme/tools.git",
+    source: {
+      kind: "url",
+      raw: "http://h.example/acme/tools.git",
+      url: "http://h.example/acme/tools",
+    },
+  },
+  {
+    rawSource: "https://h.example/acme/tools.git",
+    source: {
+      kind: "url",
+      raw: "https://h.example/acme/tools.git",
+      url: "https://h.example/acme/tools",
+    },
+  },
+  { rawSource: "./tools", source: { kind: "path", raw: "./tools", logical: "./tools" } },
+  {
+    rawSource: "acme/tools",
+    source: { kind: "github", raw: "acme/tools", owner: "acme", repo: "tools" },
+  },
+] as const) {
+  test(`D-SG-17: the command-line form accepts ${rawSource}`, () => {
+    // act
+    const parsed = parseAddableSource(rawSource, "command-line");
+
+    // assert
+    assert.deepStrictEqual(parsed, source);
   });
 }
 
@@ -3254,7 +3367,7 @@ test("RECON-03 orchestrated mode -- unsupported source returns { status: 'failed
       run,
       scope: "project",
       cwd,
-      rawSource: "git@github.com:foo/bar.git",
+      rawSource: "git://github.com/foo/bar.git",
       gitOps,
       notifications: { mode: "orchestrated" },
     });

@@ -41,6 +41,39 @@ Feature: Plugin import
       | name  | source                                             |
       | tools | https://{git host}/acme/replacement/marketplace.json |
 
+  Scenario: Importing settings that declare an ssh git marketplace adds it over ssh
+    Given the marketplace "tools" is published as a url source
+    Given the user's ssh authenticates to "127.0.0.1" as "acme"
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "tools": {
+            "source": { "source": "git", "url": "ssh://git@127.0.0.1/acme/tools.git" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | false   |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 1       |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                             |
+      | tools | ssh://git@127.0.0.1/acme/tools.git |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                  |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@127.0.0.1 git-upload-pack '/acme/tools.git' |
+    Then the git host receives no request
+
   Scenario: Importing the user's claude code settings adds their marketplace and installs their enabled plugin
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
