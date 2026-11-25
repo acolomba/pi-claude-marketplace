@@ -374,6 +374,9 @@ Plans:
 **Wave 11** *(blocked on Wave 10 completion)*
 - [ ] 04-18-PLAN.md — Records: NFR-5 amended in PROJECT.md and AGENTS.md, the D-SG-17..24 outcomes, the codebase maps, and the user docs (wave 11)
 
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- Every re-baselined scenario differs only by clone columns or clone lines (04-08's rule)
+
 ### Phase 5: Credential Surface
 
 **Goal**: Git authenticates only through what the machine already holds, the extension keeps no git token of its own, Device Flow is removed or kept in the form discuss chose, and a user who stored a token through Device Flow keeps working with no action.
