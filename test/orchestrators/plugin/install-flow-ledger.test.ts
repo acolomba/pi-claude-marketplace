@@ -13123,6 +13123,7 @@ for (const mode of ["json", "rpc"]) {
         const capture = createJsonCapture();
         const ctx = {
           mode,
+          hasUI: mode === "tui" || mode === "rpc",
           get ui() {
             return capture.ui;
           },

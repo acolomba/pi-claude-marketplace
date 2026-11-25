@@ -15,7 +15,7 @@ Feature: Plugin config migration
     Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope user"
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user scope holds what release 0.4.3 left: its installation record and no config
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name     | source                       | autoupdate |
@@ -32,7 +32,7 @@ Feature: Plugin config migration
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
     Given the user has deleted the config files of the user scope
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name     | source                       |
@@ -49,7 +49,7 @@ Feature: Plugin config migration
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
     Given the user has deleted the config files of the user scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin pending --scope user"
     Then the result has these fields:
       | kind         | reconcile-pending-empty |
@@ -64,7 +64,7 @@ Feature: Plugin config migration
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install app@fixtures --scope user"
     Given the user has deleted the config files of the user scope
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id           |
@@ -84,7 +84,7 @@ Feature: Plugin config migration
     Given the user has run "/claude:plugin disable app@fixtures --scope user"
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
     Given the user has deleted the config files of the user scope
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id            | enabled |
@@ -98,19 +98,17 @@ Feature: Plugin config migration
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has deleted the config files of the user scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   | false   |
     Given the config and installation record bytes of the user scope are remembered
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope |
-      | fixtures         | user              | demo@fixtures | demo | will disable |         | user  |
       | fixtures         | user              | demo@fixtures | demo | will disable |         | user  |
     Then the config and installation record bytes of the user scope are unchanged
 
@@ -122,7 +120,7 @@ Feature: Plugin config migration
     Given pi runs with the scripted model
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has deleted the config files of the user scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given a config in scope user and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   | false   |
@@ -146,14 +144,12 @@ Feature: Plugin config migration
       """
       """
     Given the config and installation record bytes of the user scope are remembered
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | summary                      | tally label       | tally failures | tally warnings |
       | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
-      | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
     Then the results list these marketplaces and plugins:
       | marketplace name    | marketplace scope | marketplace status | marketplace reasons | id                                      | name                | status | reasons          | scope | cause chain                                     | cause truncated | leaks | rollback partial |
-      | claude-plugins.json | user              | failed             | invalid manifest    | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | user  | JSON parse failed: Unexpected end of JSON input | false           |       |                  |
       | claude-plugins.json | user              | failed             | invalid manifest    | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | user  | JSON parse failed: Unexpected end of JSON input | false           |       |                  |
     Then the config and installation record bytes of the user scope are unchanged
     Then the session offers these skills:
@@ -170,14 +166,12 @@ Feature: Plugin config migration
       """
       { "plugins": [] }
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | summary                      | tally label       | tally failures | tally warnings |
       | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
-      | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
     Then the results list these marketplaces and plugins:
       | marketplace name          | marketplace scope | marketplace status | marketplace reasons | id                                                  | name                      | status | reasons          | scope   | cause chain                                        | cause truncated | leaks | rollback partial |
-      | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | schema validation failed: /plugins: must be object | false           |       |                  |
       | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | schema validation failed: /plugins: must be object | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the "claude-plugins.local.json" file of the project scope holds this text:
@@ -188,6 +182,63 @@ Feature: Plugin config migration
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: Pending before the first-run migration reports the local config's missing marketplace and writes no project config (MIG-01, LAYER-06)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has deleted the config files of the project scope
+    Given a config in scope project and layer local, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind           | cascade                        |
+      | needs reload   | false                          |
+      | severity       | error                          |
+      | summary        | A plugin operation has failed. |
+      | tally failures | 1                              |
+      | tally label    | Reconcile pending              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares no marketplaces
+
+  Scenario: Applying before the first-run migration stops on the local config's missing marketplace and keeps the plugin installed (MIG-01, LAYER-06)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has deleted the config files of the project scope
+    Given a config in scope project and layer local, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | needs reload   | false                          |
+      | severity       | error                          |
+      | summary        | A plugin operation has failed. |
+      | tally failures | 1                              |
+      | tally label    | Reconcile                      |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
   Scenario: The first load after an upgrade from release 0.4.3 writes the project config with autoupdate off
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -197,7 +248,7 @@ Feature: Plugin config migration
     Given the user has run "/claude:plugin marketplace noautoupdate fixtures --scope project"
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the project scope holds what release 0.4.3 left: its installation record and no config
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name     | source                       | autoupdate |
@@ -214,7 +265,7 @@ Feature: Plugin config migration
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
     Given the user has deleted the config files of the project scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin pending --scope project"
     Then the result has these fields:
       | kind         | reconcile-pending-empty |
@@ -230,7 +281,7 @@ Feature: Plugin config migration
       | demo | 1.0.0   |
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/fixtures --scope project --local"
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
@@ -256,7 +307,7 @@ Feature: Plugin config migration
     Given a config in scope project and layer local, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |

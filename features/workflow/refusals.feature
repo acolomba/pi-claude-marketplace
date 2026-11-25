@@ -22,7 +22,7 @@ Feature: Workflow refusals
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which reported these notes on workflow scripts:
       | script | disposition                                         |
       | <file> | was installed but the engine will refuse to load it |
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs the workflow command "<command>", which starts no run
     Then the workflow engine shows these notices:
       | notice            |
@@ -140,7 +140,7 @@ Feature: Workflow refusals
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
 
-  Scenario: A new session offers a command for each installed script and none for a refused or skipped one
+  Scenario: A reload offers a command for each installed script and none for a refused or skipped one
     Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/clock.js" with this text:
       """
       export const meta = {name:"clock",description:"Tells the time."};
@@ -195,7 +195,7 @@ Feature: Workflow refusals
       | late.js     | was installed but the engine will refuse to load it |
       | nodesc.js   | was installed but the engine will refuse to load it |
       | reserved.js | was installed but the engine will refuse to load it |
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these workflow commands:
       | command        | description                 |

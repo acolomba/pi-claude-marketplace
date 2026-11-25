@@ -19,8 +19,6 @@ import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain
 
 import type {
   CacheEntry,
-  PendingPromptContext,
-  PendingSessionStartContext,
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 
@@ -59,137 +57,12 @@ test("a fresh runtime begins at zero without changing an advanced peer", () => {
   );
 });
 
-test("reads an empty pending SessionStart context", (t) => {
-  // arrange
-  const routingState = createRoutingStateOperations(createHooksRuntime());
-  routingState.clearPendingSessionStartContext();
-  t.after(() => {
-    routingState.clearPendingSessionStartContext();
-  });
-
-  // act
-  const entries = routingState.pendingSessionStartContextEntries();
-
-  // assert
-  assert.deepStrictEqual(entries, []);
-});
-
 test("names the prompt events whose context the buffer carries, in the order of their parts (D-PG6-20)", () => {
   // act
   const events = [...PROMPT_CONTEXT_EVENTS];
 
   // assert
   assert.deepStrictEqual(events, ["UserPromptSubmit", "UserPromptExpansion"]);
-});
-
-test("the pending context clear also empties the runtime's prompt context (D-CF5-13)", () => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const routingState = createRoutingStateOperations(runtime);
-  runtime.appendPendingPromptContext({
-    context: "stale prompt context",
-    pluginId: "stale-plugin",
-    event: "UserPromptSubmit",
-    marketplace: "catalog",
-    scope: "user",
-  } satisfies PendingPromptContext);
-
-  // act
-  routingState.clearPendingSessionStartContext();
-
-  // assert
-  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
-});
-
-test("skips an empty pending SessionStart context", (t) => {
-  // arrange
-  const routingState = createRoutingStateOperations(createHooksRuntime());
-  routingState.clearPendingSessionStartContext();
-  t.after(() => {
-    routingState.clearPendingSessionStartContext();
-  });
-  const emptyEntry = {
-    context: "",
-    pluginId: "empty-plugin",
-    marketplace: "empty-marketplace",
-    scope: "project",
-  } satisfies PendingSessionStartContext;
-
-  // act
-  routingState.appendPendingSessionStartContext(emptyEntry);
-  const entries = routingState.pendingSessionStartContextEntries();
-
-  // assert
-  assert.deepStrictEqual(entries, []);
-});
-
-test("preserves pending SessionStart context order across reads", (t) => {
-  // arrange
-  const routingState = createRoutingStateOperations(createHooksRuntime());
-  routingState.clearPendingSessionStartContext();
-  t.after(() => {
-    routingState.clearPendingSessionStartContext();
-  });
-  const firstEntry = {
-    context: "first context",
-    pluginId: "first-plugin",
-    marketplace: "first-marketplace",
-    scope: "user",
-  } satisfies PendingSessionStartContext;
-  const secondEntry = {
-    context: "second context",
-    pluginId: "second-plugin",
-    marketplace: "second-marketplace",
-    scope: "project",
-  } satisfies PendingSessionStartContext;
-  const expectedEntries = [
-    {
-      context: "first context",
-      pluginId: "first-plugin",
-      marketplace: "first-marketplace",
-      scope: "user",
-    },
-    {
-      context: "second context",
-      pluginId: "second-plugin",
-      marketplace: "second-marketplace",
-      scope: "project",
-    },
-  ] satisfies ReadonlyArray<PendingSessionStartContext>;
-
-  // act
-  routingState.appendPendingSessionStartContext(firstEntry);
-  routingState.appendPendingSessionStartContext(secondEntry);
-  const firstRead = routingState.pendingSessionStartContextEntries();
-  const secondRead = routingState.pendingSessionStartContextEntries();
-
-  // assert
-  assert.deepStrictEqual(firstRead, expectedEntries);
-  assert.deepStrictEqual(secondRead, expectedEntries);
-});
-
-test("clears pending SessionStart context for later reads", (t) => {
-  // arrange
-  const routingState = createRoutingStateOperations(createHooksRuntime());
-  routingState.clearPendingSessionStartContext();
-  t.after(() => {
-    routingState.clearPendingSessionStartContext();
-  });
-  routingState.appendPendingSessionStartContext({
-    context: "context to clear",
-    pluginId: "clear-plugin",
-    marketplace: "clear-marketplace",
-    scope: "project",
-  });
-
-  // act
-  routingState.clearPendingSessionStartContext();
-  const firstReadAfterClear = routingState.pendingSessionStartContextEntries();
-  const secondReadAfterClear = routingState.pendingSessionStartContextEntries();
-
-  // assert
-  assert.deepStrictEqual(firstReadAfterClear, []);
-  assert.deepStrictEqual(secondReadAfterClear, []);
 });
 
 test("reads a missing parsed config without creating a cache entry", () => {
@@ -634,17 +507,10 @@ test("a fresh runtime starts empty without clearing a populated peer", () => {
     ifPredicate: { kind: "match-all" },
     options: resolveOptions(undefined),
   } satisfies RoutingEntry;
-  const pendingEntry = {
-    context: "reset context",
-    pluginId: "plugin-reset",
-    marketplace: "catalog-reset",
-    scope: "project",
-  } satisfies PendingSessionStartContext;
 
   routingState.setParsedConfig(cacheKey, cacheEntry);
   routingState.setRoutingBucket("PreToolUse", [routingEntry]);
   routingState.bumpEpoch();
-  routingState.appendPendingSessionStartContext(pendingEntry);
 
   // act
   const stateBeforeReset = {
@@ -652,7 +518,6 @@ test("a fresh runtime starts empty without clearing a populated peer", () => {
     parsedKeys: Array.from(routingState.parsedConfigEntries().keys()),
     routingEvents: Array.from(routingState.routingTableEntries().keys()),
     routedPluginIds: routingState.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
-    pendingContexts: routingState.pendingSessionStartContextEntries().map((entry) => entry.context),
   };
   const freshState = createRoutingStateOperations(createHooksRuntime());
   const stateFromFreshRuntime = {
@@ -660,7 +525,6 @@ test("a fresh runtime starts empty without clearing a populated peer", () => {
     parsedKeys: Array.from(freshState.parsedConfigEntries().keys()),
     routingEvents: Array.from(freshState.routingTableEntries().keys()),
     routedPluginIds: freshState.getRoutingBucket("PreToolUse").map((entry) => entry.pluginId),
-    pendingContexts: freshState.pendingSessionStartContextEntries().map((entry) => entry.context),
   };
 
   // assert
@@ -669,14 +533,12 @@ test("a fresh runtime starts empty without clearing a populated peer", () => {
     parsedKeys: [cacheKey],
     routingEvents: ["PreToolUse"],
     routedPluginIds: ["plugin-reset"],
-    pendingContexts: ["reset context"],
   });
   assert.deepStrictEqual(stateFromFreshRuntime, {
     epoch: 0,
     parsedKeys: [],
     routingEvents: [],
     routedPluginIds: [],
-    pendingContexts: [],
   });
 });
 
@@ -714,37 +576,26 @@ test("binds routing operations to one required runtime instance", () => {
     ifPredicate: { kind: "match-all" },
     options: resolveOptions(undefined),
   } satisfies RoutingEntry;
-  const pendingEntry = {
-    context: "bound context",
-    pluginId: "plugin-bound",
-    marketplace: "catalog-bound",
-    scope: "project",
-  } satisfies PendingSessionStartContext;
 
   // act
   operations.setParsedConfig(cacheKey, cacheEntry);
   operations.setRoutingBucket("PreToolUse", [route]);
-  operations.appendPendingSessionStartContext(pendingEntry);
   const explicitEpoch = operations.bumpEpoch();
   routingState.setParsedConfig(cacheKey, cacheEntry);
   routingState.setRoutingBucket("PreToolUse", [route]);
-  routingState.appendPendingSessionStartContext(pendingEntry);
   const transitionEpoch = routingState.bumpEpoch();
   const explicitState = {
     epoch: operations.currentEpoch(),
     parsed: Array.from(operations.parsedConfigEntries()),
     routes: Array.from(operations.routingTableEntries()),
-    pending: operations.pendingSessionStartContextEntries(),
   };
   const transitionState = {
     epoch: routingState.currentEpoch(),
     parsed: Array.from(routingState.parsedConfigEntries()),
     routes: Array.from(routingState.routingTableEntries()),
-    pending: routingState.pendingSessionStartContextEntries(),
   };
   operations.deleteParsedConfig(cacheKey);
   operations.setRoutingBucket("PreToolUse", []);
-  operations.clearPendingSessionStartContext();
   operations.bumpEpoch();
 
   // assert
@@ -756,7 +607,6 @@ test("binds routing operations to one required runtime instance", () => {
       epoch: routingState.currentEpoch(),
       parsed: Array.from(routingState.parsedConfigEntries()),
       routes: Array.from(routingState.routingTableEntries()),
-      pending: routingState.pendingSessionStartContextEntries(),
     },
     transitionState,
   );
@@ -775,15 +625,8 @@ test("advancing generation preserves the runtime's other routing state", () => {
     ifPredicates: new Map(),
     options: resolveOptions(undefined),
   } satisfies CacheEntry;
-  const pendingEntry = {
-    context: "preserved context",
-    pluginId: "plugin-preserved",
-    marketplace: "catalog-preserved",
-    scope: "user",
-  } satisfies PendingSessionStartContext;
   routingState.setParsedConfig(cacheKey, cacheEntry);
   routingState.setRoutingBucket("SessionEnd", []);
-  routingState.appendPendingSessionStartContext(pendingEntry);
   routingState.bumpEpoch();
 
   // act
@@ -794,7 +637,6 @@ test("advancing generation preserves the runtime's other routing state", () => {
   assert.strictEqual(routingState.currentEpoch(), 2);
   assert.deepStrictEqual(Array.from(routingState.parsedConfigEntries()), [[cacheKey, cacheEntry]]);
   assert.deepStrictEqual(Array.from(routingState.routingTableEntries()), [["SessionEnd", []]]);
-  assert.deepStrictEqual(routingState.pendingSessionStartContextEntries(), [pendingEntry]);
 });
 
 test("sets a scope's plugin MCP servers on the bound runtime (D-PG6-07)", () => {

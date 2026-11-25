@@ -216,7 +216,7 @@ function loadRun(entrySink: NotificationRun["entrySink"]): NotificationRun {
 
 function emit(t: TestContext, report: McpMigrationReport): readonly NotifyArguments[] {
   const notify = t.mock.fn<(...args: NotifyArguments) => void>();
-  const ctx: NotificationContext = { mode: "tui", ui: { notify } };
+  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify } };
   notifyMcpMigration(
     ctx,
     loadRun({
@@ -265,6 +265,7 @@ for (const { state, severity, report } of CATALOG_REPORT_ROWS) {
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },

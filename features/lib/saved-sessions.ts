@@ -10,11 +10,12 @@
  * `.` of the timestamp replaced by `-`. Pi 1.5.0 and 1.5.2 both do so.
  * Pi writes the file once the session holds a prompt and a reply, and
  * `--continue` opens the file of that folder with the newest modification
- * time, whatever its name says.
+ * time, whatever its name says. Each line of the file is one session entry,
+ * and a user message's entry has `type` `message` and the message.
  */
 
 import assert from "node:assert/strict";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import type { RunTokens } from "./run-tokens.ts";
@@ -54,18 +55,72 @@ export function projectSessionFile(
   return named ? SESSION_FILE_TOKEN : value;
 }
 
+// The session files of `folder`.
+async function sessionFiles(folder: string): Promise<readonly string[]> {
+  return (await readdir(folder))
+    .filter((name) => name.endsWith(".jsonl"))
+    .map((name) => path.join(folder, name));
+}
+
 /**
  * Returns the session file of `folder` with the newest modification time, the
  * one `--continue` opens. Fails when the folder holds no session file.
  */
 export async function latestSessionFile(folder: string): Promise<string> {
-  const files = (await readdir(folder))
-    .filter((name) => name.endsWith(".jsonl"))
-    .map((name) => path.join(folder, name));
+  const files = await sessionFiles(folder);
   const modified = await Promise.all(
     files.map(async (file) => ({ file, mtimeMs: (await stat(file)).mtimeMs })),
   );
   const [latest] = modified.sort((left, right) => right.mtimeMs - left.mtimeMs);
   assert.ok(latest !== undefined, `the sessions folder ${folder} holds no saved session`);
   return latest.file;
+}
+
+// The text of each user message of a saved session file, whose lines are
+// Pi's session entries.
+function userPromptsOf(text: string): readonly string[] {
+  return text
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .flatMap((line) => {
+      const entry = JSON.parse(line) as {
+        readonly type?: unknown;
+        readonly message?: { readonly role?: unknown; readonly content?: unknown };
+      };
+      return entry.type === "message" && entry.message?.role === "user"
+        ? textsOf(entry.message.content)
+        : [];
+    });
+}
+
+// The texts of a message's content: the string itself, or its text parts.
+function textsOf(content: unknown): readonly string[] {
+  if (typeof content === "string") {
+    return [content];
+  }
+
+  const parts = Array.isArray(content) ? (content as readonly unknown[]) : [];
+  return parts.flatMap((part) =>
+    typeof part === "object" && part !== null && "text" in part && typeof part.text === "string"
+      ? [part.text]
+      : [],
+  );
+}
+
+/**
+ * Returns the one session file of `folder` whose user messages hold
+ * `prompt`. Fails when no file or more than one holds it.
+ */
+export async function sessionFileWithPrompt(folder: string, prompt: string): Promise<string> {
+  const files = await sessionFiles(folder);
+  const texts = await Promise.all(files.map((file) => readFile(file, "utf8")));
+  const holding = files.filter((_file, index) =>
+    userPromptsOf(texts[index] ?? "").includes(prompt),
+  );
+  const [only, ...others] = holding;
+  if (only === undefined || others.length > 0) {
+    assert.fail(`saved sessions holding "${prompt}": ${holding.join(", ")}`);
+  }
+
+  return only;
 }

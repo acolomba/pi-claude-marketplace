@@ -18,7 +18,7 @@ Feature: Agent invocation
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                           | tool     | arguments                                                           |
       |                                 | subagent | {"agent":"demo:reviewer","task":"Review the README.","async":false} |
@@ -59,7 +59,7 @@ Feature: Agent invocation
       | reviewer.md | reviewer | Reviews the files it is given. | helper | Review the files named in the task and report every problem you find. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                           | tool     | arguments                                                           |
       |                                 | subagent | {"agent":"demo:reviewer","task":"Review the README.","async":false} |
@@ -103,7 +103,7 @@ Feature: Agent invocation
       | reviewer.md | reviewer | Reviews the files it is given. | bare   | Review the files named in the task and report every problem you find. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments                               |
       |                     | subagent | {"action":"get","agent":"demo:reviewer"} |
@@ -138,7 +138,7 @@ Feature: Agent invocation
       | reviewer.md | reviewer | Reviews the files it is given. | hidden | Review the files named in the task and report every problem you find. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                           | tool     | arguments                                                           |
       |                                 | subagent | {"agent":"demo:reviewer","task":"Review the README.","async":false} |
@@ -174,7 +174,7 @@ Feature: Agent invocation
       | name | version |
       | demo | 1.1.0   |
     Given the user has run "/claude:plugin update demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments                                |
       |                     | subagent | {"action":"get","agent":"demo:reviewer"} |
@@ -231,7 +231,7 @@ Feature: Agent invocation
       | reviewer.md | reviewer | Reviews the files it is given. | Read, Bash | Review the files named in the task and report every problem you find. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                           | tool     | arguments                                                           |
       |                                 | subagent | {"agent":"demo:reviewer","task":"Review the README.","async":false} |
@@ -256,7 +256,7 @@ Feature: Agent invocation
       | reviewer.md | reviewer | Reviews the files it is given. | Review the files named in the task and report every problem you find. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                           | tool     | arguments                                                           |
       |                                 | subagent | {"agent":"demo:reviewer","task":"Review the README.","async":false} |
@@ -283,7 +283,7 @@ Feature: Agent invocation
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has run "/claude:plugin install tools@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                           | tool     | arguments                                                            |
       |                                 | subagent | {"agent":"tools:reviewer","task":"Review the README.","async":false} |
@@ -316,7 +316,7 @@ Feature: Agent invocation
       | helper.md | helper | Reviews the files given. | Read                     | Review the files named in a task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                         | tool     | arguments                                                         |
       |                               | subagent | {"agent":"demo:lead","task":"Review the README.","async":false}   |
@@ -351,7 +351,7 @@ Feature: Agent invocation
       | helper.md | helper | Reviews the files given. | Read  | Review the files named in a task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                         | tool     | arguments                                                         |
       |                               | subagent | {"agent":"demo:lead","task":"Review the README.","async":false}   |
@@ -386,7 +386,7 @@ Feature: Agent invocation
       | helper.md | helper | Reviews the files given. | Read  |                 | Review the files named in a task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                         | tool     | arguments                                                         |
       |                               | subagent | {"agent":"demo:lead","task":"Review the README.","async":false}   |

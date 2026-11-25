@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- `/claude:plugin reload` now reloads Pi, also over RPC, where Pi has no `/reload`, and plugin `SessionStart` hooks now behave more like Claude Code. (#332)
+
+  - Reload hints and refusals now name the command your Pi offers, and a one-shot run such as `pi -p` shows none.
+  - A Pi `/reload` before your first prompt no longer drops the context that a plugin's `SessionStart` hook added at startup.
+  - A resumed or forked session now adds a plugin's `SessionStart` context only when it changed, instead of showing it twice.
+  - A plugin's `SessionStart` context now reaches the next model call after a compaction in the middle of a run or after a context overflow.
+  - An `async` `SessionStart` hook's unchanged answer no longer reaches the model again each time you resume or fork the session.
+  - In print, JSON, and RPC mode, a plugin that `autoapply` installs or enables as Pi starts now runs its `SessionStart` hooks in that session.
+  - A prune that cannot remove a plugin's read-only directory no longer leaves its `prune-backup-` folder behind in the scope's `pi-claude-marketplace` folder.
+  - A marketplace's own `git-subdir` plugin, with a URL that ends in `.git` or `/`, now shows as available after `marketplace add`, and a pinned install of it makes no new clone.
+
 - Internal: the plugin browser now typechecks against Pi 1.6.0 as well as Pi 1.5.1. (#330)
 
 - `--map-model` now maps `fable` to `claude-fable-5-2` and `best` to `claude-opus-5-5`, as Claude Code 2.1.328 does. This extension now needs Pi 1.5.1 or later, and an installed agent keeps its old model until the next `update --map-model`. (#328)

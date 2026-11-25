@@ -11,6 +11,14 @@
  * interrupted-update step leaves a checkout there with no live checkout. The
  * earlier-version steps give a checkout the git settings of a clone that an
  * earlier version made with `isomorphic-git`, and find them kept (SG-MIG-01).
+ *
+ * The setup steps also plant a checkout that an interrupted add left, with
+ * the ownership marker and a stale file (MA-12), and a read step lists the
+ * files a checkout holds outside `.git/`. A setup step also plants a
+ * directory of the user's own at a checkout path (MA-13). A refused add must
+ * leave that directory exactly as it was, so one read step lists every entry
+ * it holds, directories and `.git/` included, with the text of each file, and
+ * another proves the refusal removed the clone it staged first.
  */
 
 import assert from "node:assert/strict";
@@ -18,13 +26,14 @@ import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Given, Then, When } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import {
   EARLIER_VERSION_GIT_SETTINGS,
   giveEarlierVersionGitSettings,
   readEarlierVersionGitSettings,
 } from "../../lib/git-clones.ts";
+import { runGit } from "../../lib/hermetic-git.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -40,6 +49,32 @@ async function entryNames(directory: string): Promise<string[]> {
 // The directory under which the scope keeps its marketplace checkouts.
 function extensionRootOf(world: ScenarioWorld, scope: string): string {
   return path.join(world.scopeRoot(scope), "pi-claude-marketplace");
+}
+
+// Every entry under the checkout of the marketplace `name`, as its absolute
+// path and its path segments under the checkout; the checkout itself must be
+// a directory.
+async function checkoutEntries(
+  world: ScenarioWorld,
+  name: string,
+  scope: string,
+): Promise<{ absolutePath: string; segments: string[]; isDirectory: boolean }[]> {
+  const checkout = path.join(extensionRootOf(world, scope), "sources", name);
+  assert.equal((await stat(checkout)).isDirectory(), true);
+  const entries = await readdir(checkout, { recursive: true, withFileTypes: true });
+  return entries.map((entry) => {
+    const absolutePath = path.join(entry.parentPath, entry.name);
+    return {
+      absolutePath,
+      segments: path.relative(checkout, absolutePath).split(path.sep),
+      isDirectory: entry.isDirectory(),
+    };
+  });
+}
+
+// One table row per path, in path order.
+function pathRows(paths: readonly string[]): string[][] {
+  return [...paths].sort((left, right) => left.localeCompare(right)).map((entry) => [entry]);
 }
 
 Given(
@@ -156,6 +191,43 @@ Then(
   },
 );
 
+Given(
+  "the {word} scope holds a checkout of the marketplace {string} that an interrupted add left",
+  async function (this: ScenarioWorld, scope: string, name: string) {
+    const published = this.requirePublished(name);
+    if (published.kind !== "url") {
+      assert.fail(`the marketplace ${name} is not published as a url source`);
+    }
+
+    const sources = path.join(extensionRootOf(this, scope), "sources");
+    const checkout = path.join(sources, name);
+    assert.equal(existsSync(checkout), false);
+    await mkdir(sources, { recursive: true });
+    await runGit(sources, published.gitHome, "clone", "--quiet", published.bareRepository, name);
+    await runGit(checkout, published.gitHome, "remote", "set-url", "origin", published.source);
+    // Q-01: the ownership marker `marketplace add` writes into every clone it creates.
+    const marker = path.join(checkout, ".git", "pi-claude-marketplace.json");
+    await writeFile(marker, JSON.stringify({ generatedBy: "pi-claude-marketplace" }));
+    await writeFile(path.join(checkout, "stale.txt"), "left behind");
+    assert.equal(
+      await runGit(checkout, published.gitHome, "remote", "get-url", "origin"),
+      published.source,
+    );
+    assert.equal(existsSync(marker), true);
+  },
+);
+
+Given(
+  "the {word} scope holds a directory of the user's own where the checkout of the marketplace {string} goes",
+  async function (this: ScenarioWorld, scope: string, name: string) {
+    const checkout = path.join(extensionRootOf(this, scope), "sources", name);
+    assert.equal(existsSync(checkout), false);
+    await mkdir(checkout, { recursive: true });
+    await writeFile(path.join(checkout, "notes.txt"), "the user's notes");
+    assert.deepStrictEqual(await readdir(checkout), ["notes.txt"]);
+  },
+);
+
 Then(
   "the {word} scope holds no marketplace checkout",
   async function (this: ScenarioWorld, scope: string) {
@@ -171,6 +243,14 @@ Then(
 );
 
 Then(
+  "the {word} scope holds no staged marketplace checkout",
+  async function (this: ScenarioWorld, scope: string) {
+    const staging = path.join(extensionRootOf(this, scope), "sources-staging");
+    assert.deepStrictEqual(await entryNames(staging), []);
+  },
+);
+
+Then(
   "the {word} scope holds no marketplace record",
   async function (this: ScenarioWorld, scope: string) {
     const stateFile = path.join(extensionRootOf(this, scope), "state.json");
@@ -180,5 +260,36 @@ Then(
 
     const state = JSON.parse(await readFile(stateFile, "utf8")) as { marketplaces?: unknown };
     assert.deepStrictEqual(state.marketplaces ?? {}, {});
+  },
+);
+
+Then(
+  "the checkout of the marketplace {string} in the {word} scope holds these files:",
+  async function (this: ScenarioWorld, name: string, scope: string, table: DataTable) {
+    const files = (await checkoutEntries(this, name, scope))
+      .filter((entry) => !entry.isDirectory && entry.segments[0] !== ".git")
+      .map((entry) => entry.segments.join("/"));
+    assert.deepStrictEqual([["file"], ...pathRows(files)], table.raw());
+  },
+);
+
+// A directory reads as its path and a trailing `/` with no content, so a new
+// empty directory, such as a `.git/` an add began, changes the list. A file
+// reads as its path and its text, so an overwritten or truncated file does too.
+Then(
+  "the checkout of the marketplace {string} in the {word} scope holds exactly these entries:",
+  async function (this: ScenarioWorld, name: string, scope: string, table: DataTable) {
+    const rows = await Promise.all(
+      (await checkoutEntries(this, name, scope)).map(async (entry): Promise<[string, string]> => {
+        const entryPath = entry.segments.join("/");
+        if (entry.isDirectory) {
+          return [`${entryPath}/`, ""];
+        }
+
+        return [entryPath, await readFile(entry.absolutePath, "utf8")];
+      }),
+    );
+    rows.sort(([left], [right]) => left.localeCompare(right));
+    assert.deepStrictEqual([["entry", "content"], ...rows], table.raw());
   },
 );

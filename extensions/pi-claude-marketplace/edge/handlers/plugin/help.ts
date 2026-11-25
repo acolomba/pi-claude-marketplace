@@ -2,11 +2,13 @@
 //
 // Thin-shim handler factory for `/claude:plugin help [marketplace]`.
 // Displays the canonical usage block at info severity without requiring
-// an invalid subcommand to read the documentation.
+// an invalid subcommand to read the documentation. The top-level usage is the
+// host's: it lists `reload` only where the host takes later commands
+// (RELOADCMD-D1).
 
 import { notifyUsageError, notifyUsageInfo } from "../../../shared/notification-dispatch.ts";
 import { tokenizeArgs } from "../../args.ts";
-import { MARKETPLACE_USAGE, TOP_LEVEL_USAGE } from "../../router.ts";
+import { MARKETPLACE_USAGE, topLevelUsage } from "../../router.ts";
 
 import { rejectUnknownFlag } from "./shared.ts";
 
@@ -28,7 +30,7 @@ export function makeHelpHandler(): SubcommandHandler {
 
     const [topic] = tokens;
     if (topic === undefined || topic === "help") {
-      notifyUsageInfo(ctx, run, TOP_LEVEL_USAGE);
+      notifyUsageInfo(ctx, run, topLevelUsage(ctx));
       return Promise.resolve();
     }
 

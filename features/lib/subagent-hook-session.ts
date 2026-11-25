@@ -297,9 +297,20 @@ async function restoreChildPromptSections(
 }
 
 // The environment of process `pid` as name-value lines, or none once it exited.
+// A process that exited but is not yet reaped still has its /proc entry, and
+// reading its environ then fails with ESRCH instead of ENOENT.
 async function processEnvironment(pid: number): Promise<readonly string[]> {
-  const text = await readOptional(`/proc/${pid}/environ`);
+  const text = await readFile(`/proc/${pid}/environ`, "utf8").catch(absentWhenExited);
   return text?.split("\0") ?? [];
+}
+
+function absentWhenExited(error: unknown): undefined {
+  if (error instanceof Error && "code" in error && error.code === "ESRCH") {
+    return undefined;
+  }
+
+  absentWhenMissing(error);
+  return undefined;
 }
 
 // The dispatch marker in the environment of process `pid`, if it carries one.

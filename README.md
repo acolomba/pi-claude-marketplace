@@ -232,7 +232,7 @@ User-scope configs live in your home directory. They are personal and never shar
 
 ## Command reference
 
-This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources. If you edit a config by hand, run `/claude:plugin apply` before `/reload`.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, reload Pi. Then Pi discovers the changed resources. In Pi's terminal, run `/reload`. Over RPC, which has no `/reload`, run `/claude:plugin reload`. A one-shot run, such as `pi -p`, needs no reload, because the next run loads the change. If you edit a config by hand, run `/claude:plugin apply` before you reload.
 
 ### Marketplace
 
@@ -433,6 +433,12 @@ Reload Pi after changes. Neither `/reload` nor `/claude:plugin apply` prunes orp
 
 ```text
 /reload
+```
+
+Reload Pi with a command: `/claude:plugin reload`. In Pi's terminal, it does what `/reload` does. Over RPC, which has no `/reload`, it is how you reload. A one-shot run refuses it, because its next run loads the changes. While Pi works on a prompt, the command refuses and reloads nothing. Run it again when the prompt is done.
+
+```text
+/claude:plugin reload
 ```
 
 #### Remote plugins

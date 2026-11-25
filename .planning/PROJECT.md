@@ -77,6 +77,54 @@ repository, and the extension needs no git credential of its own.
   missing on the platforms that matter (Windows); error and failure
   classification parity; migration of existing clones and Device Flow
   keychain entries.
+## Previous Milestone: integration-rescope -- Integration Test Rescope (branch: claude/stoic-shannon-la9q7o, started 2026-11-20, completed 2026-11-23, no PR or npm release yet)
+
+**Goal:** Every file in `test/integration/` either guards something that the
+cucumber suite and the unit tests cannot reach, or is deleted. Its
+user-visible cases live in cucumber scenarios that pass under both MCP
+profiles.
+
+**Why:** An overlap audit on 2026-11-20 compared the 45 integration test
+files with the 149 feature files
+([research/INTEGRATION-OVERLAP.md](research/INTEGRATION-OVERLAP.md)). It
+found 2 duplicated files, 29 partly covered, and 14 with no cucumber
+equivalent. Many uncovered cases are visible to users, so under the
+behavioral-test rule in `AGENTS.md` they belong in `features/`. Integration
+tests add nothing to the Sonar coverage gate, which reads only
+`coverage/direct.lcov`; their value is only the bugs they catch.
+
+**Target features:**
+
+- Remove the duplicates: delete `hooks-spawn-end-to-end.test.ts`, and delete
+  `pi-subagents-child-identity.test.ts` once a scenario covers its
+  empty-body child case.
+- Move the user-visible gaps into cucumber: the LAYER-04 refusals and the
+  other plugin-layer cases, plugin names that are `Object.prototype` members,
+  the unfiltered `list` fold, the marketplace layer cases (D-09 and
+  re-declaration), the MCP tool-rules warning, a literal `~/` in stdio args,
+  the legacy `mcp.json` sweep and migration notices, project-scope adapter
+  overrides, AVAR-04 and AVAR-05, cross-scope hooks after an apply, a reload
+  that clears buffered context, path-source dependencies at a marketplace
+  tag, and the uncovered prune, project-install, and auth cases. Then cut
+  the integration cases that the new scenarios duplicate.
+- Rescope the suite: what remains is peer conformance, multi-process races,
+  and internal record, released-build state, and fault-injection cases;
+  purely internal single-module cases move to unit tests, and the suite's
+  charter is written down.
+
+**Delivered 2026-11-23 (9 phases, 22 of 22 requirements):** the two duplicate
+integration files are gone, and the user-visible cases of the others now live
+in cucumber scenarios. Each scenario was shown to fail under a deliberate
+break. `test/integration/` keeps 28 files and 236 cases. Each one is peer
+conformance, a multi-process race, or an internal case, and its header says
+so. The charter is the same in the `typescript-unit-tests` and `cucumber`
+skills and in `.planning/codebase/TESTING.md`. Inserted Phase 6.1 fixed one
+parity gap that the reload scenario found, with upstream evidence (HKRL-01..03,
+D-CF5-13 amended): a SessionStart context goes into the session as soon as its
+hooks finish, so a `/reload` before the first prompt keeps it. A resume or a
+fork sends only the values the conversation does not already hold. A
+compaction's context reaches the next model call. `npm run check` passes on
+the combined tree (adapter 2285/2285, builtin 260/260, 100% direct coverage).
 
 ## Previous Milestone: parity-gaps -- Claude Code Parity Gaps and Defects (branch: features/gaps, started 2026-11-11, completed 2026-11-17, not yet pushed, no PR or npm release yet)
 
@@ -1200,7 +1248,9 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 ### Active
 
 The system-git milestone is active. Its requirements are in
-[REQUIREMENTS.md](REQUIREMENTS.md).
+[REQUIREMENTS.md](REQUIREMENTS.md). The 22 integration-rescope requirements are
+validated and archived in
+[milestones/integration-rescope-REQUIREMENTS.md](milestones/integration-rescope-REQUIREMENTS.md).
 
 The 42 parity-gaps requirements are validated and
 archived in
@@ -1225,6 +1275,13 @@ the 36 json-output requirements in
 
 ### Validated
 
+- ✓ Every case left in `test/integration/` guards what cucumber and the unit
+  tests cannot reach (peer conformance, races, internal cases), its
+  user-visible cases are cucumber scenarios proven red under a break, the
+  charter is written in three places, and a `/reload`, resume, fork, or
+  compaction keeps a SessionStart context as Claude Code does --
+  integration-rescope Phases 1-8 and 6.1 (ITDUP-01..02, ITMIG-01..13,
+  HKRL-01..03, ITSCOPE-01..04)
 - ✓ Every P0 and P1 gap that `docs/prd/parity-gaps-prd.md` lists between
   Claude Code 2.1.322 and this project is closed or recorded as a divergence
   with a decision ID or a Pi capability gap: companion floors, MCP timeouts
@@ -2292,7 +2349,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-CF5-10 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-02): one hook per upstream dedupe key, rooted at the plugin's `resolvedSource`**. A copy keeps the first copy's position and the last copy's fields. The same hook in two plugins runs once for each. | Upstream parity: upstream's key and its first-position, last-fields rule (probed). | -- Locked |
 | **D-CF5-11 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-07): tool hooks decide as upstream**: a JSON deny applies at any exit code, `updatedInput` replaces the whole input, `continue: false` ends the turn, PreToolUse `ask` asks through `ctx.ui.confirm` in `tui` and blocks without a terminal, and `defer` is ignored (Pi gap). A PostToolUse block keeps the tool output and adds the feedback. | Upstream decisions probed in `-p`. Residuals: the `ask` dialog title and the default texts are the bridge's own; PostToolUse `continue: false` stays a debug line (BACKLOG HOOKPOSTSTOP-01). | -- Locked |
 | **D-CF5-12 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-06): a call through a pi-mcp-adapter proxy runs no hook, and the nested call fires once under `mcp__plugin_<p>_<s>__<tool>`**. Non-call proxy actions still fire as the proxy tool. | Upstream has no proxy, and each matching hook fires once for a plugin MCP tool. Before, a match-all hook fired twice. Residual (Pi gap): a call the adapter runs without a nested Pi call never reaches hooks. | -- Locked |
-| **D-CF5-13 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-02): every event's `additionalContext` reaches the model**: UserPromptSubmit context beside the unchanged prompt, SessionStart context past the first turn, tool context after the tool result, and every Stop value. Plain stdout counts as context on SessionStart and UserPromptSubmit. | Upstream sends `<hookName> hook additional context: ...` and cannot replace the prompt. Before, UserPromptSubmit context replaced the prompt. Pi gap: upstream adds prompt context to the same request, Pi adds a separate hidden message. | -- Locked |
+| **D-CF5-13 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-02): every event's `additionalContext` reaches the model**: UserPromptSubmit context beside the unchanged prompt, SessionStart context past the first turn, tool context after the tool result, and every Stop value. Plain stdout counts as context on SessionStart and UserPromptSubmit. Amended 2026-11-23 by HKRL-01 (integration-rescope, upstream parity per the Claude Code 2.1.330 record in `06.1-UPSTREAM-EVIDENCE.md`): a SessionStart context goes into the session in a hidden message of its own as soon as the hooks finish, before the first prompt, so a `/reload` before the first prompt keeps it, and a new session does not get it. Amended 2026-11-23 by HKRL-02 and HKRL-03 (integration-rescope, upstream parity per the Claude Code 2.1.330 record in `06.1-UPSTREAM-EVIDENCE-FORK-COMPACT.md`): a resumed or forked session's SessionStart sends only the values that its model-visible conversation does not already hold, compared value by value with a saved file's path ignored, as Claude Code's duplicate removal does; a compaction's SessionStart context reaches the next model call, steered into the run when Pi compacts between two turns or retries after an overflow, and held to the end of the turn when a queued message takes the next model call: a waiting or newly typed steer, a follow-up after a turn without a tool call, or a message the bridge cannot tell from a steer. The bridge adds no model call, except in four cases it cannot see, each read from Pi's source: another extension's custom message sent with `deliverAs: "steer"` while Pi compacts (a steer sent with `sendUserMessage` passes the `input` handlers, so the bridge sees it), a steer that another extension's `input` handler still holds when the turn ends, a tool batch that ends early (`terminate`) while a follow-up waits, and a steer with the text of a follow-up still queued. | Upstream sends `<hookName> hook additional context: ...` and cannot replace the prompt. Before, UserPromptSubmit context replaced the prompt. Pi gap: upstream adds prompt context to the same request, Pi adds a separate hidden message. | -- Locked |
 | **D-CF5-14 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-07): a `systemMessage` shows to the user as `<label> says: <text>` and never reaches the model**, on PreToolUse, PostToolUse, PostToolUseFailure, UserPromptSubmit, Stop, and SessionStart. SessionEnd, PreCompact, PostCompact, and StopFailure drop it with a debug line. | Upstream parity: `<hookName> says: <text>` at notice level, discarded on the four events. | -- Locked |
 | **D-CF5-15 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-02): exec-form `command` and each `args` element substitute `${CLAUDE_PROJECT_DIR}`, `${CLAUDE_PLUGIN_ROOT}`, and `${CLAUDE_PLUGIN_DATA}` in one pass**. Shell form gets no text substitution, and `${user_config.*}` stays literal (USRCFG-01). Amended by D-PG10-10. | Upstream parity: upstream's exec-form substitution set and its shell-form rule. | -- Locked |
 | **D-CF5-16 (component-features, Phase 5, settled autonomously, DUBIOUS-CHOICES P5-DC-02): the hook env keeps its current variables, and `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_PID`, and `CLAUDE_EFFORT` are not set yet**. | Upstream sets the four (BACKLOG HOOKENV-01). The Pi-only `CLAUDE_SESSION_ID` shim stays (SENV-03, D-91-02). | -- Deferred |
@@ -2553,6 +2610,8 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-SG-14 (system-git, Phase 3, 2026-11-23; interim until Phase 5 answers Q2): Device Flow runs after a git auth failure, then git retries once** | git cannot call back into Node. After an `https-auth` failure for a registry host with no helper answer, the extension runs Device Flow where it runs today, stores the token with `git credential approve` (D-BG-1102), and reruns the command once. No Device Flow in the autoupdate pass or an autoapply load (D-PL8-12). The harness keeps git's request host `github.com` through a loopback `CONNECT` proxy. Temporary continuation of D-79-04, D-79-05, and D-BG-1101. Evidence: `03-EVIDENCE.md` Q2 interim. Maintainer accepted 2026-11-23. | Phase 3: an `https-auth` `no-credential` failure under a Device Flow bundle signs in once, stores the token with `git credential approve`, and runs the command once more with a one-shot helper (`platform/git-one-shot-credential.ts`, a 0600 file removed after the run). A refused stored credential fails as `StoredCredentialRejectedError` (GAUTH-04). The Device Flow profile reaches the git host through the loopback CONNECT proxy stand-in. The credential phase (Phase 5) closes or keeps it. Note for that phase: git's own `store` helper erases a credential that the host refused, so GAUTH-04's "stays stored" and SG-AUTH-03 no longer describe what a user sees, and AUTH-07's second sign-in no longer happens |
 | **D-SG-15 (system-git, Phase 3, 2026-11-23, autonomous; SG-TRN-06): `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` works as upstream** | True for `1`, `true`, `yes`, or `on`. Only when the freshness check finds the remote unreachable and the checkout has `.claude-plugin/marketplace.json`, the checkout is kept and reported unchanged with a warning note that names the variable. A SHA ref and a stale checkout are never kept. Evidence: `03-EVIDENCE.md` Q16. | Phase 3: `marketplace update` and the PUP-2 sync read the variable once per run. The kept outcomes reuse `network unreachable` and `permission denied` (a checkout in use), with no new closed-set token (planning decision 3). A kept `marketplace update` is a warning row, writes nothing to the record, and runs no autoupdate cascade; a kept PUP-2 sync says so only in the debug log. Scenarios: `features/marketplace/url-source-update.feature` and `features/plugin/url-marketplace-update.feature`. Wording in the failure-message phase (Phase 6) |
 | **D-SG-16 (system-git, Phase 3, 2026-11-23, autonomous; keeps D-MF-01; SG-TRN-07): `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` becomes an `insteadOf` key** | When set, every remote command carries `-c url.<base>/.insteadOf=https://github.com/`, with the same validation and GHB-03/GHB-04 errors. The recorded origin stays canonical, and git keys credentials by the rewritten host, which keeps GHB-02. The harness is unchanged. Phase 4 leaves Pi's own `-c` out of the SSH probe-skip check. Evidence: `03-EVIDENCE.md` Q8. | Phase 3: every remote command to an `https://github.com/` URL carries the pair from `shared/github-base-url.ts`, a base that holds `=` is refused (GHB-03), and a rewritten request adds the GHB-01 fetched-URL cause. SG-TRN-07's edge probe is unclassified: it is assumed covered by the `insteadOf` rows of `test/shared/github-base-url.test.ts` and `test/platform/git.test.ts` and by every scenario that reaches the GitHub stand-in through the base override (flagged for the verifier). The SSH sources phase (Phase 4) must leave Pi's own `-c` out of its probe-skip check |
+| **HOOKLATESS-D1 (quick task 261123-jdc, orchestrator decision 2026-11-23, option A of `research/HOOKLATESS-01-UPSTREAM.md`; upstream parity, D-CF5-03 stays): a plugin that a load activates runs its SessionStart hooks in print, json, and rpc mode**: After a load with Pi's `startup` resources reason, the bridge runs SessionStart once for the plugins that hold a SessionStart route after the load and held none at the session's own SessionStart dispatch, keyed `<plugin>@<marketplace>` in either scope, with that dispatch's source (`startup`, `resume`, or `fork`) and with no other plugin's hooks. A load changes installation state only through autoapply (APL-D1, AAP-D1), so these are the plugins its autoapply installed or enabled. No late run in tui mode, on a reload (D-CF5-03), after a `/claude:plugin` command, at a second load, after a new session (source `clear`), or in a pi-subagents child. The `/clear` question is settled from the binary: Claude Code keys its start source and its covered plugins by the root session, which `/clear` keeps (`noa` @310611421 updates the id of the same object, `tgs.of(N())` @323940316 is the store's only use), and its launch trigger runs once (`Gy`), so a new session runs none. The load waits at most 10 s for the late run, as Claude Code races it before its first turn (`S5(){return 1e4}` @351774140, `me(K,S5())` in `ib`). A run that ends later goes on, and its context reaches the model with the next prompt (`deliverAs: "nextTurn"`), as Claude Code holds a late hook's context rows (`w5` @351774165, `_U` @351775390) and flushes them in `beforeTurnInput` (`wU`); its notices show when the hooks end, because the bridge shows a `systemMessage` as a notice outside the conversation (D-CF5-14). Pi gap: Pi keeps a next-turn message in memory only (`core/agent-session.js:1956-1958`) and has no form that stores a message and holds it from the model until the next prompt, so a held context is lost when Pi ends before that prompt, where Claude Code's held rows stay in its transcript (`v5`/`hU`). Residual: a project scope whose hook read failed at the session's start and succeeds at the load counts as activated. | Claude Code 2.1.330 headless runner (`ib` @351776042, `xqa`/`Abt` @323940328, `_U` @351775390, `wU` in `beforeTurnInput`), binary read 2026-11-23; Pi 1.5.1 `core/agent-session.js:1946-1984`; see `research/HOOKLATESS-01-UPSTREAM.md` and `quick/261123-jdc-hooklatess-01-late-sessionstart-for-plug/`. | -- Locked |
+| **RELOADCMD-D1 (quick task 261123-qru, maintainer decisions 1 to 4 of 2026-11-23 in `research/HEADLESS-RELOAD.md`): `/claude:plugin reload`, the sessionful predicate, and the reload wording**: `acceptsLaterCommands(host)` (`shared/session-host.ts`) returns Pi's `hasUI` and is the only check of whether this Pi process takes later commands: the terminal and RPC bind a UI, print and json bind none, and a future long-lived host without dialogs reads false, the safe direction. `/claude:plugin reload` runs `ctx.reload()` only where it holds. A one-shot run refuses it with `Reload is unavailable: this Pi run does not accept later commands, so the next run loads the changes.`, and its help leaves it out. Completions always offer it: Pi asks for argument completions only in its terminal (`modes/interactive/interactive-mode.js:538-559`), which takes later commands (maintainer review on PR 332, 2026-11-24). While a run streams or Pi compacts (`ctx.isIdle()` false), the command refuses with Claude Code's busy words, `The session is busy, so plugins were not reloaded. Ask again once it is idle.`. Pi gap: Pi cannot reload then, where Claude Code's default serves the reload in the turn. Pi makes the command's context stale once it reloads, so the command emits the outcome `reload-started` first and the registration calls `ctx.reload()` after the command settled and the foreground runner returned. Pi gap: no context survives the reload, so the command prints no `Reloaded: <counts>` line as Claude Code's `/reload-plugins` does, and Pi's terminal shows its own reload status instead. The command takes no argument, because `--force` only skips a prompt-cache check that Pi does not make. The reload hint follows the predicate: a one-shot run gets no hint text, and the JSON and RPC payloads keep `needsReload` in every mode. Every instruction to reload names the command `reloadCommandFor(mode, host)` picks: `/reload` where the host has Pi's own `/reload`, only the terminal (`modes/interactive/interactive-mode.js:2762`), checked first because the terminal always binds a UI; `/claude:plugin reload` in another host that takes later commands; none in a one-shot run, where a reload sentence is left out. D-CF5-03 stays: the command runs Pi's reload, which runs no session hook. | Claude Code 2.1.330: `/reload-plugins` (@325359447), its `Reloaded:` line (@339454145), its remote decline (@339452313, `Ae` @339454863), the SDK busy refusal (@352166769), and the interactive-only notice (@347950235); Pi 1.5.1 `core/agent-session.js:1131-1133`, `:1702-1711`, `:3094-3100`, `core/extensions/runner.js:403-405`, `:482-491`, `modes/interactive/interactive-mode.js:2762`, `:5482-5556`, `docs/extensions.md:1514-1540`; see `research/HEADLESS-RELOAD.md` and `quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni/`. | -- Locked |
 
 ## Evolution
 
@@ -2870,5 +2929,11 @@ _Last updated: 2026-11-16 after the maintainer review of the last two pending ro
 _Last updated: 2026-11-17 after the parity-gaps milestone closed (`override_closeout`, Phase 5 A9 waits for the PR's CI); every D-PG decision row is kept as locked._
 
 _Last updated: 2026-11-19 after the maintainer decision D-PG1-15: the `--map-model` alias table follows Claude Code 2.1.328 and the Pi floor is 1.5.1, which supersedes D-PG1-06 and amends D-CF4-07 and the NFR-11 floor; AGENT-06 is closed._
+
+_Last updated: 2026-11-20 after the integration-rescope milestone started._
+
+_Last updated: 2026-11-21 after integration-rescope Phase 1: both duplicate integration files are deleted after deliberate breaks failed their replacement scenarios; the user chose to keep the `fallow-audit` gate unchanged and accept its `weakened-tests` warn at PR review._
+
+_Last updated: 2026-11-23 after the integration-rescope milestone completed: 22 of 22 requirements, nine phases including the inserted Phase 6.1 (HKRL-01..03, D-CF5-13 amended), and a green `npm run check` on the combined tree._
 
 _Last updated: 2026-11-23 after system-git Phase 1 (Harness on System Git): the test suites run git through the system binary under a hermetic environment; no product decision was made._

@@ -546,7 +546,7 @@ describe("judgeDependencyMove", () => {
       partial: true,
       mapModel: true,
       notification: {
-        ctx: { mode: "tui", ui: { notify: (message) => notified.push(message) } },
+        ctx: { mode: "tui", hasUI: true, ui: { notify: (message) => notified.push(message) } },
         run: runWithNothingLoaded(),
       },
       credentialOps: credentials.credentialOps,

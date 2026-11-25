@@ -3,12 +3,13 @@
  * across the plugin verbs that rewrite its entry, including a request timeout
  * the user wrote (D-08-01, D-08-02, D-CF6-09, D-PG1-11), the fields the user
  * wrote that beat this extension's defaults or that the closed table never
- * writes (D-PG9-03, D-PG9-05), and an entry as release 0.23.0 wrote it, before
- * any default (D-PG9-04).
+ * writes (D-PG9-03, D-PG9-05), an entry as release 0.23.0 wrote it, before
+ * any default (D-PG9-04), the user's enable of a server the user had disabled,
+ * and the whole mcp-adapter.json file as the user keeps it (AFILE-06, D-08-02).
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
@@ -17,6 +18,8 @@ import {
   writeMcpAdapterOverride,
   writeRelease0230McpAdapterEntry,
 } from "../../lib/mcp-server-files.ts";
+import { expandTokens } from "../../lib/run-tokens.ts";
+import { writeScenarioFile } from "../../lib/scenario-file.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -66,5 +69,36 @@ Given(
     const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
     const written = await writeRelease0230McpAdapterEntry(file, key);
     assert.strictEqual(await readFile(file, "utf8"), written);
+  },
+);
+
+// pi-mcp-adapter 7.0.1's `/mcp-adapter enable <key>` removes `disabled` from
+// the entry under the key and keeps every other member, the marker included.
+Given(
+  "the user has enabled the mcp server {string} in the mcp-adapter.json file of the {word} scope",
+  async function (this: ScenarioWorld, key: string, scope: string) {
+    const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
+    const doc: unknown = JSON.parse(await readFile(file, "utf8"));
+    const servers: unknown = isRecord(doc) ? doc.mcpServers : undefined;
+    assert.ok(isRecord(doc) && isRecord(servers), `${file} holds no mcpServers object`);
+    const entry = servers[key];
+    assert.ok(isRecord(entry) && entry.disabled === true, `${key} is not disabled in ${file}`);
+    const enabled = Object.fromEntries(
+      Object.entries(entry).filter(([field]) => field !== "disabled"),
+    );
+    const text = `${JSON.stringify({ ...doc, mcpServers: { ...servers, [key]: enabled } }, null, 2)}\n`;
+    await writeFile(file, text);
+    assert.strictEqual(await readFile(file, "utf8"), text);
+  },
+);
+
+// The whole file as the user keeps it, such as a choice another plugin
+// stored (D-08-02). The file must not exist yet.
+Given(
+  "the user has written the mcp-adapter.json file of the {word} scope with this text:",
+  async function (this: ScenarioWorld, scope: string, text: string) {
+    const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeScenarioFile(this, file, expandTokens(text, this.tokens));
   },
 );

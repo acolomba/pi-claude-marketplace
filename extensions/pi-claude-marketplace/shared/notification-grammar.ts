@@ -9,6 +9,7 @@ import type {
   ResolvedEnvelope,
   ResolvedFailure,
   ResolvedMarketplace,
+  ResolvedMcpMigration,
   ResolvedRawSurface,
   ResolvedRow,
   ResolvedTally,
@@ -40,6 +41,7 @@ import type {
   Severity,
   VersionCommits,
 } from "./notification-types.ts";
+import type { ReloadCommand } from "./session-host.ts";
 import type { Scope } from "./types.ts";
 
 /**
@@ -1175,7 +1177,7 @@ function pushCauseLine(
 //
 //   [<tally sentence> | <update no-op headline>]
 //
-//   [/reload to pick up changes]  <-- iff the envelope needsReload
+//   [<reload> to pick up changes]  <-- iff the envelope needsReload and the host has a reload to name (RELOADCMD-D1)
 //
 //   [/claude:plugin apply to make these changes]  <-- iff the envelope needsApply
 //
@@ -1193,8 +1195,13 @@ function pushCauseLine(
 // the reconcile-applied cascade; the update no-op renders no sentinel.
 // ---------------------------------------------------------------------------
 
-/** Reload-hint trailer literal. */
-const RELOAD_HINT_TRAILER = "/reload to pick up changes";
+/**
+ * RELOADCMD-D1: the reload-hint trailer names the host's reload command, and a
+ * one-shot run, which has none, gets no trailer.
+ */
+function reloadHintTrailer(needsReload: boolean, reload: ReloadCommand | undefined): string {
+  return needsReload && reload !== undefined ? `${reload} to pick up changes` : "";
+}
 
 /**
  * APL-04 / D-05: the trailer of a `pending` block that holds a change. It is a
@@ -1262,13 +1269,19 @@ export type NotifyArguments = readonly [text: string] | readonly [text: string, 
  * carries no summary line.
  *
  * D-15: an info envelope yields one argument, the text alone. A warning or
- * error envelope yields two, the text and its severity.
+ * error envelope yields two, the text and its severity. RELOADCMD-D1: the
+ * reload trailer names `reload`, the host's reload command, and is absent when
+ * the host has none.
  */
-export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string): NotifyArguments {
+export function formatEnvelopeArguments(
+  envelope: ResolvedEnvelope,
+  body: string,
+  reload: ReloadCommand | undefined,
+): NotifyArguments {
   const folded = [
     body,
     envelope.noOp ? UPDATE_NO_OP_HEADLINE : tallySentence(envelope.tally),
-    envelope.needsReload ? RELOAD_HINT_TRAILER : "",
+    reloadHintTrailer(envelope.needsReload, reload),
     envelope.needsApply ? APPLY_HINT_TRAILER : "",
   ]
     .filter((segment) => segment !== "")
@@ -1314,16 +1327,34 @@ function composeAutoapplyStatusText(surface: AutoapplyStatusSurface): string {
 }
 
 /**
- * AUP-03 / D-PL8-10: Claude Code's background update notice with Pi's reload
- * command (D-PL8-11). D-PL8-21: names are deduplicated by the bare plugin name
- * in first-seen order, as Claude Code does, so a plugin updated in both scopes
- * or from two marketplaces is named once; two names are joined with "and",
- * three or more are counted.
+ * AUP-03 / D-PL8-10: Claude Code's background update notice with the host's
+ * reload command (D-PL8-11, RELOADCMD-D1); a one-shot run gets no reload tail.
+ * D-PL8-21: names are deduplicated by the bare plugin name in first-seen order,
+ * as Claude Code does, so a plugin updated in both scopes or from two
+ * marketplaces is named once; two names are joined with "and", three or more
+ * are counted.
  */
-function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[]): string {
+function composeBackgroundUpdateText(
+  plugins: readonly BackgroundUpdatePlugin[],
+  reload: ReloadCommand | undefined,
+): string {
   const names = [...new Set(plugins.map((plugin) => plugin.name))];
   const subject = names.length <= 2 ? names.join(" and ") : `${names.length} plugins`;
-  return `${names.length === 1 ? "Plugin" : "Plugins"} updated: ${subject} · Run /reload to apply`;
+  const updated = `${names.length === 1 ? "Plugin" : "Plugins"} updated: ${subject}`;
+  return reload === undefined ? updated : `${updated} · Run ${reload} to apply`;
+}
+
+/**
+ * AMIG-03: the migration notice, whose reload hint is its last line when the
+ * host has a reload command to name (RELOADCMD-D1).
+ */
+function mcpMigrationArguments(
+  surface: ResolvedMcpMigration,
+  reload: ReloadCommand | undefined,
+): NotifyArguments {
+  const text = composeMcpMigrationText(surface.rows, surface.notices, reload);
+  const trailer = reloadHintTrailer(surface.needsReload, reload);
+  return [trailer === "" ? text : `${text}\n${trailer}`, surface.severity];
 }
 
 /**
@@ -1334,9 +1365,15 @@ function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[])
  * `undefined` means nothing is emitted. The diagnostic arm reads the line count
  * and the async-rewake arm reads the summary length, so only a zero-length line
  * list or summary is a no-op (D-05, D-08); the hook-notice arm reads its text
- * length the same way (D-CF5-14). Producer strings pass through verbatim.
+ * length the same way (D-CF5-14). `reload-started` emits nothing too
+ * (RELOADCMD-D1). Producer strings pass through verbatim. `reload` is the
+ * host's reload command, which the migration notice and the background update
+ * name, and which a one-shot run lacks (RELOADCMD-D1).
  */
-export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments | undefined {
+export function formatRawSurface(
+  surface: ResolvedRawSurface,
+  reload: ReloadCommand | undefined,
+): NotifyArguments | undefined {
   switch (surface.kind) {
     case "usage-error":
       // SNM-13 / D-06: one blank line separates the message from nonempty usage.
@@ -1380,19 +1417,22 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
         composeMcpConfigNoticesText(surface.section, surface.notices),
         RAW_SURFACE_SEVERITY[surface.kind],
       ];
-    case "mcp-migration": {
-      // AMIG-03: the reload hint is the notice's last line.
-      const text = composeMcpMigrationText(surface.rows, surface.notices);
-      return [surface.needsReload ? `${text}\n${RELOAD_HINT_TRAILER}` : text, surface.severity];
-    }
-
+    case "mcp-migration":
+      return mcpMigrationArguments(surface, reload);
     case "background-update":
-      return [composeBackgroundUpdateText(surface.plugins), RAW_SURFACE_SEVERITY[surface.kind]];
+      return [
+        composeBackgroundUpdateText(surface.plugins, reload),
+        RAW_SURFACE_SEVERITY[surface.kind],
+      ];
     case "hook-notice":
       // D-CF5-14: the hooks bridge composed the notice and the seam made it
       // terminal-safe; it passes through as given.
       return surface.text.length === 0
         ? undefined
         : [surface.text, RAW_SURFACE_SEVERITY[surface.kind]];
+    case "reload-started":
+      // RELOADCMD-D1: Pi's terminal shows its own reload, and it rebuilds the chat
+      // during the reload, so the text strategy adds nothing.
+      return undefined;
   }
 }

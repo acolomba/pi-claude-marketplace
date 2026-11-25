@@ -26,6 +26,7 @@ Feature: Marketplace device flow
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status |
       | tools            | user              | added              |
+    Then no result of the command contains "stand-in-access-token"
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
@@ -253,3 +254,127 @@ Feature: Marketplace device flow
     Then pi routes these github requests:
       | method  | url            | routed to |
       | CONNECT | github.com:443 | git host  |
+
+  Scenario: Adding a GitHub marketplace whose host rejects the stored credential fails as authentication required and removes the credential (AUTH-07)
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given the user has stored a credential for github.com with the user "x-access-token" and the password "expired-token"
+    Given pi runs with github's requests routed to the stand-ins
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name       | scope | status | reasons                 |
+      | acme/tools | user  | failed | authentication required |
+    Then no result of the command contains "expired-token"
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+    Then the user's git credential store holds no credentials
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the user scope holds no marketplace record
+    Then the user scope holds no marketplace checkout
+
+  Scenario: After the GitHub host rejected the stored credential, the next add signs in through Device Flow again (AUTH-07)
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+      | authorized            |
+    Given the user has stored a credential for github.com with the user "x-access-token" and the password "expired-token"
+    Given pi runs with github's requests routed to the stand-ins
+    Given the user has run "/claude:plugin marketplace add acme/tools --scope user", which failed
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the command reports these results:
+      | kind               | severity | needs reload | verification uri                | user code |
+      | device-flow-prompt | info     | false        | https://github.com/login/device | WDJB-MJHT |
+      | cascade            | info     | false        |                                 |           |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | user              | added              |
+    Then no result of the command contains "expired-token"
+    Then no result of the command contains "stand-in-access-token"
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then github's sign-in receives these requests:
+      | method | path                      | form                                                                                                                      |
+      | POST   | /login/device/code        | client_id=Ov23liNcyK08uGdU0mMl, scope=repo                                                                                |
+      | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
+      | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
+    Then pi routes these github requests:
+      | method  | url                                         | routed to |
+      | CONNECT | github.com:443                              | git host  |
+      | POST    | https://github.com/login/device/code        | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | CONNECT | github.com:443                              | git host  |
+    Then the user's git credential store holds these credentials:
+      | protocol | host       | user           | password              |
+      | https    | github.com | x-access-token | stand-in-access-token |
+
+  Scenario: Adding a private GitHub marketplace in pi's print mode refuses with the remedy and leaves the scope as it was (MODE-04)
+    Given the marketplace "fixtures" is published as a url source
+    Given the marketplace "fixtures" is added to the project scope
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given pi runs with github's requests routed to the stand-ins
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin marketplace add acme/tools --scope project" in pi's print mode
+    Then pi's print mode exits with code 0 and prints this error:
+      """
+      Extension error (command:claude:plugin): Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.
+      """
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+    Then the files of the project scope are unchanged
+
+  Scenario: Applying a config that declares a private GitHub marketplace in pi's print mode adds nothing and leaves no staged clone, and print mode shows nothing, a documented Pi gap (MODE-04, JDOC-02)
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given pi runs with github's requests routed to the stand-ins
+    Given a config in scope project and layer base, with these marketplaces:
+      | name  | source     | autoupdate |
+      | tools | acme/tools | false      |
+    When the user runs "/claude:plugin apply --scope project" in pi's print mode
+    Then pi's print mode exits with code 0 and prints nothing
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source     | autoupdate |
+      | tools | acme/tools | false      |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones

@@ -11,8 +11,8 @@
 //   - PL-5 (upgradable) string compare
 //   - PL-6 manifest soft-fail -> failed-marketplace header per CMC-22
 //   - PL-7 <autoupdate> marker on the marketplace header
-//   - CMC-21 orphan-fold rule (rendered cross-scope, but the adoption
-//     round-trip lives in `test/integration/fold-adoption.test.ts`)
+//   - CMC-21 orphan-fold rule, rendered cross-scope (the fold scenarios of
+//     `features/plugin/list.feature` run the fold end to end)
 //
 // Plus a compile-time proof that the list options expose no Git transport
 // (NFR-5 / PI-2 / PL-3), defense in depth beside BLOCK F in `eslint.config.js`.
@@ -2177,8 +2177,10 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
   // under the user-scope header with the cross-scope `[project]` bracket
   // per D-13-18 / D-16-17.
   //
-  // The integration counterpart for this regression is
-  // test/integration/fold-adoption.test.ts step 2 (CMC-21 step 2).
+  // The behavioral counterpart for this regression is the scenario "The
+  // unfiltered list shows a plugin the project installed from a user
+  // marketplace under that marketplace (CMC-21, D-13-17)" of
+  // features/plugin/list.feature.
   // The same-mp-both-scopes test above does NOT cover this case
   // because both seedMarketplace calls allocate independent
   // `marketplaceRoot` paths -- the fold rule does not trigger.

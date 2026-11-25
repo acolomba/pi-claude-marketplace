@@ -66,7 +66,7 @@ Feature: Marketplace file source update
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status |
       | tools            | project           | updated            |
-    When the user starts a new pi session
+    When the user reloads pi
     When the user runs "/claude:plugin marketplace update tools --scope project"
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | marketplace reasons |

@@ -8,10 +8,11 @@
  * plugin `demo` holds the run's agents, a stub MCP server, and a recording
  * hook of every event. Its Stop hook asks a main session for one more turn.
  * A main Pi in RPC mode loads the real extension, pi-subagents, and the MCP
- * implementation of the profile, each from the optional peer cache, and
- * installs the plugin with `/claude:plugin` in the user scope, as a user
- * does. The user's settings name the extension and the MCP implementation,
- * so every child session loads them, as a child loads the user's extensions.
+ * implementation of the profile, each from the optional peer cache at the
+ * suite version that `resolveCompanion` checks, and installs the plugin with
+ * `/claude:plugin` in the user scope, as a user does. The user's settings
+ * name the extension and the MCP implementation, so every child session
+ * loads them, as a child loads the user's extensions.
  * The main Pi saves its session in the fixture's agent directory, so
  * pi-subagents writes that session's file into the header of each child
  * session it creates (D-PG6-02, D-PG6-16).
@@ -24,8 +25,8 @@
  * last user text holds, and with the text `Done.` past it. A marker is a
  * bracketed token looked up whole, so an agent whose name begins with
  * another agent's name never gets that agent's script. It keeps each
- * request's last user text and tool names, never a system prompt or a
- * header.
+ * request's model, last user text, and tool names, never a system prompt
+ * or a header, and a run fails unless every request named its one model.
  *
  * `runRealSubagentChild` has the main Pi's model call pi-subagents'
  * `subagent` tool for each agent in turn, naming no launch mode, so the
@@ -34,7 +35,8 @@
  * to exit, and reads the child's Pi session id from the header of the session
  * file pi-subagents records, apart from any hook, and keeps that file.
  * pi-subagents then wakes the main Pi with a notice, and the run waits for
- * the main Pi to settle.
+ * the main Pi to settle. A run fails unless each child sent the provider the
+ * results of all its tool calls, foreground children included.
  *
  * `runConcurrentRealSubagentChildren` starts one runner process of its own,
  * with pi-subagents' child marker, that builds the sessions of a generation
@@ -215,13 +217,6 @@ export interface ConcurrentChildrenOptions extends RealChildFixtureOptions {
   readonly rounds: number;
 }
 
-/** The versions of what a run executed. */
-export interface RealChildVersions {
-  readonly node: string;
-  readonly piSubagents: string;
-  readonly mcpAdapter?: string;
-}
-
 /** What pi-subagents reported about the child of one agent. */
 export interface DetachedChildObservation {
   /** The agent pi-subagents recorded that it ran, not the one the run asked for. */
@@ -246,19 +241,16 @@ export interface ConcurrentSessionObservation {
   readonly pid: number;
 }
 
-/** What every run observed of its main Pi, its hooks, and its provider. */
+/** What every run observed of its main Pi and its hooks. */
 export interface MainObservation {
-  readonly versions: RealChildVersions;
+  /** The id of the session the main Pi started with, which the install's new session ended. */
+  readonly startupSessionId: string;
   /** The id of the main Pi's session after the install's new session. */
   readonly mainSessionId: string;
   /** That session's file, as Pi reports it. */
   readonly mainSessionFile: string;
   /** Every hook run, in the order the hook processes appended them. */
   readonly hookRuns: readonly HookRun[];
-  /** The last user text of each provider request, in arrival order. */
-  readonly providerPrompts: readonly string[];
-  /** The model each provider request named, once each, in order of first use. */
-  readonly providerModels: readonly (string | undefined)[];
 }
 
 /** What one run of `runRealSubagentChild` observed. */
@@ -286,6 +278,8 @@ interface ProviderRequestBody {
 interface ProviderRequest {
   readonly model: string | undefined;
   readonly lastUserText: string;
+  /** How many tool results follow the last user text. */
+  readonly toolResults: number;
   readonly tools: readonly string[];
 }
 
@@ -339,17 +333,15 @@ function messageText(content: unknown): string {
     : "";
 }
 
-// The step for `messages`: of the script whose marker is the first marker of
+// The step for `request`: of the script whose marker is the first marker of
 // the last user text, the one at the number of tool results after that text.
 function scriptedStep(
   script: ReadonlyMap<string, readonly ScriptedToolCall[]>,
-  messages: readonly ProviderMessage[],
+  request: ProviderRequest,
 ): ScriptedToolCall | undefined {
-  const userAt = lastUserIndex(messages);
-  const marker = MARKER_PATTERN.exec(messageText(messages[userAt]?.content))?.[0];
+  const marker = MARKER_PATTERN.exec(request.lastUserText)?.[0];
   const steps = marker === undefined ? undefined : script.get(marker);
-  const index = messages.slice(userAt + 1).filter((message) => message.role === "tool").length;
-  return steps?.[index];
+  return steps?.[request.toolResults];
 }
 
 function streamChunk(model: string, delta: unknown, finish: string | null): string {
@@ -402,18 +394,20 @@ async function startProvider(
       const body = JSON.parse(Buffer.concat(parts).toString("utf8")) as ProviderRequestBody;
       const messages = body.messages ?? [];
       const userAt = lastUserIndex(messages);
-      requests.push({
+      const received = {
         model: body.model,
         lastUserText: messageText(messages[userAt]?.content),
+        toolResults: messages.slice(userAt + 1).filter((message) => message.role === "tool").length,
         tools: (body.tools ?? []).map((tool) => tool.function?.name ?? ""),
-      });
+      };
+      requests.push(received);
       if (body.model !== MODEL) {
         response.writeHead(400, { "content-type": "application/json" });
         response.end(JSON.stringify({ error: { message: `no model ${String(body.model)}` } }));
         return;
       }
 
-      answer(response, MODEL, scriptedStep(script, messages), requests.length);
+      answer(response, MODEL, scriptedStep(script, received), requests.length);
     });
   });
   server.listen(0, "127.0.0.1");
@@ -641,15 +635,15 @@ interface MainRun {
   readonly fixture: Fixture;
   readonly provider: ScriptedProvider;
   readonly pi: PiProcess;
-  readonly versions: RealChildVersions;
   readonly mainSession: MainSession;
   readonly subagents: Companion;
 }
 
-/** The main Pi's session after the install's new session. */
+/** The main Pi's session after the install's new session, and the session it ended. */
 interface MainSession {
   readonly id: string;
   readonly file: string;
+  readonly startupId: string;
 }
 
 // The scripts of the provider: each agent's launch and task, and the main
@@ -723,21 +717,28 @@ async function withMainRun<T>(
       pi,
       mainSession,
       subagents,
-      versions: {
-        node: process.version,
-        piSubagents: subagents.version,
-        ...(adapter === undefined ? {} : { mcpAdapter: adapter.version }),
-      },
     });
   } finally {
     await release();
   }
 }
 
+// The id and file of the main Pi's session.
+async function sessionOfPi(pi: PiProcess): Promise<{ readonly id: string; readonly file: string }> {
+  const state = await expectSuccess(pi, { type: "get_state" });
+  const data = state.data as
+    { readonly sessionId?: unknown; readonly sessionFile?: unknown } | undefined;
+  assert.ok(typeof data?.sessionId === "string", JSON.stringify(state));
+  assert.ok(typeof data.sessionFile === "string", JSON.stringify(state));
+  return { id: data.sessionId, file: data.sessionFile };
+}
+
 // Installs the plugin through `/claude:plugin` and starts a new session,
-// returning that session's id and file, which must lie in the fixture.
+// returning that session's id and file, which must lie in the fixture, and
+// the id of the session that the new session ended.
 async function installPlugin(pi: PiProcess, fixture: Fixture): Promise<MainSession> {
   await expectSuccess(pi, { type: "set_model", provider: PROVIDER, modelId: MODEL });
+  const startup = await sessionOfPi(pi);
   for (const command of [
     `/claude:plugin marketplace add ${fixture.marketplace} --scope user`,
     `/claude:plugin install ${PLUGIN}@${MARKETPLACE} --scope user`,
@@ -748,16 +749,13 @@ async function installPlugin(pi: PiProcess, fixture: Fixture): Promise<MainSessi
 
   await startSession(pi);
   await expectSuccess(pi, { type: "set_model", provider: PROVIDER, modelId: MODEL });
-  const state = await expectSuccess(pi, { type: "get_state" });
-  const data = state.data as
-    { readonly sessionId?: unknown; readonly sessionFile?: unknown } | undefined;
-  assert.ok(typeof data?.sessionId === "string", JSON.stringify(state));
-  assert.ok(typeof data.sessionFile === "string", JSON.stringify(state));
+  const main = await sessionOfPi(pi);
   assert.ok(
-    data.sessionFile.startsWith(`${fixture.root}${path.sep}`),
-    `the main session file ${data.sessionFile} lies outside the fixture`,
+    main.file.startsWith(`${fixture.root}${path.sep}`),
+    `the main session file ${main.file} lies outside the fixture`,
   );
-  return { id: data.sessionId, file: data.sessionFile };
+  assert.notStrictEqual(main.id, startup.id, "the install started a new session");
+  return { ...main, startupId: startup.id };
 }
 
 // Prompts the main Pi with `prompt` and waits for the main Pi to settle:
@@ -837,10 +835,40 @@ async function detachedChild(agent: string, asyncDir: string): Promise<DetachedC
   };
 }
 
+// Fails unless each request of the child of `agent` offered every tool of
+// `calls`, and the child sent the provider the results of all of them. No
+// hook shows the calls of a foreground child, and Pi answers a call to a tool
+// that the session does not offer with an error result and no tool event.
+function assertCallsAnswered(
+  run: MainRun,
+  agent: string,
+  calls: readonly ScriptedToolCall[],
+): void {
+  const requests = run.provider.requests.filter(
+    ({ lastUserText }) => MARKER_PATTERN.exec(lastUserText)?.[0] === taskMarker(agent),
+  );
+  assert.deepStrictEqual(
+    requests.map(({ tools }) =>
+      calls.map(({ tool }) => tool).filter((tool) => !tools.includes(tool)),
+    ),
+    requests.map(() => []),
+    `the child of ${agent} was offered every tool it calls`,
+  );
+  assert.ok(
+    requests.some(({ toolResults }) => toolResults === calls.length),
+    `the child of ${agent} sent the results of its ${calls.length} tool calls`,
+  );
+}
+
 // Has the main Pi's model call `subagent` for `agent`, and returns what
-// pi-subagents reported of the child once the main Pi settled. A foreground
-// child's agent is the one the tool result names.
-async function launchChild(run: MainRun, agent: string): Promise<DetachedChildObservation> {
+// pi-subagents reported of the child once the main Pi settled, after
+// asserting that the child was offered and answered each of its `calls`. A
+// foreground child's agent is the one the tool result names.
+async function launchChild(
+  run: MainRun,
+  agent: string,
+  calls: readonly ScriptedToolCall[],
+): Promise<DetachedChildObservation> {
   const from = await promptMain(run, launchMarker(agent), CHILD_TIMEOUT_MS);
   const launched = run.pi
     .recordsSince(from)
@@ -859,17 +887,24 @@ async function launchChild(run: MainRun, agent: string): Promise<DetachedChildOb
           sessionId: undefined,
         };
   await settleMainPi(run);
+  assertCallsAnswered(run, agent, calls);
   return child;
 }
 
+// What the run observed of the main Pi and the hooks, after asserting that
+// every provider request, of the main Pi and of each child, named the
+// scripted model.
 async function observeMain(run: MainRun): Promise<MainObservation> {
+  assert.deepStrictEqual(
+    [...new Set(run.provider.requests.map(({ model }) => model))],
+    [MODEL],
+    "every provider request named the scripted model",
+  );
   return {
-    versions: run.versions,
+    startupSessionId: run.mainSession.startupId,
     mainSessionId: run.mainSession.id,
     mainSessionFile: run.mainSession.file,
     hookRuns: await readHookRuns(run.fixture.harness),
-    providerPrompts: run.provider.requests.map(({ lastUserText }) => lastUserText),
-    providerModels: [...new Set(run.provider.requests.map(({ model }) => model))],
   };
 }
 
@@ -889,8 +924,8 @@ export async function runRealSubagentChild(
     await promptMain(run, MAIN_CONTROL_PROMPT, READY_TIMEOUT_MS);
     await settleMainPi(run);
     const children: DetachedChildObservation[] = [];
-    for (const { agent } of launches) {
-      children.push(await launchChild(run, agent));
+    for (const { agent, calls } of launches) {
+      children.push(await launchChild(run, agent, calls));
     }
 
     return { ...(await observeMain(run)), children };
@@ -1063,41 +1098,58 @@ function tableRecords(
 }
 
 /**
- * Reads an agents table with the columns `name`, `background`, `tools`, and
- * `tool calls`: an empty `background` or `tools` cell leaves that line out of
- * the agent's frontmatter, and `tool calls` names the calls its child makes,
- * from `bash`, `failing read`, and `stub mcp tool`, separated by commas.
+ * Reads an agents table with the columns `name`, `background`, `tools`, an
+ * optional `body`, and `tool calls`, in that order. Any other header throws.
+ * An empty `background` or `tools` cell leaves that line out of the agent's
+ * frontmatter. A `body` cell is the agent's whole body, so an empty cell gives
+ * an agent with an empty body. A table without the `body` column gives every
+ * agent the body "Run the tools the task names.". `tool calls` names the calls
+ * the agent's child makes, from `bash`, `failing read`, and `stub mcp tool`,
+ * separated by commas.
  */
 export function parseRealChildAgents(rows: readonly (readonly string[])[]): RealChildAgent[] {
-  return tableRecords(rows, ["name", "background", "tools", "tool calls"]).map((row) => ({
+  const withBody = rows[0]?.includes("body") === true;
+  const columns = withBody
+    ? ["name", "background", "tools", "body", "tool calls"]
+    : ["name", "background", "tools", "tool calls"];
+  return tableRecords(rows, columns).map((row) => ({
     name: row.name ?? "",
     frontmatter: (["background", "tools"] as const).flatMap((key) => {
       const value = row[key] ?? "";
       return value === "" ? [] : [[key, value] as const];
     }),
-    body: "Run the tools the task names.",
+    body: withBody ? (row.body ?? "") : "Run the tools the task names.",
     calls: namedCalls(row["tool calls"] ?? ""),
   }));
 }
 
 /**
  * Reads a child sessions table with the columns `agent`, `mode` (`append` or
- * `replace`), `body`, and `tool calls`, named as `parseRealChildAgents`
- * names them.
+ * `replace`), `body`, an optional `fork cache key`, and `tool calls`, in that
+ * order, the calls named as `parseRealChildAgents` names them. Any other
+ * header throws. A `fork cache key` cell launches the session as
+ * pi-subagents launches a forked child, and an empty cell launches it
+ * unforked.
  */
 export function parseConcurrentLaunches(
   rows: readonly (readonly string[])[],
 ): ConcurrentChildLaunch[] {
-  return tableRecords(rows, ["agent", "mode", "body", "tool calls"]).map((row) => {
+  const withForkKey = rows[0]?.includes("fork cache key") === true;
+  const columns = withForkKey
+    ? ["agent", "mode", "body", "fork cache key", "tool calls"]
+    : ["agent", "mode", "body", "tool calls"];
+  return tableRecords(rows, columns).map((row) => {
     const mode = row.mode;
     if (mode !== "append" && mode !== "replace") {
       throw new Error(`a child session's mode is append or replace, not ${String(mode)}`);
     }
 
+    const forkCacheKey = row["fork cache key"] ?? "";
     return {
       agent: row.agent ?? "",
       mode,
       body: row.body ?? "",
+      ...(forkCacheKey === "" ? {} : { forkCacheKey }),
       calls: namedCalls(row["tool calls"] ?? ""),
     };
   });

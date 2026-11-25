@@ -720,7 +720,7 @@ interface LeakProbe {
   readonly text: string;
 }
 
-const GITHUB_TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz";
+const GITHUB_TOKEN = "ghp_0123456789abcdefghijklmnopqrstuvwxyz"; // trufflehog:ignore -- fake token fixture
 const USERINFO_URL = "https://alice:s3cret@github.com/o/r.git";
 const USERINFO = ["alice:s3cret@", "s3cret"];
 const FAILED_ADD_SOURCE = "https://alice:s3cret@gitlab.example.com/team/private-mp";
@@ -735,6 +735,7 @@ function probePresentation(message: NotificationMessage): LeakProbe {
   const delivered: string[] = [];
   const ctx: NotificationContext = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify: (text) => {
         delivered.push(text);
@@ -763,7 +764,7 @@ function probeRawSurface(surface: RawSurface): LeakProbe {
     payload: JSON.stringify(
       toWirePayload(resolved, { kind: "command", commandId: "plugin", invocationId: "test-run" }),
     ),
-    text: formatRawSurface(resolved)?.[0] ?? "",
+    text: formatRawSurface(resolved, "/reload")?.[0] ?? "",
   };
 }
 
@@ -777,7 +778,7 @@ function probeComposedText(presentation: NotificationPresentation, body: string)
         invocationId: "test-run",
       }),
     ),
-    text: formatEnvelopeArguments(presentation.envelope, body)[0],
+    text: formatEnvelopeArguments(presentation.envelope, body, "/reload")[0],
   };
 }
 
@@ -1183,6 +1184,7 @@ for (const root of [
         };
         const ctx: NotificationContext = {
           mode,
+          hasUI: mode === "tui" || mode === "rpc",
           get ui() {
             return capture.ui;
           },
@@ -1266,6 +1268,7 @@ for (const mode of ["json", "rpc"] as const) {
     });
     const ctx: NotificationContext = {
       mode,
+      hasUI: mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -1317,6 +1320,7 @@ for (const message of [
       } as const;
       const ctx: NotificationContext = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },

@@ -445,6 +445,7 @@ for (const kind of [
   "usage-error",
   "usage-info",
   "autoapply-status",
+  "reload-started",
   "internal-error",
 ]) {
   test(`the preparation recognizes the ${kind} outcome kind`, async (t) => {

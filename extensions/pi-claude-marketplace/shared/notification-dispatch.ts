@@ -57,6 +57,7 @@ import {
 } from "./notification-resolve.ts";
 import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
+import { reloadCommandFor } from "./session-host.ts";
 
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CommandErrorPresentation } from "./notification-command-error.ts";
@@ -88,6 +89,7 @@ import type {
   RetainedWorkflowStaging,
   UsageErrorMessage,
 } from "./notification-types.ts";
+import type { ReloadCommand } from "./session-host.ts";
 import type { Scope } from "./types.ts";
 
 function isCommandOutcome(
@@ -119,6 +121,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
     case "usage-error":
     case "usage-info":
     case "autoapply-status":
+    case "reload-started":
     case "internal-error":
       return true;
     case "diagnostic":
@@ -219,8 +222,13 @@ function appendCommand(
   state.hasOutcome ||= isOutcome;
 }
 
-function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
-  deliver(ctx, formatEnvelopeArguments(envelope, body));
+function emitWithSummary(
+  ctx: NotificationContext,
+  envelope: ResolvedEnvelope,
+  body: string,
+  reload: ReloadCommand | undefined,
+): void {
+  deliver(ctx, formatEnvelopeArguments(envelope, body, reload));
 }
 
 /** D-14: the entry point for the hook-origin group of raw surfaces. */
@@ -325,6 +333,15 @@ export function notifyAutoapplyStatus(
   surface: AutoapplyStatusSurface,
 ): void {
   emitPresentation(ctx, run, resolveRawSurface(surface));
+}
+
+/**
+ * RELOADCMD-D1: sends the outcome of `/claude:plugin reload` right before Pi
+ * reloads. Pi's terminal shows its own reload, so the text strategy emits
+ * nothing; json and rpc append the payload.
+ */
+export function notifyReloadStarted(ctx: NotificationContext, run: NotificationRun): void {
+  emitPresentation(ctx, run, resolveRawSurface({ kind: "reload-started" }));
 }
 
 /**
@@ -604,6 +621,28 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
 }
 
 /**
+ * The text strategy for one presentation (MODE-01). `reload` is the command
+ * its reload instructions name, none in a one-shot run (RELOADCMD-D1).
+ */
+function emitText(
+  ctx: NotificationContext,
+  presentation: NotificationPresentation | ResolvedRawSurface,
+  reload: ReloadCommand | undefined,
+): void {
+  if ("envelope" in presentation) {
+    emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation), reload);
+    return;
+  }
+
+  // RELOADCMD-D1: reload-started renders no text; the other kinds that can render
+  // none return before transport selection.
+  const args = formatRawSurface(presentation, reload);
+  if (args !== undefined) {
+    deliver(ctx, args);
+  }
+}
+
+/**
  * MODE-01: selects transport from the live context for each presentation.
  */
 function emitPresentation(
@@ -620,18 +659,11 @@ function emitPresentation(
     state.needsReload ||= presentation.envelope.needsReload;
   }
 
-  switch (requireNotificationMode(ctx.mode)) {
+  const mode = requireNotificationMode(ctx.mode);
+  switch (mode) {
     case "tui":
     case "print":
-      if ("envelope" in presentation) {
-        emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
-      } else {
-        // Usage, load warnings, device prompts, and nonempty diagnostics produce a tuple.
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- empty diagnostics return before transport selection
-        const args = formatRawSurface(presentation)!;
-        deliver(ctx, args);
-      }
-
+      emitText(ctx, presentation, reloadCommandFor(mode, ctx));
       return;
     case "json":
     case "rpc": {

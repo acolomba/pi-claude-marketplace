@@ -26,7 +26,7 @@ Feature: Workflow agent steps
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply       | tool | arguments |
       | The answer. |      |           |
@@ -54,7 +54,7 @@ Feature: Workflow agent steps
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply           | tool | arguments |
       | The files pass. |      |           |
@@ -83,7 +83,7 @@ Feature: Workflow agent steps
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply           | tool | arguments |
       | The files pass. |      |           |
@@ -105,7 +105,7 @@ Feature: Workflow agent steps
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply    | tool | arguments                                                                                                                                    |
       |          | bash | {"command": "if [ $(git rev-parse --git-dir) = $(git rev-parse --git-common-dir) ]; then echo main worktree; else echo linked worktree; fi"} |
@@ -135,7 +135,7 @@ Feature: Workflow agent steps
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool              | arguments          |
       |       | structured_output | {"verdict":"pass"} |

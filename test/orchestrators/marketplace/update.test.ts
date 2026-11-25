@@ -259,6 +259,7 @@ function makeCtx(): {
   const notifications: NotifyRecord[] = [];
   const ctx: NotificationContext = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify(message: string, severity?: Severity): void {
         notifications.push(severity === undefined ? { message } : { message, severity });
@@ -413,6 +414,7 @@ for (const mode of ["json", "rpc"]) {
       } as const;
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -1394,6 +1396,7 @@ test("D-SG-10: a kept checkout's row is the marketplace's own in JSON mode", asy
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },
@@ -3978,6 +3981,7 @@ function bareUpdateRun(): {
   const capture = createJsonCapture();
   const ctx: NotificationContext = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },

@@ -4,7 +4,8 @@
  * step can also block with a directory of the same name, the user's approval
  * of project MCP servers, and a legacy `mcp.json` that holds an installed
  * plugin's servers beside the user's own, as release 0.19.2 wrote it. One
- * step reads the whole text of a scope's `mcp.json` or `mcp-adapter.json`.
+ * step reads the whole text of a scope's `mcp.json` or `mcp-adapter.json`,
+ * and one shows that such a file does not exist.
  */
 
 import assert from "node:assert/strict";
@@ -139,5 +140,14 @@ Then(
     const file = path.join(this.scopeRoot(scope), fileName);
     const content = await readFile(file, "utf8");
     assert.strictEqual(projectTokens("text", content, this.tokens), text);
+  },
+);
+
+Then(
+  "the mcp configuration file {string} of the {word} scope does not exist",
+  async function (this: ScenarioWorld, fileName: string, scope: string) {
+    assert.ok(MCP_CONFIG_FILES.has(fileName), `${fileName} is not an mcp configuration file`);
+    const file = path.join(this.scopeRoot(scope), fileName);
+    await assert.rejects(stat(file), { code: "ENOENT" }, `${file} exists`);
   },
 );

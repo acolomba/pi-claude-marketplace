@@ -1,3 +1,19 @@
+// test/integration/pi-subagents-child-launch-conformance.test.ts
+//
+// Peer conformance (ITSCOPE-01) against pi-subagents' own launch planner,
+// `src/runs/shared/child-launch.js`, with its MCP allowlist and agent
+// discovery, in place from the suite version in the optional peer cache
+// (D-PG1-02). Each case writes an agent with `convertAgent` and asks the
+// planner which tools and model the child gets: ambient adapter tools for an
+// unrestricted or exclusion-only runner, none after an explicit read, an
+// empty list, or a read-only ceiling; a short MCP grant selects its tool, and
+// an exclude name removes one (PG-AGENT-09); the Agent grant keys allow
+// fan-out or none (PG-AGENT-03); an inherit model runs on the parent's model
+// (PG-AGENT-07a, D-PG7-17). The scenarios launch a few real children
+// (`features/agent/frontmatter.feature`,
+// `features/plugin/subagent-child.feature`); the other launch plans need
+// pi-subagents' own planner.
+
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";

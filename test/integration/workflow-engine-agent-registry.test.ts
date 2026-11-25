@@ -1,9 +1,12 @@
 // test/integration/workflow-engine-agent-registry.test.ts
 //
-// The workflow engine reads the agent files the agents bridge writes: its
-// agentType registry parses them with Pi's YAML frontmatter reader, unlike
-// pi-subagents' line reader. These cases load a bridged agent file through
-// the engine's own registry.
+// Peer conformance (ITSCOPE-01) against the workflow engine's own agent
+// registry. The workflow engine reads the agent files the agents bridge
+// writes: its agentType registry parses them with Pi's YAML frontmatter
+// reader, unlike pi-subagents' line reader. These cases load a bridged agent
+// file through the engine's own registry. Three of the values are in
+// `features/workflow/agent-steps.feature`; the other descriptions, the
+// provenance values, and the source names need the engine's own registry.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";

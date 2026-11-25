@@ -3,11 +3,17 @@ Feature: MCP server lifecycle
   Each plugin verb changes the MCP servers of a session started after it, as
   Pi's /reload would, under pi-mcp-adapter and under Pi's built-in MCP (BLT-06,
   D-MB-10). The two implementations show it through different tools, so each
-  verb has a scenario for each. The three scenarios about a user's disabled
-  choice in mcp-adapter.json exist only for pi-mcp-adapter, whose file keeps
-  that choice (D-08-01, D-08-02). Four request-timeout scenarios also use the
-  adapter's file; Pi's built-in MCP sets its timeout at session start and reads
-  no user value from that file (D-PG1-11 to D-PG1-13). They also show the
+  verb has a scenario for each. Three scenarios show through pi-mcp-adapter's
+  tools that a user's disabled choice in mcp-adapter.json survives a plugin
+  verb (D-08-01, D-08-02). The extension writes that file the same way under
+  either implementation, so the scenarios that read only the file run under
+  both: a project install keeps the user's stub for a server's key and an
+  uninstall writes it back (AFILE-06), the choices the user wrote there
+  survive each plugin verb (D-08-01, D-08-02), and a stub's own timeout is
+  kept for the uninstall to write back while the plugin's applies (ANAME-07).
+  Four request-timeout scenarios also use the adapter's file; Pi's built-in
+  MCP sets its timeout at session start and reads no user value from that file
+  (D-PG1-11 to D-PG1-13). They also show the
   `lifecycle: "lazy-keep-alive"` default of a stdio server, which keeps it
   connected for the session as Claude Code does, and which a restage writes
   again as the extension's own (D-PG9-01, D-PG9-03, D-PG9-04). No `openUi`
@@ -1138,3 +1144,1203 @@ Feature: MCP server lifecycle
     Then pi lists these registered mcp servers:
       | name             |
       | plugin_demo_stub |
+
+  @mcp
+  Scenario: A project install keeps the user's override of a plugin server's key, applies its disabled choice, and names the fields that stop applying (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "mine" in the mcp-adapter.json file of the project scope:
+      """
+      {"command": "my-server"}
+      """
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                             |
+      | cascade            | info     | true         |                                                                                                                                     |
+      | mcp-config-notices | warning  | false        | [{"kind":"override-kept","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","fields":["env"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "mine": {
+            "command": "my-server"
+          },
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              },
+              "keptOverride": {
+                "disabled": true,
+                "env": {
+                  "STUB_TOKEN": "stub-secret"
+                }
+              }
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the mcp configuration file "mcp.json" of the user scope does not exist
+
+  @mcp
+  Scenario: An uninstall writes the user's override of a plugin server's key back as the user wrote it (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "mine" in the mcp-adapter.json file of the project scope:
+      """
+      {"command": "my-server"}
+      """
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "mine": {
+            "command": "my-server"
+          },
+          "plugin_demo_srv_": {
+            "disabled": true,
+            "env": {
+              "STUB_TOKEN": "stub-secret"
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the mcp configuration file "mcp.json" of the user scope does not exist
+
+  @mcp
+  Scenario: A project install of a plugin the user scope also installs keeps the project's disable stub and leaves the user scope's files alone (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the files of the user scope are remembered
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                             |
+      | cascade            | info     | true         |                                                                                                                                     |
+      | mcp-config-notices | warning  | false        | [{"kind":"override-kept","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","fields":["env"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              },
+              "keptOverride": {
+                "disabled": true,
+                "env": {
+                  "STUB_TOKEN": "stub-secret"
+                }
+              }
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the files of the user scope are unchanged
+
+  @mcp
+  Scenario: A project update writes the plugin's new server definition, keeps the project's disable stub of a plugin the user scope also installs, and leaves the user scope's files alone (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": ["v2"]}}}
+      """
+    Given the files of the user scope are remembered
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v2"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              },
+              "keptOverride": {
+                "disabled": true,
+                "env": {
+                  "STUB_TOKEN": "stub-secret"
+                }
+              }
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the files of the user scope are unchanged
+
+  @mcp
+  Scenario: A project reinstall keeps the project's disable stub of a plugin the user scope also installs and leaves the user scope's files alone (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the files of the user scope are remembered
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              },
+              "keptOverride": {
+                "disabled": true,
+                "env": {
+                  "STUB_TOKEN": "stub-secret"
+                }
+              }
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the files of the user scope are unchanged
+
+  @mcp
+  Scenario: A project uninstall writes the project's disable stub back and leaves the user scope's files alone (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the files of the user scope are remembered
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "disabled": true,
+            "env": {
+              "STUB_TOKEN": "stub-secret"
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the files of the user scope are unchanged
+
+  @mcp
+  Scenario: A plugin disable after the user enabled the plugin's server writes back the override without the disabled choice (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has enabled the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin disable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status   | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | disabled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "env": {
+              "STUB_TOKEN": "stub-secret"
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A plugin enable after a disable keeps the user's enable of the plugin's server (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has enabled the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                             |
+      | cascade            | info     | true         |                                                                                                                                     |
+      | mcp-config-notices | warning  | false        | [{"kind":"override-kept","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","fields":["env"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              },
+              "keptOverride": {
+                "env": {
+                  "STUB_TOKEN": "stub-secret"
+                }
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An uninstall after the user enabled the plugin's server writes back the override without the disabled choice (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has enabled the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "env": {
+              "STUB_TOKEN": "stub-secret"
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A project install over a disable stub applies the timeout the plugin's entry declares (AFILE-06, ANAME-07)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "timeout": 5000}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true}
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "requestTimeoutMs": 5000,
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "pluginSetFields": [
+                "requestTimeoutMs"
+              ],
+              "defaultFields": {
+                "lifecycle": "lazy-keep-alive"
+              },
+              "keptOverride": {
+                "disabled": true
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An uninstall writes back no timeout that only the plugin's entry declared (AFILE-06, ANAME-07)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "timeout": 5000}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "disabled": true
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A project install over a stub with a timeout applies the plugin's timeout, keeps the user's for later, and says so (ANAME-07)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"type": "http", "url": "https://127.0.0.1:9/mcp", "timeout": 60000}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"requestTimeoutMs": 5000, "disabled": true}
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                          |
+      | cascade            | info     | true         |                                                                                                                                                  |
+      | mcp-config-notices | warning  | false        | [{"kind":"override-kept","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","fields":["requestTimeoutMs"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "url": "https://127.0.0.1:9/mcp",
+            "requestTimeoutMs": 60000,
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "pluginSetFields": [
+                "requestTimeoutMs"
+              ],
+              "keptOverride": {
+                "requestTimeoutMs": 5000,
+                "disabled": true
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An uninstall after the user enabled the plugin's server writes back only the user's timeout (ANAME-07)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"type": "http", "url": "https://127.0.0.1:9/mcp", "timeout": 60000}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"requestTimeoutMs": 5000, "disabled": true}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has enabled the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "requestTimeoutMs": 5000
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An uninstall keeps the disabled and openUi choices the user wrote for a plugin server (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "openUi": true}
+      """
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {},
+        "_piClaudeMarketplace": {
+          "serverChoices": {
+            "plugin_demo_srv_": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "fields": {
+                "disabled": true,
+                "openUi": true
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An install after an uninstall gives the plugin's server back the user's disabled and openUi choices (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "openUi": true}
+      """
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "openUi": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A plugin disable keeps the disabled and trace choices the user wrote for a plugin server (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "trace": true}
+      """
+    When the user runs "/claude:plugin disable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status   | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | disabled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {},
+        "_piClaudeMarketplace": {
+          "serverChoices": {
+            "plugin_demo_srv_": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "fields": {
+                "disabled": true,
+                "trace": true
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A second plugin disable leaves the user's kept choices as the first left them (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "trace": true}
+      """
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    When the user runs "/claude:plugin disable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | false        |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons          | scope   |
+      | fixtures         | project           | demo@fixtures | demo | skipped | already disabled | project |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {},
+        "_piClaudeMarketplace": {
+          "serverChoices": {
+            "plugin_demo_srv_": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "fields": {
+                "disabled": true,
+                "trace": true
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A plugin enable gives the plugin's server back the user's disabled and trace choices (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "trace": true}
+      """
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "disabled": true,
+            "trace": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An update that drops a plugin server keeps the user's choice for it (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"openUi": true}
+      """
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {}}
+      """
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {},
+        "_piClaudeMarketplace": {
+          "serverChoices": {
+            "plugin_demo_srv_": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "fields": {
+                "openUi": true
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An update that restores a plugin server gives it back the user's choice (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"openUi": true}
+      """
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {}}
+      """
+    Given the user has run "/claude:plugin update demo@fixtures --scope project", which did not fail
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.2.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": ["v3"]}}}
+      """
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.1.0 | 1.2.0 |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v3"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "openUi": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A reinstall keeps the openUi and trace the user wrote for a plugin server (D-08-01)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"trace": false, "openUi": true}
+      """
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "openUi": true,
+            "trace": false,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An install neither applies nor removes a choice another plugin stored under the server's key (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written the mcp-adapter.json file of the project scope with this text:
+      """
+      {"_piClaudeMarketplace": {"serverChoices": {"plugin_demo_srv_": {"plugin": "other", "marketplace": "fixtures", "fields": {"approveTools": true}}}}}
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "_piClaudeMarketplace": {
+          "serverChoices": {
+            "plugin_demo_srv_": {
+              "plugin": "other",
+              "marketplace": "fixtures",
+              "fields": {
+                "approveTools": true
+              }
+            }
+          }
+        },
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An install neither applies nor removes a choice the same-named plugin of another marketplace stored under the server's key (D-08-02)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written the mcp-adapter.json file of the project scope with this text:
+      """
+      {"_piClaudeMarketplace": {"serverChoices": {"plugin_demo_srv_": {"plugin": "demo", "marketplace": "elsewhere", "fields": {"approveTools": false}}}}}
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "_piClaudeMarketplace": {
+          "serverChoices": {
+            "plugin_demo_srv_": {
+              "plugin": "demo",
+              "marketplace": "elsewhere",
+              "fields": {
+                "approveTools": false
+              }
+            }
+          }
+        },
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An uninstall removes a disable stub that the user's enable emptied while the plugin was installed (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true}
+      """
+    Given the user has written these fields on the mcp server "mine" in the mcp-adapter.json file of the project scope:
+      """
+      {"command": "mine"}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has enabled the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "mine": {
+            "command": "mine"
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A user-scope install after a project install and uninstall over the project's disable stub writes no kept override into the user entry (AFILE-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true, "env": {"STUB_TOKEN": "stub-secret"}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """

@@ -118,11 +118,11 @@ Feature: Marketplace autoupdate
       | name                    | source                             | autoupdate |
       | claude-plugins-official | anthropics/claude-plugins-official | false      |
 
-  Scenario: An enabled autoupdate shows in the marketplace list of a new session
+  Scenario: An enabled autoupdate shows in the marketplace list after a reload
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace list"
     Then the result has these fields:
       | kind                | cascade          |
@@ -136,11 +136,11 @@ Feature: Marketplace autoupdate
       | name  | scope   | details autoupdate | details last updated at |
       | tools | project | true               | {scenario time}         |
 
-  Scenario: An enabled autoupdate shows in the marketplace info of a new session
+  Scenario: An enabled autoupdate shows in the marketplace info after a reload
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
       | kind                    | marketplace-info          |
@@ -262,6 +262,7 @@ Feature: Marketplace autoupdate
   Scenario: Enabling autoupdate without --local on a marketplace added with --local fails as marketplace in local layer only
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin marketplace autoupdate tools --scope project"
     Then the result has these fields:
       | kind         | cascade                      |
@@ -275,10 +276,12 @@ Feature: Marketplace autoupdate
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.json" file of the project scope does not exist
+    Then the files of the project scope are unchanged
 
   Scenario: Disabling autoupdate with --local on a marketplace only the base layer declares fails as marketplace in base layer only
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin marketplace noautoupdate tools --scope project --local"
     Then the result has these fields:
       | kind         | cascade                      |
@@ -292,6 +295,7 @@ Feature: Marketplace autoupdate
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
     Then the "claude-plugins.local.json" file of the project scope does not exist
+    Then the files of the project scope are unchanged
 
   Scenario: Enabling autoupdate without a scope changes only the scopes whose base layer declares the marketplace
     Given the marketplace "tools" is published as a dir source
@@ -691,3 +695,66 @@ Feature: Marketplace autoupdate
     Then the result lists no marketplaces
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the "claude-plugins.json" file of the user scope does not exist
+
+  Scenario: Enabling autoupdate of a marketplace the scope records but no layer declares fails as not added and changes nothing (D-09)
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given a config in scope project and layer base, with this text:
+      """
+      { "schemaVersion": 1, "marketplaces": {} }
+      """
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin marketplace autoupdate tools --scope project"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | project                             |
+      | reasons      | marketplace not added               |
+    Then the files of the project scope are unchanged
+
+  Scenario: Enabling autoupdate for every marketplace gives no row to a marketplace the scope records but no layer declares (D-09)
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "extras" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "extras" is added to the project scope
+    Given a config in scope project and layer base, with these marketplaces:
+      | name   | source                     | autoupdate |
+      | extras | {home}/marketplaces/extras |            |
+    When the user runs "/claude:plugin marketplace autoupdate --scope project"
+    Then the result has these fields:
+      | kind                | cascade                |
+      | severity            | info                   |
+      | needs reload        | false                  |
+      | tally label         | Marketplace autoupdate |
+      | tally failures      | 0                      |
+      | tally warnings      | 0                      |
+      | tally success count | 1                      |
+    Then the result lists these marketplaces:
+      | name   | scope   | status             |
+      | extras | project | autoupdate enabled |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name   | source                     | autoupdate |
+      | extras | {home}/marketplaces/extras | true       |
+    Then the "claude-plugins.local.json" file of the project scope does not exist
+
+  Scenario: Enabling autoupdate without --local of a marketplace only the local layer declares fails as invalid manifest and changes nothing while the local config cannot be read (CFG-03)
+    Given the marketplace "tools" is published as a dir source
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given a config in scope project and layer local, with this text:
+      """
+      { malformed
+      """
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin marketplace autoupdate tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the files of the project scope are unchanged

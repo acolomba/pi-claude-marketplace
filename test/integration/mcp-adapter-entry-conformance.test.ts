@@ -1,13 +1,17 @@
 // test/integration/mcp-adapter-entry-conformance.test.ts
 //
-// D-08-02 / D-08-04: pi-mcp-adapter accepts two shapes this extension writes
-// to `mcp-adapter.json`. Its config loader reads the top-level
-// `_piClaudeMarketplace.serverChoices` store as no server, so a stored choice
-// never shows up as a server after uninstall (D-08-02). Its OAuth check turns
-// OAuth on for a remote entry beside clean non-Authorization headers, where
-// the extension writes `auth: "oauth"`, and its header resolver accepts those
-// headers; an entry whose header names an unset variable keeps OAuth off,
-// because the resolver refuses that header (D-08-04).
+// Peer conformance (ITSCOPE-01) against pi-mcp-adapter's own config loader and
+// OAuth check. D-08-02 / D-08-04: pi-mcp-adapter accepts two shapes this
+// extension writes to `mcp-adapter.json`. Its config loader reads the
+// top-level `_piClaudeMarketplace.serverChoices` store as no server, so a
+// stored choice never shows up as a server after uninstall (D-08-02). Its
+// OAuth check turns OAuth on for a remote entry beside clean
+// non-Authorization headers, where the extension writes `auth: "oauth"`, and
+// its header resolver accepts those headers; an entry whose header names an
+// unset variable keeps OAuth off, because the resolver refuses that header
+// (D-08-04). The entry beside a clean header is also in
+// `features/mcp-server/configuration.feature`; the adapter's own reading of
+// the stored choices and of the unset header is only here.
 //
 // pi-mcp-adapter is an optional peer. The test imports its compiled
 // `dist/config.js`, `dist/utils.js` and `dist/mcp-auth-fetch.js` in

@@ -47,6 +47,9 @@ test("executes a blocking hook through the portable process boundary", async (t)
   const pluginRoot = path.join(caseRoot, "plugin");
   const stdoutCapturePath = path.join(caseRoot, "stdout.txt");
   const stderrCapturePath = path.join(caseRoot, "stderr.txt");
+  // The child writes its environment here, not to its hook output, because
+  // the bridge caps a hook's context at 10,000 characters (D-PG5-14).
+  const environmentCapturePath = path.join(caseRoot, "environment.json");
   await Promise.all([mkdir(cwd, { recursive: true }), mkdir(pluginRoot, { recursive: true })]);
 
   const ownedEnvironmentKeys = [
@@ -133,12 +136,12 @@ test("executes a blocking hook through the portable process boundary", async (t)
   const literalArgument = "literal;$(echo unsafe)&%PORTABLE_HOOK_PROBE%";
   const childProgram = String.raw`
     const { readFileSync, writeFileSync, writeSync } = require("node:fs");
-    const [literalArgument, stdoutCapturePath, stderrCapturePath] = process.argv.slice(1);
+    const [literalArgument, stdoutCapturePath, stderrCapturePath, environmentCapturePath] =
+      process.argv.slice(1);
     const stdin = readFileSync(0, "utf8");
     const observation = {
       argv: process.argv.slice(1),
       cwd: process.cwd(),
-      environment: process.env,
       execPath: process.execPath,
       literalArgument,
       stdin,
@@ -152,6 +155,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     const stderr = "portable child stderr\n";
     writeFileSync(stdoutCapturePath, stdout);
     writeFileSync(stderrCapturePath, stderr);
+    writeFileSync(environmentCapturePath, JSON.stringify(process.env));
     writeSync(2, stderr);
     writeSync(1, stdout);
   `;
@@ -161,6 +165,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     literalArgument,
     stdoutCapturePath,
     stderrCapturePath,
+    environmentCapturePath,
   ];
   const entry = {
     scope: "user",
@@ -259,9 +264,8 @@ test("executes a blocking hook through the portable process boundary", async (t)
     CLAUDE_SESSION_ID: "portable-session",
   });
   const expectedObservation = {
-    argv: [literalArgument, stdoutCapturePath, stderrCapturePath],
+    argv: [literalArgument, stdoutCapturePath, stderrCapturePath, environmentCapturePath],
     cwd,
-    environment: expectedEnvironment,
     execPath: process.execPath,
     literalArgument,
     stdin: expectedStdin,
@@ -283,6 +287,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
   const hookOutcome = await dispatchHookExec(entry, event, extensionContext, undefined, runtime);
   const stdout = await readFile(stdoutCapturePath, "utf8");
   const stderr = await readFile(stderrCapturePath, "utf8");
+  const childEnvironment = JSON.parse(await readFile(environmentCapturePath, "utf8")) as unknown;
   const childObservation =
     hookOutcome.kind === "mutate" && hookOutcome.additionalContext !== undefined
       ? (JSON.parse(hookOutcome.additionalContext) as unknown)
@@ -297,6 +302,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
   assert.strictEqual(stdout, expectedStdout);
   assert.strictEqual(stderr, "portable child stderr\n");
   assert.deepStrictEqual(childObservation, expectedObservation);
+  assert.deepStrictEqual(childEnvironment, expectedEnvironment);
   const stderrDiagnostic = consoleErrorSpy.mock.calls
     .map(({ arguments: diagnosticArguments }) => diagnosticArguments.map(String).join(" "))
     .find((line) => line.includes("portable child stderr"));

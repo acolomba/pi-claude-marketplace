@@ -361,6 +361,45 @@ async function artifactTargets(
   return [...targets.values()];
 }
 
+/**
+ * NFR-3: gives the owner read, write, and search permission on `root` and on
+ * every directory under it, so a recursive removal can empty them.
+ * `snapshotPath` copies modes because `sameEntry` compares them, so a backup
+ * can hold a plugin's read-only directory. The walk uses `lstat` and never
+ * follows a symlink, and only `removeBackupRoot` runs it, on a backup that is
+ * about to be removed.
+ */
+async function grantBackupWrites(root: string): Promise<void> {
+  const stat = await lstat(root);
+  if (!stat.isDirectory()) {
+    return;
+  }
+
+  await chmod(root, (stat.mode & 0o7777) | 0o700);
+  const names = await readdir(root);
+  await Promise.all(names.map((name) => grantBackupWrites(path.join(root, name))));
+}
+
+/**
+ * NFR-3: removes the backup root, even one that holds a read-only directory.
+ * An absent root counts as removed, as a forced removal treats it. The
+ * snapshot failure path catches and logs any failure here, so it rethrows its
+ * own error. A rollback with restore failures keeps its backup for manual
+ * recovery and never calls this. A removal that fails after the permission
+ * walk also keeps the backup, and each directory the walk reached is then
+ * writable by its owner: `rollback` reports this as a `backup cleanup`
+ * failure, and `discard` and the snapshot failure path log it. A manual
+ * restore from such a backup gives writable directories, not the plugin's
+ * read-only modes.
+ */
+async function removeBackupRoot(ops: PruneRestoreOps, backupRoot: string): Promise<void> {
+  if (await pathExists(backupRoot)) {
+    await grantBackupWrites(backupRoot);
+  }
+
+  await ops.removeBackup(backupRoot, { recursive: true, force: true });
+}
+
 /** Captures only paths the selected members' unstage bridges may change. */
 export async function preparePruneRollback(
   locations: ScopedLocations,
@@ -437,7 +476,14 @@ export async function preparePruneRollback(
       `${JSON.stringify({ schemaVersion: 1, entries }, null, 2)}\n`,
     );
   } catch (error: unknown) {
-    await ops.removeBackup(backupRoot, { recursive: true, force: true });
+    try {
+      await removeBackupRoot(ops, backupRoot);
+    } catch (cleanupError: unknown) {
+      // The snapshot error is the one the user acts on; a backup cleanup
+      // leak is diagnostic only.
+      hookDebugLog(`prune: backup cleanup failed: ${errorMessage(cleanupError)}`);
+    }
+
     throw error;
   }
 
@@ -486,7 +532,7 @@ export async function preparePruneRollback(
 
       if (failures.length === 0) {
         try {
-          await ops.removeBackup(backupRoot, { recursive: true, force: true });
+          await removeBackupRoot(ops, backupRoot);
         } catch (error: unknown) {
           failures.push({ phase: "backup cleanup", cause: asError(error) });
         }
@@ -496,7 +542,7 @@ export async function preparePruneRollback(
     },
     discard: async (): Promise<void> => {
       try {
-        await ops.removeBackup(backupRoot, { recursive: true, force: true });
+        await removeBackupRoot(ops, backupRoot);
       } catch (error: unknown) {
         // Persistence has already committed; a backup cleanup leak is diagnostic only.
         hookDebugLog(`prune: backup cleanup failed: ${errorMessage(error)}`);

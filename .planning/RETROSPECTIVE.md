@@ -2,6 +2,49 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: integration-rescope -- Integration Test Rescope
+
+**Completed:** 2026-11-23 on `claude/stoic-shannon-la9q7o` (pushed, no PR or npm release yet; version stays 0.23.0)
+**Phases:** 9 (one inserted) | **Plans:** 26 | **Tasks:** 43 | **Requirements:** 22/22 | **Audit:** `tech_debt`, no blockers (integration 4/4, flows 3/3); seven phase reports closed with a stale-verification override
+
+### What Was Built
+
+- The user-visible cases of the integration suite now run as cucumber scenarios under both MCP profiles: plugin and marketplace layers, cross-scope installs, `prune`, MCP install refusals, the legacy `mcp.json` move, adapter overrides, hooks across scopes, Device Flow sign-in in print mode, and path-source dependencies at a marketplace tag.
+- Each moved or deleted integration case first failed its replacement under a reverted deliberate break, checked by a red-proof checker that rejects setup-only failures and timeouts.
+- `test/integration/` is down to 28 files and 236 cases: peer conformance, races, and internal cases, each named in its header. The charter is the same in two skills and `TESTING.md`.
+- A parity fix that the reload scenario found (inserted Phase 6.1): a SessionStart context goes into the session at once, a resume or fork sends only new values, and a compaction's context reaches the next model call, as Claude Code 2.1.330 does.
+
+### What Worked
+
+- **Asking the user before keeping a divergence.** The Phase 6 verifier found a case that pinned behavior unlike upstream; researching upstream first, then asking, turned it into a fix instead of a recorded difference.
+- **Frozen planner inputs with checksums** (`plan-0N/inputs/SHA256SUMS`) let executors apply exact edits and prove nothing else changed.
+- **A separate gate checkout** let the full `npm run check` run while other agents edited the main tree.
+
+### What Was Inefficient
+
+- **The Phase 6.1 review loop ran four fix passes:** a pass 2 fix for the compaction steer caused a regression that pass 3 had to find and replace with a send-time tracker.
+- **Harness races** (ESRCH zombies in two hook helpers, a half-written log line) failed gates in teardown until Phases 5 and 6 fixed them.
+- **Plan counts went stale:** 08-05 hard-coded counts that the phase's own review fixes changed, so the plan stopped and needed a decision.
+- **Seven verifications went stale** because later phases edited shared harness files and docs that earlier reports covered.
+
+### Patterns Established
+
+- **A deleted test needs a red proof:** a reverted break must fail the covering scenario or unit case in a `When` or `Then` first.
+- **Where a test goes** is written as a charter: user-visible behavior goes to cucumber, a single module goes to its unit pair, and only conformance, races, and internal cases stay in integration.
+- **Upstream evidence files** (`06.1-UPSTREAM-EVIDENCE*.md`) back a parity fix with the exact upstream version read.
+
+### Key Lessons
+
+1. Count-based verify commands should derive their expected values from the tree, or run after the review fixes, not before.
+2. A scenario that pins behavior unlike upstream is a question for the user, not a test to keep.
+3. A fix to timing-sensitive agent-loop code needs its regression scenarios before the review loop starts, not during it.
+
+### Cost Observations
+
+- Model mix: Opus orchestrator and executors; exact percentages were not recorded.
+- Sessions: one cloud session, with continuations after context compaction.
+- Timeline: 2026-11-20 -> 2026-11-23 (376 commits).
+
 ## Milestone: parity-gaps -- Claude Code Parity Gaps and Defects
 
 **Completed:** 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm release; version stays 0.23.0)
@@ -1273,6 +1316,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | component-features | 8 | A harness phase, then parallel component sessions with file ownership; a user-reviewed dubious-choices log; upstream gaps split into bugs (patches) and design differences (accepted); a reopen and a retroactive phase for the locality redesign |
 | mcp-builtin | 6 | A frozen foundation phase, then four parallel child sessions with parent lines; two cucumber profiles for two MCP implementations; read-time verdicts from neutral records; every phase re-verified on the combined tree at the close |
 | parity-gaps | 11 | A PRD as the requirement source with its open decisions answered per phase; two child branches for disjoint code areas; a maintainer decision review before the audit; the cucumber suite in place of the manual runtime UAT |
+| integration-rescope | 9 | Integration cases moved to cucumber only after a reverted break fails the replacement; a written test charter; a parity gap found by a moved case fixed in an inserted phase with upstream evidence |
 
 ### Cumulative Quality
 
@@ -1294,6 +1338,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | component-features | 1,539 scenarios / 16,565 steps | Every bridged component kind checked against a real Pi with a scripted model; 327 direct-coverage records; 62/62 requirements and all 8 phase verifications current on the closeout tree |
 | mcp-builtin | 1,603 adapter + 133 builtin scenarios | Every MCP scenario under both implementations; 31/31 requirements; all 6 phase verifications current on the closeout tree (Phase 2 `human_needed`) |
 | parity-gaps | 2,100 adapter + 204 builtin scenarios | 376 direct-coverage records; 42/42 requirements; all 11 phase verifications current on the closeout tree (Phase 5 `human_needed` on A9) |
+| integration-rescope | 2,285 adapter + 260 builtin scenarios, 236 int | 376 direct-coverage records; 22/22 requirements; `test/integration/` from 45 files to 28; seven phase verifications stale-overridden at the close |
 
 ### Top Lessons (Verified Across Milestones)
 

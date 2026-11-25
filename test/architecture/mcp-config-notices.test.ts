@@ -168,7 +168,7 @@ type NotifyArguments = [message: string, severity?: string];
 
 function emit(t: TestContext, notice: McpConfigNotice): readonly NotifyArguments[] {
   const notify = t.mock.fn<(...args: NotifyArguments) => void>();
-  const ctx: NotificationContext = { mode: "tui", ui: { notify } };
+  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify } };
   notifyMcpConfigNotices(ctx, runWithNothingLoaded(), [notice]);
   return notify.mock.calls.map((call) => call.arguments);
 }
@@ -209,6 +209,7 @@ for (const { state, notice } of CATALOG_NOTICE_ROWS) {
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },

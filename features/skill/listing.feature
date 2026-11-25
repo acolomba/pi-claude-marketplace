@@ -1,9 +1,9 @@
 Feature: Skill listing
 
-  A new session lists each bridged skill under its generated name with the
+  A reload lists each bridged skill under its generated name with the
   description Claude Code gives it. A local marketplace stands in for a published one.
 
-  Scenario: A new session lists a bridged skill under its generated name with its description
+  Scenario: A reload lists a bridged skill under its generated name with its description
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -14,7 +14,7 @@ Feature: Skill listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description              |
       | /skill:demo-greet | Greets a person by name. |
@@ -36,7 +36,7 @@ Feature: Skill listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description              |
       | /skill:demo-brief | First line of the brief. |
@@ -57,7 +57,7 @@ Feature: Skill listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-<dir> | <listed description>   |
@@ -86,7 +86,7 @@ Feature: Skill listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description                   |
       | /skill:demo-greet | Greets. Use it when greeting. |

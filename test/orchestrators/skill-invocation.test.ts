@@ -134,6 +134,7 @@ function request(overrides: Partial<SkillInvocationRequest> = {}): SkillInvocati
     projectTrusted: true,
     sessionId: "session-1",
     thinkingLevel: "medium",
+    reloadCommand: "/reload",
     ...overrides,
   };
 }
@@ -423,6 +424,40 @@ describe("invokeBridgedSkill", () => {
       message: `Cannot read the skill /demo:greet: ${parseFailure}. Run /reload to load the installed skills again.`,
     });
   });
+
+  for (const { reloadCommand, untrusted, unreadable } of [
+    {
+      reloadCommand: "/claude:plugin reload",
+      untrusted: "Trust the project folder, then run /claude:plugin reload to use it.",
+      unreadable: " Run /claude:plugin reload to load the installed skills again.",
+    },
+    { reloadCommand: undefined, untrusted: "Trust the project folder to use it.", unreadable: "" },
+  ] as const) {
+    test(`RELOADCMD-D1: an untrusted project skill names ${String(reloadCommand)} to reload`, async () => {
+      // act
+      const outcome = await invokeBridgedSkill(
+        request({ projectTrusted: false, typed: "/fancy", reloadCommand }),
+        dependencies({}),
+      );
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        kind: "abort",
+        message: `The skill /fancy belongs to the project /work, which Pi does not trust. ${untrusted}`,
+      });
+    });
+
+    test(`RELOADCMD-D1: an unreadable skill names ${String(reloadCommand)} to reload`, async () => {
+      // act
+      const outcome = await invokeBridgedSkill(request({ reloadCommand }), dependencies({}));
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        kind: "abort",
+        message: `Cannot read the skill /skill:demo-greet: unexpected read of ${PROJECT_SKILL}.${unreadable}`,
+      });
+    });
+  }
 
   test("D-CF2-06: reads the staged skill file from disk with the production dependencies", async (t) => {
     // arrange

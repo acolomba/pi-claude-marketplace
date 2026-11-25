@@ -26,7 +26,7 @@ Feature: Plugin git source
       | GET    | /acme/<repository>.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/<repository>.git/git-upload-pack                   | 200    |
       | POST   | /acme/<repository>.git/git-upload-pack                   | 200    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command               | description                |
       | /skill:<plugin>-skill | A skill of <plugin> 1.0.0. |
@@ -163,7 +163,7 @@ Feature: Plugin git source
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
     Examples:
@@ -196,7 +196,7 @@ Feature: Plugin git source
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 401    |
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario Outline: An install fails on the dependency as <reason> when the git host <refusal> for the dependency and installs nothing
@@ -297,14 +297,12 @@ Feature: Plugin git source
       | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial |
       | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
     Then the project scope has no installed plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id       | name | status       | reasons | scope   |
-      | gits             | project           | ghp@gits | ghp  | will install |         | project |
       | gits             | project           | ghp@gits | ghp  | will install |         | project |
     Then the session offers no skills
 
@@ -338,14 +336,12 @@ Feature: Plugin git source
       | marketplace name | marketplace scope | id       | name | status | reasons           | scope   | leaks | rollback partial | cause chain                                                                                            | cause truncated |
       | gits             | project           | app@gits | app  | failed | dependency failed | project |       |                  | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |
     Then the project scope has no installed plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id       | name | status       | reasons | scope   |
-      | gits             | project           | app@gits | app  | will install |         | project |
       | gits             | project           | app@gits | app  | will install |         | project |
     Then the session offers no skills
 
@@ -491,7 +487,7 @@ Feature: Plugin git source
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:ghp-skill | A skill of ghp 2.0.0. |

@@ -36,7 +36,10 @@ import type {
 import type { UserPromptExpansionEvent } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
-import type { BucketAEvent } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import type {
+  BucketAEvent,
+  SessionStartSource,
+} from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
@@ -5741,13 +5744,22 @@ function hookDebugLineWritten(t: TestContext, line: string): Promise<void> {
   });
 }
 
+// A SessionStart run of the hook: the source of its event and the session
+// that its answer is checked against (HOOKASYNCRESUME-01).
+interface SessionStartAnswerRun {
+  readonly source: SessionStartSource;
+  readonly prepare: (context: ExtensionContext) => ExtensionContext;
+}
+
 // Runs a plain async hook whose answer is `stdout` to its exit, with the PID
-// table writes kept off the disk.
+// table writes kept off the disk. With `sessionStart`, the hook is a
+// SessionStart hook of that run; without it, a UserPromptSubmit hook.
 async function endPlainAnswer(
   t: TestContext,
   stdout: string,
   pi: ExtensionAPI,
   saveHookOutput: NonNullable<SpawnDeps["saveHookOutput"]>,
+  sessionStart?: SessionStartAnswerRun,
 ): Promise<{ readonly runtime: HooksRuntime; readonly dataRoot: string }> {
   const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-cap-"));
@@ -5758,14 +5770,17 @@ async function endPlainAnswer(
     destroyChild(child);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   });
+  const context = createContext(root, "session-cap", true).context;
   await spawnAndRegister(
     runtime,
     createEntry(root, {
-      claudeEvent: "UserPromptSubmit",
+      claudeEvent: sessionStart === undefined ? "UserPromptSubmit" : "SessionStart",
       handlerDecl: { type: "command", command: "/opt/hooks/note", async: true },
     }),
-    { type: "input", text: "prompt", source: "interactive" },
-    createContext(root, "session-cap", true).context,
+    sessionStart === undefined
+      ? { type: "input", text: "prompt", source: "interactive" }
+      : { source: sessionStart.source },
+    sessionStart === undefined ? context : sessionStart.prepare(context),
     pi,
     locations,
     {
@@ -5797,6 +5812,233 @@ function answerMessage(content: string): { readonly message: unknown; readonly o
 function answerOf(systemMessage: string, additionalContext: string): string {
   return JSON.stringify({ systemMessage, hookSpecificOutput: { additionalContext } });
 }
+
+// The details of each message of the SessionStart answer `values` of the
+// hook that `endPlainAnswer` runs (HOOKASYNCRESUME-01).
+function sessionStartAnswerDetails(values: readonly string[]): Record<string, unknown> {
+  return {
+    pluginId: "plugin-lifecycle",
+    marketplace: "catalog-lifecycle",
+    command: "/opt/hooks/note",
+    dispatchId: "dispatch-cap",
+    event: "SessionStart",
+    values,
+  };
+}
+
+function sessionStartAnswerMessage(
+  content: string,
+  values: readonly string[],
+): { readonly message: unknown; readonly options: unknown } {
+  return {
+    message: {
+      customType: "claude-hook-async-response",
+      content,
+      display: false,
+      details: sessionStartAnswerDetails(values),
+    },
+    options: { deliverAs: "nextTurn" },
+  };
+}
+
+// A SessionStart run of `source` whose session holds what `append` adds.
+// Assigning keeps the context's throwing getters, which a spread would read.
+function heldRun(
+  source: SessionStartSource,
+  append: (sessionManager: SessionManager) => void,
+): SessionStartAnswerRun {
+  return {
+    source,
+    prepare: (context) => {
+      const sessionManager = SessionManager.inMemory("/work", { id: "session-cap" });
+      append(sessionManager);
+      return Object.assign(context, { sessionManager });
+    },
+  };
+}
+
+for (const source of ["startup", "resume"] as const) {
+  test(`keeps the hook and every text of a ${source} SessionStart answer in its details (HOOKASYNCRESUME-01)`, async (t) => {
+    // arrange
+    const pi = createCountingPi();
+    const saver = createAnswerSaver();
+
+    // act
+    await endPlainAnswer(
+      t,
+      PLAIN_ANSWER,
+      pi.pi,
+      saver.saveHookOutput,
+      heldRun(source, () => undefined),
+    );
+    await pi.sent(2);
+
+    // assert
+    assert.deepStrictEqual(pi.messages, [
+      sessionStartAnswerMessage("remember", ["remember", "context"]),
+      sessionStartAnswerMessage("context", ["remember", "context"]),
+    ]);
+  });
+}
+
+test("keeps the text of a SessionStart answer over the limit whole in its details (HOOKASYNCRESUME-01)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+
+  // act
+  await endPlainAnswer(
+    t,
+    JSON.stringify({ hookSpecificOutput: { additionalContext: BIG_TEXT } }),
+    pi.pi,
+    saver.saveHookOutput,
+    heldRun("resume", () => undefined),
+  );
+  await pi.sent(1);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [
+    sessionStartAnswerMessage(savedBigText("/saved/additionalContext.txt"), [BIG_TEXT]),
+  ]);
+});
+
+test("does not add or save a SessionStart answer that the hook gave before (HOOKASYNCRESUME-01)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const skipped = hookDebugLineWritten(
+    t,
+    "async-hook: answer not added, the conversation holds its text (plugin-lifecycle/SessionStart)",
+  );
+
+  // act
+  await endPlainAnswer(
+    t,
+    JSON.stringify({ hookSpecificOutput: { additionalContext: BIG_TEXT } }),
+    pi.pi,
+    saver.saveHookOutput,
+    heldRun("resume", (sessionManager) => {
+      sessionManager.appendCustomMessageEntry(
+        "claude-hook-async-response",
+        savedBigText("/saved/earlier.txt"),
+        false,
+        { ...sessionStartAnswerDetails([BIG_TEXT]), dispatchId: "dispatch-earlier" },
+      );
+    }),
+  );
+  await skipped;
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, saves: saver.saves },
+    { messages: [], saves: [] },
+  );
+});
+
+test("does not add a SessionStart answer that a synchronous context holds (HOOKASYNCRESUME-01)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const skipped = hookDebugLineWritten(
+    t,
+    "async-hook: answer not added, the conversation holds its text (plugin-lifecycle/SessionStart)",
+  );
+
+  // act
+  await endPlainAnswer(
+    t,
+    PLAIN_ANSWER,
+    pi.pi,
+    saver.saveHookOutput,
+    heldRun("compact", (sessionManager) => {
+      sessionManager.appendCustomMessageEntry(
+        "claude-hook-additional-context",
+        [{ type: "text", text: "SessionStart hook additional context: remember\ncontext" }],
+        false,
+        { event: "SessionStart", values: ["remember", "context"] },
+      );
+    }),
+  );
+  await skipped;
+
+  // assert
+  assert.deepStrictEqual(pi.messages, []);
+});
+
+for (const { kind, details } of [
+  { kind: "a changed text", details: sessionStartAnswerDetails(["remember", "old context"]) },
+  {
+    kind: "another command",
+    details: { ...sessionStartAnswerDetails(["remember", "context"]), command: "/opt/hooks/other" },
+  },
+  {
+    kind: "another marketplace",
+    details: {
+      ...sessionStartAnswerDetails(["remember", "context"]),
+      marketplace: "catalog-mirror",
+    },
+  },
+]) {
+  test(`adds a SessionStart answer when the earlier one has ${kind} (HOOKASYNCRESUME-01)`, async (t) => {
+    // arrange
+    const pi = createCountingPi();
+    const saver = createAnswerSaver();
+
+    // act
+    await endPlainAnswer(
+      t,
+      PLAIN_ANSWER,
+      pi.pi,
+      saver.saveHookOutput,
+      heldRun("resume", (sessionManager) => {
+        sessionManager.appendCustomMessageEntry(
+          "claude-hook-async-response",
+          "context",
+          false,
+          details,
+        );
+      }),
+    );
+    await pi.sent(2);
+
+    // assert
+    assert.deepStrictEqual(pi.messages, [
+      sessionStartAnswerMessage("remember", ["remember", "context"]),
+      sessionStartAnswerMessage("context", ["remember", "context"]),
+    ]);
+  });
+}
+
+test("adds a SessionStart answer and debug-logs a session it cannot read (NFR-2, HOOKASYNCRESUME-01)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const logged = hookDebugLineWritten(
+    t,
+    "async-hook: session read failed (plugin-lifecycle): session closed",
+  );
+
+  // act
+  await endPlainAnswer(t, PLAIN_ANSWER, pi.pi, saver.saveHookOutput, {
+    source: "resume",
+    prepare: (context) =>
+      Object.assign(context, {
+        sessionManager: Object.assign(context.sessionManager, {
+          buildSessionProjection(): never {
+            throw new Error("session closed");
+          },
+        }),
+      }),
+  });
+  await logged;
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [
+    sessionStartAnswerMessage("remember", ["remember", "context"]),
+    sessionStartAnswerMessage("context", ["remember", "context"]),
+  ]);
+});
 
 test("sends a plain async answer under the limit as it is and saves nothing (D-PG5-14)", async (t) => {
   // arrange

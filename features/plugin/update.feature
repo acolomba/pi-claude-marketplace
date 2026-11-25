@@ -73,12 +73,12 @@ Feature: Plugin update
       | marketplace name | marketplace scope | marketplace status | id     | name   | status | reasons     | cause chain                                                                                                                                                                                                                                                      | cause truncated | leaks | rollback partial | scope   |
       | broken           | project           | failed             | broken | broken | failed | unparseable | Failed to update marketplace "broken"., marketplace.json is not valid JSON: SyntaxError: Expected ',' or '}' after property value in JSON at position 57 (line 1 column 58), Expected ',' or '}' after property value in JSON at position 57 (line 1 column 58) | false           |       |                  | project |
 
-  Scenario: A new session offers the skills of the updated version
+  Scenario: A reload offers the skills of the updated version
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
     Given the user has run "/claude:plugin update demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.1.0. |
@@ -172,18 +172,79 @@ Feature: Plugin update
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
       | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
-      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Updating a plugin fails as an invalid manifest and changes nothing while the local config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the files of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { not json
+      """
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Updating a plugin with --local fails as an invalid manifest and changes nothing while the base config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project --local"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.1.0   |
+    Given a config in scope project and layer base, with this text:
+      """
+      { not json
+      """
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin update pp@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | pp@fixtures | pp   | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+    Then the files of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id          |
+      | pp@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+      | skill | pp-skill   |
 
   Scenario: Updating every plugin with --local updates only the plugins the local layer declares
     Given the marketplace "fixtures" offers these plugins:
@@ -211,14 +272,12 @@ Feature: Plugin update
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
-      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
       | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
     Then the session offers these skills:
       | command           | description            |
@@ -287,14 +346,12 @@ Feature: Plugin update
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id                | name     | status | reasons    | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
       | (update)         | project           | (update)@(update) | (update) | failed | unreadable | project | cannot read the dependencies of app@tools: its marketplace manifest is invalid | false           |       |                  |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                    | cause truncated |
-      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
       | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command           | description            |
@@ -439,14 +496,12 @@ Feature: Plugin update
       | app@tools     | 1.0.0   | true    |
       | demo@fixtures | 1.0.0   | true    |
       | lib@tools     | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | summary                             | tally label       | tally failures | tally warnings |
       | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
-      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
-      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
       | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
     Then the session offers these skills:
       | command           | description            |
@@ -498,14 +553,12 @@ Feature: Plugin update
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | summary                             | tally label       | tally failures | tally warnings |
       | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
-      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status               | reasons               | hint                   | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |
       | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |
     Then the session offers these skills:
       | command           | description            |
@@ -527,7 +580,7 @@ Feature: Plugin update
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.1.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.1.0. |

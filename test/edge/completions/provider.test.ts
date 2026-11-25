@@ -267,10 +267,36 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "disable", value: "disable " },
     { label: "import", value: "import " },
     { label: "browse", value: "browse " },
+    { label: "reload", value: "reload " },
     { label: "marketplace", value: "marketplace " },
     { label: "market", value: "market " },
     { label: "help", value: "help " },
   ]);
+});
+
+test("TC-1 offers reload beside reinstall (RELOADCMD-D1)", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "top-level-reload");
+
+  // act
+  const suggestions = await getArgumentCompletions("re", resolver, completionCache);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "reinstall", value: "reinstall " },
+    { label: "reload", value: "reload " },
+  ]);
+});
+
+test("offers no flag after reload (RELOADCMD-D1)", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "reload-flags");
+
+  // act
+  const suggestions = await getArgumentCompletions("reload -", resolver, completionCache);
+
+  // assert
+  assert.deepStrictEqual(suggestions, []);
 });
 
 for (const { prefix, expected } of [
