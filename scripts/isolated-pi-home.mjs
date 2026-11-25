@@ -7,15 +7,29 @@
  * and writes that root and never the developer's `~/.pi`. The per-case helpers
  * in `hermetic-environment.ts` restore to these values.
  *
+ * SG-SSH-02: it also writes `<root>/bin/ssh`, a script that refuses every
+ * launch the way GitHub refuses an unknown key, and puts `<root>/bin` first on
+ * `PATH`. So a test that reaches the product's ssh probe without a fake gets
+ * `not-configured`, and no test runs the machine's own ssh against
+ * github.com. A case that needs another ssh puts its own first on the PATH
+ * of the processes it starts.
+ *
  * The test runner's process makes the root and removes it when it exits. Each
  * test file's process, and a child that a case forks, inherits `--import` too.
  * There the module finds `PI_CM_TEST_HOME` and changes nothing, so the child
- * keeps the runner's root, or the `HOME` that its parent chose for it.
+ * keeps the runner's root, or the `HOME` that its parent chose for it, and the
+ * `PATH` it was given.
  */
 
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+
+// The answer GitHub's ssh gives a key it does not know.
+const REFUSING_SSH = `#!/bin/sh
+echo 'git@github.com: Permission denied (publickey).' >&2
+exit 255
+`;
 
 if (process.env.PI_CM_TEST_HOME === undefined) {
   // Resolved so the paths match what the filesystem and child processes
@@ -26,6 +40,10 @@ if (process.env.PI_CM_TEST_HOME === undefined) {
   const agentDir = path.join(home, ".pi", "agent");
 
   mkdirSync(agentDir, { recursive: true });
+  const bin = path.join(root, "bin");
+  mkdirSync(bin);
+  writeFileSync(path.join(bin, "ssh"), REFUSING_SSH, { mode: 0o755 });
+  process.env.PATH = [bin, process.env.PATH].filter(Boolean).join(path.delimiter);
   process.env.PI_CM_TEST_HOME = home;
   process.env.HOME = home;
   process.env.PI_CODING_AGENT_DIR = agentDir;

@@ -77,7 +77,10 @@ import type {
   AddMarketplaceOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
-import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  GitHubSshOps,
+  GitOps,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
   ScopeDependencyInstallFn,
   ScopeDependencyInstallResult,
@@ -217,7 +220,14 @@ const ALLOWED_MARKETPLACE_REMOTES = [
   // D-2-02: stands in for a host that serves ONLY its `.git`-suffixed path --
   // admitted here suffixed so a verbatim (non-github) request is refused.
   "https://gitlab.example.com/team/git-only-mp.git",
+  // SG-SSH-02: the SSH clone URL of an owner/repo source.
+  "git@github.com:acme/mp.git",
 ] as const;
+
+/** SG-SSH-02: the user's ssh, answering the probe with `answer`. */
+function userSsh(answer: Awaited<ReturnType<GitHubSshOps["probe"]>>): GitHubSshOps {
+  return { probe: () => Promise.resolve(answer) };
+}
 
 function createGitOps(initial: GitOpsAdapterOptions = {}) {
   const git = createGitOpsFake({
@@ -536,6 +546,126 @@ test("MA-5: github source clones, validates, renames, mutates state, emits V2 su
     assert.equal(note.severity, undefined);
     // SNM-33 / D-22-01: empty-plugins add never triggers the reload-hint.
     assert.equal(note.message.includes("/reload to pick up changes"), false);
+  });
+});
+
+test("SG-SSH-02: clones an owner/repo source over ssh without the auth bundle when the user's ssh authenticates to GitHub", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run } = makeCtx();
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp#main",
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      state.cloneCalls.map(({ url, ref, singleBranch, auth }) => ({
+        url,
+        ref,
+        singleBranch,
+        auth,
+      })),
+      [{ url: "git@github.com:acme/mp.git", ref: "main", singleBranch: true, auth: undefined }],
+    );
+  });
+});
+
+for (const answer of ["not-configured", "unknown"] as const) {
+  test(`SG-SSH-02: clones an owner/repo source over https with the auth bundle when the ssh probe answers ${answer}`, async () => {
+    await withTmpScope(async ({ cwd }) => {
+      // arrange
+      const { ctx, run } = makeCtx();
+      const { gitOps, state } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+
+      // act
+      await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: "acme/mp",
+        gitOps,
+        gitHubSsh: userSsh(answer),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        state.cloneCalls.map(({ url, auth }) => ({ url, authHost: auth?.host })),
+        [{ url: "https://github.com/acme/mp.git", authHost: "github.com" }],
+      );
+    });
+  });
+}
+
+test("SG-SSH-02: clones a github URL source as written and runs no ssh probe", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run } = makeCtx();
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const gitHubSsh = mock<GitHubSshOps>({ exactParams: true, name: "user's ssh" });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://github.com/acme/mp",
+      gitOps,
+      gitHubSsh,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      state.cloneCalls.map(({ url }) => url),
+      ["https://github.com/acme/mp.git"],
+    );
+    verify(gitHubSsh);
+  });
+});
+
+test("D-SG-21: clones an owner/repo source once over https and runs no ssh probe while the GitHub base override is set", async (t) => {
+  setGitHubBaseUrl(t, "https://mirror.example/git");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run } = makeCtx();
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const gitHubSsh = mock<GitHubSshOps>({ exactParams: true, name: "user's ssh" });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps,
+      gitHubSsh,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      state.cloneCalls.map(({ url }) => url),
+      ["https://github.com/acme/mp.git"],
+    );
+    verify(gitHubSsh);
   });
 });
 
@@ -6953,6 +7083,41 @@ test("D-PL5-20: addMarketplaceToState returns the download directory of a hosted
     );
   });
 });
+
+for (const { answer, clone } of [
+  { answer: "configured", clone: { note: "via-ssh", url: "git@github.com:acme/mp.git" } },
+  {
+    answer: "not-configured",
+    clone: { note: "ssh-not-configured", url: "https://github.com/acme/mp.git" },
+  },
+] as const) {
+  test(`D-SG-22: addMarketplaceToState returns the clone note of an owner/repo source whose ssh probe answers ${answer}`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run } = makeCtx(0);
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      const snapshot: ExtensionState = { schemaVersion: 3, marketplaces: {} };
+
+      // act
+      const added = await addMarketplaceToState({
+        state: snapshot,
+        locations,
+        source: parseAddableSource("acme/mp"),
+        cwd,
+        ctx,
+        run,
+        removalOps: createRemovalOps(),
+        gitOps,
+        gitHubSsh: userSsh(answer),
+      });
+
+      // assert
+      assert.deepStrictEqual(added.cloneNotes?.noteFor("acme/mp"), clone);
+    });
+  });
+}
 
 /** The entry names of `dir`; an absent directory holds none. */
 async function entriesOf(dir: string): Promise<readonly string[]> {

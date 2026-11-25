@@ -18,7 +18,8 @@
  * loaded, or a request sent before it loaded. An https request for
  * `github.com` goes to the Device Flow stand-in when its path starts with
  * `/login/`, and to the run's git host
- * otherwise, with its path kept. Its host becomes `127.0.0.1`, so TLS checks
+ * otherwise, with its path kept. A config that names no sign-in stand-in
+ * refuses a sign-in request. Its host becomes `127.0.0.1`, so TLS checks
  * the git host's certificate, which both stand-ins serve. A request to a
  * loopback host passes unchanged. Any other request through the replaced
  * functions is refused with an error that names its host, and so is every non-loopback request when the config
@@ -93,8 +94,7 @@ function isRedirectConfig(value: unknown): value is RedirectConfig {
     value !== null &&
     "gitHost" in value &&
     typeof value.gitHost === "string" &&
-    "signIn" in value &&
-    typeof value.signIn === "string"
+    (!("signIn" in value) || typeof value.signIn === "string")
   );
 }
 

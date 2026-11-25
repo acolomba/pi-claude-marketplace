@@ -6,15 +6,19 @@
  * coverage script, must load `scripts/isolated-pi-home.mjs` with
  * `--import`. Every cucumber profile must load
  * `features/support/isolated-pi-home.ts`. This test runs under such a script
- * itself, so its last case checks that the import took effect.
+ * itself, so its last cases check that the import took effect: the Pi home,
+ * and the refusing ssh first on PATH, so no test runs the machine's own ssh
+ * against github.com (SG-SSH-02, T-04-15).
  */
 
 import assert from "node:assert/strict";
-import { existsSync, realpathSync } from "node:fs";
+import { execFile } from "node:child_process";
+import { accessSync, constants, existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import { PACKAGE_JSON_REL } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
@@ -128,4 +132,51 @@ test("this test process runs with a Pi home under the temporary directory", () =
   // assert
   assert.ok(home.startsWith(`${temporary}${path.sep}`), `HOME ${home} is outside ${temporary}`);
   assert.strictEqual(agentDir, path.join(home, ".pi", "agent"));
+});
+
+// The first executable `ssh` in the absolute PATH entries, as the product looks it up.
+function firstSshOnPath(): string | undefined {
+  const directories = (process.env.PATH ?? "").split(path.delimiter).filter(path.isAbsolute);
+  return directories
+    .map((directory) => path.join(directory, "ssh"))
+    .find((candidate) => {
+      try {
+        accessSync(candidate, constants.X_OK);
+        return true;
+      } catch {
+        return false;
+      }
+    });
+}
+
+// The exit code and stderr that `execFile` puts on the error of a run that failed.
+function failedRun(error: unknown): { readonly exitCode: unknown; readonly stderr: unknown } {
+  if (!(error instanceof Error)) {
+    return { exitCode: error, stderr: undefined };
+  }
+
+  const exitCode: unknown = Reflect.get(error, "code");
+  const stderr: unknown = Reflect.get(error, "stderr");
+  return { exitCode, stderr };
+}
+
+test("this test process finds the run's refusing ssh first on PATH", async () => {
+  // arrange
+  const refusingSsh = path.join(path.dirname(os.homedir()), "bin", "ssh");
+
+  // act
+  const found = firstSshOnPath();
+  // The run's own stub runs, never whatever ssh is found, so a broken PATH
+  // cannot reach github.com from this case either.
+  const refusal = await promisify(execFile)(refusingSsh, ["-T", "git@github.com"]).then(
+    () => ({ exitCode: 0, stderr: "" }),
+    failedRun,
+  );
+
+  // assert
+  assert.strictEqual(found, refusingSsh);
+  assert.deepStrictEqual(refusal, {
+    exitCode: 255,
+    stderr: "git@github.com: Permission denied (publickey).\n",
+  });
 });

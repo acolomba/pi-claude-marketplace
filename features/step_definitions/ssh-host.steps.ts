@@ -21,6 +21,30 @@ Given(
   },
 );
 
+// SG-SSH-02: the probe's three answers that are not an authentication: GitHub
+// refuses every key, the host key is not known, and no answer comes before
+// the probe's time limit.
+Given(
+  "the user's ssh is denied for {string}",
+  async function (this: ScenarioWorld, host: string): Promise<void> {
+    await this.sshHost.register(host, { probe: { kind: "denied" } });
+  },
+);
+
+Given(
+  "the user's ssh does not know the host key for {string}",
+  async function (this: ScenarioWorld, host: string): Promise<void> {
+    await this.sshHost.register(host, { probe: { kind: "host-key" } });
+  },
+);
+
+Given(
+  "the user's ssh never answers for {string}",
+  async function (this: ScenarioWorld, host: string): Promise<void> {
+    await this.sshHost.register(host, { probe: { kind: "hold" } });
+  },
+);
+
 Then(
   "the user's ssh receives these launches:",
   async function (this: ScenarioWorld, table: DataTable): Promise<void> {

@@ -35,6 +35,7 @@ import {
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { upstreamFlagIsTrue } from "../../shared/upstream-flag.ts";
 
 import type { GitHubSource, UrlSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -98,15 +99,12 @@ export const DEFAULT_RENAME_OPS: RenameOps = {
 export const KEEP_MARKETPLACE_ON_FAILURE_VARIABLE =
   "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE";
 
-/** D-SG-15: the values Claude Code reads as true, after trimming and lower-casing. */
-const TRUE_VALUES: ReadonlySet<string> = new Set(["1", "true", "yes", "on"]);
-
 /**
  * D-SG-15: whether `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` is true,
  * as Claude Code reads it: `1`, `true`, `yes`, or `on`, trimmed, in any case.
  */
 export function keepMarketplaceOnFailure(env: NodeJS.ProcessEnv = process.env): boolean {
-  return TRUE_VALUES.has((env[KEEP_MARKETPLACE_ON_FAILURE_VARIABLE] ?? "").trim().toLowerCase());
+  return upstreamFlagIsTrue(KEEP_MARKETPLACE_ON_FAILURE_VARIABLE, env);
 }
 
 /**

@@ -61,6 +61,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
+import { planMarketplaceClone } from "../../domain/github-transport.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import { addedMarketplaceNameRefusal, isReservedRecordKey } from "../../domain/name.ts";
 import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
@@ -119,6 +120,12 @@ import {
   hostFromCloneUrl,
   type AuthAttemptResult,
 } from "../auth-host.ts";
+import {
+  cloneOverGitHubTransports,
+  createGitHubCloneNotes,
+  transportForce,
+  type GitHubCloneNotes,
+} from "../github-transport.ts";
 import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
@@ -132,10 +139,12 @@ import {
 } from "./hosted-catalog.ts";
 import {
   DEFAULT_GIT_OPS,
+  DEFAULT_GITHUB_SSH_OPS,
   fsErrnoReason,
   marketplaceFailureRows,
   recordedManifestPath,
   type GitAuthBundle,
+  type GitHubSshOps,
   type GitOps,
 } from "./shared.ts";
 
@@ -235,6 +244,11 @@ export interface AddMarketplaceOptions {
   readonly completionCache: CompletionCache;
   /** D-12 injection seam. Defaults to DEFAULT_GIT_OPS (which wraps platform/git.ts). */
   readonly gitOps?: GitOps;
+  /**
+   * SG-SSH-02 injection seam: the ssh probe that orders a GitHub clone's
+   * transports. Defaults to DEFAULT_GITHUB_SSH_OPS, the user's own ssh.
+   */
+  readonly gitHubSsh?: GitHubSshOps;
   /**
    * AUTH-01 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
@@ -861,7 +875,8 @@ export function parseAddableSource(
  * `sources/<name>/` with the MA-6 / MA-12 / MA-13 leftover handling and the
  * MA-9 staging cleanup: a git source is cloned, and a hosted source has its
  * catalog downloaded (D-PL5-06). It returns the recorded name and, for every
- * kind but a path source, the final directory.
+ * kind but a path source, the final directory. A github or url add also
+ * returns the notes of its clone (D-SG-22).
  *
  * LAYER-07 / D-MF-04: a project-scope install that needs a marketplace only
  * the user scope records runs this body inside its own lock, so the project
@@ -886,6 +901,8 @@ export async function addMarketplaceToState(args: {
   readonly credentialOps?: CredentialOps | undefined;
   readonly deviceFlowHttp?: DeviceFlowHttp | undefined;
   readonly gitOps?: GitOps | undefined;
+  /** SG-SSH-02: the ssh probe of a GitHub clone. Defaults to DEFAULT_GITHUB_SSH_OPS. */
+  readonly gitHubSsh?: GitHubSshOps | undefined;
   /** D-PL5-07: downloads a hosted catalog. Defaults to DEFAULT_HOSTED_MANIFEST_FETCH. */
   readonly hostedManifestFetch?: HostedManifestFetch | undefined;
   /**
@@ -906,7 +923,11 @@ export async function addMarketplaceToState(args: {
    * with the name it declares, right before the new clone takes its place.
    */
   readonly beforePlace?: ((name: string) => Promise<void>) | undefined;
-}): Promise<{ readonly name: string; readonly cloneDir?: string }> {
+}): Promise<{
+  readonly name: string;
+  readonly cloneDir?: string;
+  readonly cloneNotes?: GitHubCloneNotes;
+}> {
   const { state, locations, source, cwd, removalOps, beforePlace } = args;
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const fetchCatalog = args.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
@@ -915,6 +936,10 @@ export async function addMarketplaceToState(args: {
     return { name: await addPathInGuard({ state, locations, source, cwd, plugins, beforePlace }) };
   }
 
+  const steps =
+    source.kind === "hosted"
+      ? hostedStagingSteps(source, fetchCatalog, removalOps)
+      : gitStagingSteps(source, gitOps, args);
   const name = await addStagedInGuard({
     state,
     locations,
@@ -924,12 +949,11 @@ export async function addMarketplaceToState(args: {
     previous: args.previous,
     plugins,
     beforePlace,
-    steps:
-      source.kind === "hosted"
-        ? hostedStagingSteps(source, fetchCatalog, removalOps)
-        : gitStagingSteps(source, gitOps, args),
+    steps,
   });
-  return { name, cloneDir: await locations.sourceCloneDir(name) };
+  const cloneDir = await locations.sourceCloneDir(name);
+  const { cloneNotes } = steps;
+  return cloneNotes === undefined ? { name, cloneDir } : { name, cloneDir, cloneNotes };
 }
 
 /** The inputs of `addMarketplaceToState`. */
@@ -949,6 +973,8 @@ interface StagingSteps {
    * Returns the removal leak, or `undefined`.
    */
   readonly recognize: (finalDir: string, derivedName: string) => Promise<string | undefined>;
+  /** D-SG-22: the notes of the clones `stage` ran, for a git source. */
+  readonly cloneNotes?: GitHubCloneNotes;
 }
 
 /**
@@ -957,8 +983,12 @@ interface StagingSteps {
  * anything can rename the clone into place.
  *
  * MURL-01 / D-76-06: source.url is the stored canonical identity; the wire
- * url derives from the source via `networkCloneUrl` (D-2-01, D-2-03). Every
- * host carries an auth bundle; the provider lookup decides its Device Flow
+ * url derives from the source via `networkCloneUrl` (D-2-01, D-2-03), or, for
+ * an `owner/repo` source whose ssh probe found the user's ssh authenticated,
+ * is the SSH URL (SG-SSH-02). The probe runs on every clone, and nothing
+ * keeps its answer (CONTEXT [Probe]). The plan's note goes to the steps'
+ * `cloneNotes` under the typed source (D-SG-22). Every host carries an auth bundle, which
+ * an HTTPS attempt passes on; the provider lookup decides its Device Flow
  * half (PROV-03).
  */
 function gitStagingSteps(
@@ -967,6 +997,8 @@ function gitStagingSteps(
   args: AddToStateArgs,
 ): StagingSteps {
   const { deviceFlowHttp, authMemo, removalOps } = args;
+  const cloneNotes = createGitHubCloneNotes();
+  const gitHubSsh = args.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
   const auth = cloneAuthFor(source, {
     credentialOps: args.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
     ctx: args.ctx,
@@ -976,16 +1008,29 @@ function gitStagingSteps(
   });
   return {
     async stage(stagingDir) {
-      await gitOps.clone({
-        dir: stagingDir,
-        url: networkCloneUrl(source),
-        ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
-        auth,
+      const plan = await planMarketplaceClone({
+        source,
+        force: transportForce(process.env),
+        probe: () => gitHubSsh.probe(),
+      });
+      await cloneOverGitHubTransports({
+        plan,
+        notes: cloneNotes,
+        subject: source.raw,
+        surface: "marketplace",
+        attempt: (attempt) =>
+          gitOps.clone({
+            dir: stagingDir,
+            url: attempt.url,
+            ...(source.ref !== undefined && { ref: source.ref, singleBranch: true }),
+            ...(attempt.transport === "https" && { auth }),
+          }),
       });
       await writeOwnershipMarker(stagingDir);
     },
     recognize: (finalDir, derivedName) =>
       recognizeLeftover({ finalDir, derivedName, source, gitOps, removalOps }),
+    cloneNotes,
   };
 }
 
@@ -1009,12 +1054,14 @@ function hostedStagingSteps(
 type RecordedPlugins = ExtensionState["marketplaces"][string]["plugins"];
 
 /**
- * What an add recorded: the name, the new clone of a github or url source,
- * and, for a replace (D-PL6-19), the replaced clone it set aside.
+ * What an add recorded: the name, the new clone of a github, url, or hosted
+ * source with the clone notes of the add (D-SG-22), and, for a replace
+ * (D-PL6-19), the replaced clone it set aside.
  */
 interface AddedToState {
   readonly name: string;
   readonly cloneDir?: string;
+  readonly cloneNotes?: GitHubCloneNotes;
   readonly setAside?: string;
 }
 
@@ -1183,6 +1230,7 @@ async function runAddInGuard<U>(args: {
       credentialOps: opts.credentialOps,
       deviceFlowHttp: opts.deviceFlowHttp,
       gitOps: opts.gitOps,
+      gitHubSsh: opts.gitHubSsh,
       hostedManifestFetch: opts.hostedManifestFetch,
       previous: action?.record,
     };

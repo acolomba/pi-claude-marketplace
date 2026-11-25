@@ -23,6 +23,7 @@ import {
   listRemotes,
   listLocalTags,
   listRemoteTags,
+  probeGitHubSsh,
   resolveRef,
   resolveRemoteRef,
   runWithGitAbortSignal,
@@ -39,6 +40,7 @@ import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
+import { captureDebugLog } from "./debug-log-capture.ts";
 import { registerGitOpsContract } from "./git-ops-contract.ts";
 import {
   createGitTestDirectory,
@@ -51,11 +53,14 @@ import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/pl
 import type {
   GitProcess,
   GitRequest,
+  SshRun,
+  SystemGitProcess,
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type {
   GitCredentials,
   RemoteTag,
+  SshProbeResult,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { CredentialOpsFake } from "./credential-ops-fake.ts";
 import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
@@ -2272,6 +2277,158 @@ describe("listLocalTags", () => {
         },
       ],
     );
+  });
+});
+
+// A git process whose ssh launches answer `answer`, recording each launch.
+function sshAnsweringGitProcess(answer: () => Promise<SshRun>): {
+  readonly gitProcess: SystemGitProcess;
+  readonly launches: string[];
+} {
+  const launches: string[] = [];
+  return {
+    launches,
+    gitProcess: {
+      locate: () => Promise.reject(new Error("the probe locates no git")),
+      run: () => Promise.reject(new Error("the probe runs no git")),
+      ssh: (launch) => {
+        launches.push(launch);
+        return answer();
+      },
+    },
+  };
+}
+
+describe("probeGitHubSsh", () => {
+  for (const { label, run, verdict, logLine } of [
+    {
+      label: "GitHub's greeting with exit 1",
+      run: {
+        kind: "ran",
+        exitCode: 1,
+        output:
+          "\nHi acme! You've successfully authenticated, but GitHub does not provide shell access.\n",
+        timedOut: false,
+      },
+      verdict: "configured",
+      logLine: "[git] SSH config check: code=1 configured=true",
+    },
+    {
+      label: "a publickey refusal with exit 255",
+      run: {
+        kind: "ran",
+        exitCode: 255,
+        output: "\ngit@github.com: Permission denied (publickey).\n",
+        timedOut: false,
+      },
+      verdict: "not-configured",
+      logLine: "[git] SSH config check: code=255 configured=false",
+    },
+    {
+      label: "an unknown host key with exit 255",
+      run: {
+        kind: "ran",
+        exitCode: 255,
+        output: "\nHost key verification failed.\n",
+        timedOut: false,
+      },
+      verdict: "not-configured",
+      logLine: "[git] SSH config check: code=255 configured=false",
+    },
+    {
+      label: "a probe stopped at its limit",
+      run: { kind: "ran", exitCode: null, output: "\n", timedOut: true },
+      verdict: "unknown",
+      logLine: "[git] SSH config check: code=null configured=false",
+    },
+    {
+      label: "a publickey refusal from a probe stopped at its limit",
+      run: {
+        kind: "ran",
+        exitCode: 255,
+        output: "\ngit@github.com: Permission denied (publickey).\n",
+        timedOut: true,
+      },
+      verdict: "unknown",
+      logLine: "[git] SSH config check: code=255 configured=false",
+    },
+    {
+      label: "exit 1 without GitHub's greeting",
+      run: {
+        kind: "ran",
+        exitCode: 1,
+        output: "\nConnection closed by remote host\n",
+        timedOut: false,
+      },
+      verdict: "unknown",
+      logLine: "[git] SSH config check: code=1 configured=false",
+    },
+    {
+      label: "an unresolved host with exit 255",
+      run: {
+        kind: "ran",
+        exitCode: 255,
+        output: "\nssh: Could not resolve hostname github.com: Name or service not known\n",
+        timedOut: false,
+      },
+      verdict: "unknown",
+      logLine: "[git] SSH config check: code=255 configured=false",
+    },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    run: SshRun;
+    verdict: SshProbeResult;
+    logLine: string;
+  }>) {
+    test(`SG-SSH-02: reads ${label} as ${verdict} and logs the exit code`, async (t) => {
+      // arrange
+      const logged = captureDebugLog(t);
+      const { gitProcess, launches } = sshAnsweringGitProcess(() => Promise.resolve(run));
+
+      // act
+      const probed = await probeGitHubSsh(gitProcess);
+
+      // assert
+      assert.strictEqual(probed, verdict);
+      assert.deepStrictEqual(launches, ["github-probe"]);
+      assert.deepStrictEqual(logged, [logLine]);
+    });
+  }
+
+  test("SG-SSH-02: reads a missing ssh as not-configured with no run to log", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { gitProcess } = sshAnsweringGitProcess(() => Promise.resolve({ kind: "missing" }));
+
+    // act
+    const probed = await probeGitHubSsh(gitProcess);
+
+    // assert
+    assert.strictEqual(probed, "not-configured");
+    assert.deepStrictEqual(logged, []);
+  });
+
+  test("SG-SSH-02, T-04-14: reads a launch that throws as unknown and logs its message without the path", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { gitProcess } = sshAnsweringGitProcess(() =>
+      Promise.reject(new Error("spawn /home/user/bin/ssh EACCES")),
+    );
+
+    // act
+    const probed = await probeGitHubSsh(gitProcess);
+
+    // assert
+    assert.strictEqual(probed, "unknown");
+    assert.deepStrictEqual(logged, ["[git] SSH configuration check failed: spawn ssh EACCES"]);
+  });
+
+  test("T-04-15: probes the refusing ssh that the test run puts first on this process's PATH", async () => {
+    // act
+    const probed = await probeGitHubSsh();
+
+    // assert
+    assert.strictEqual(probed, "not-configured");
   });
 });
 

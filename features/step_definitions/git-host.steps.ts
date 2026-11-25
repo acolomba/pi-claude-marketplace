@@ -357,31 +357,47 @@ Given(
 );
 
 // D-BG-01: the pi runs without the GitHub base override, so GHB-02 runs
-// Device Flow, and the redirect keeps every request on this machine. D-SG-14:
-// a system git of that pi reaches `github.com` through the CONNECT proxy,
-// which tunnels only to the git host and logs to the redirect log.
+// Device Flow and SG-SSH-02 runs the ssh probe, and the redirect keeps every
+// request on this machine. D-SG-14: a system git of that pi reaches
+// `github.com` through the CONNECT proxy, which tunnels only to the git host
+// and logs to the redirect log. The redirect config must be written already.
+async function startPiWithGitHubRouted(world: ScenarioWorld): Promise<void> {
+  const proxy = await startGitHubConnectProxy({
+    gitHost: world.gitHost.address,
+    logPath: path.join(harnessDirectory(world.tokens.home), GITHUB_REDIRECT_LOG),
+  });
+  world.onRelease(() => proxy.close());
+  await world.usePiWithProfile({
+    companions: [],
+    extraExtensions: [GITHUB_REDIRECT_EXTENSION],
+    withoutGitHubBaseOverride: true,
+    httpsProxy: `http://${proxy.address}`,
+  });
+  const loads = (await readRedirectLog(world.profileHarness())).flatMap((line) =>
+    line.decision === "loaded" ? [line] : [],
+  );
+  assert.deepStrictEqual(
+    loads.map((line) => ({ configured: line.configured, ownProcess: line.pid === process.pid })),
+    [{ configured: true, ownProcess: false }],
+  );
+}
+
 Given(
   "pi runs with github's requests routed to the stand-ins",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld): Promise<void> {
-    const proxy = await startGitHubConnectProxy({
-      gitHost: this.gitHost.address,
-      logPath: path.join(harnessDirectory(this.tokens.home), GITHUB_REDIRECT_LOG),
-    });
-    this.onRelease(() => proxy.close());
-    await this.usePiWithProfile({
-      companions: [],
-      extraExtensions: [GITHUB_REDIRECT_EXTENSION],
-      withoutGitHubBaseOverride: true,
-      httpsProxy: `http://${proxy.address}`,
-    });
-    const loads = (await readRedirectLog(this.profileHarness())).flatMap((line) =>
-      line.decision === "loaded" ? [line] : [],
-    );
-    assert.deepStrictEqual(
-      loads.map((line) => ({ configured: line.configured, ownProcess: line.pid === process.pid })),
-      [{ configured: true, ownProcess: false }],
-    );
+    await startPiWithGitHubRouted(this);
+  },
+);
+
+// A scenario with no sign-in stand-in: the redirect names only the git host,
+// so a sign-in request is refused and logged.
+Given(
+  "pi runs with github's requests routed to the git host",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld): Promise<void> {
+    await writeRedirectConfig(this.tokens.home, { gitHost: this.gitHost.address });
+    await startPiWithGitHubRouted(this);
   },
 );
 

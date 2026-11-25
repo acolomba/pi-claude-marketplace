@@ -42,6 +42,7 @@ import type {
   GitProcessHost,
   GitRequest,
   GitResult,
+  SystemGitProcess,
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { ProcessSpawn } from "../../extensions/pi-claude-marketplace/platform/process-run.ts";
 import type { GitFailure } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -210,7 +211,7 @@ function startedLauncher(control: ProcessControl): StartedLauncher {
 }
 
 interface FakeGit {
-  readonly git: GitProcess;
+  readonly git: SystemGitProcess;
   readonly control: ProcessControl;
   readonly started: Promise<void>;
   readonly host: RecordingHost;
@@ -3710,6 +3711,230 @@ exit 255
       assert.deepStrictEqual(await livingGroupMembers(launcher.pidOf("ls-remote")), []);
     },
   );
+});
+
+// SG-SSH-02: Claude Code's probe argv, verbatim.
+const PROBE_ARGS = [
+  "-T",
+  "-o",
+  "BatchMode=yes",
+  "-o",
+  "ConnectTimeout=2",
+  "-o",
+  "StrictHostKeyChecking=yes",
+  "git@github.com",
+];
+
+const AUTHENTICATED =
+  "Hi acme! You've successfully authenticated, but GitHub does not provide shell access.\n";
+
+describe("createGitProcess ssh launches", () => {
+  test("SG-SSH-02: runs the first absolute ssh on PATH with the probe argv in the neutral directory and the base environment", async () => {
+    // arrange
+    const env: NodeJS.ProcessEnv = {
+      PATH: "relative::/opt/tools:/usr/bin",
+      SSH_AUTH_SOCK: "/run/user/1000/agent.sock",
+      GIT_SSH_COMMAND: "ssh -i /home/user/.ssh/work",
+    };
+    const { git, control, started, host } = createFakeGit(env, {
+      files: ["/usr/bin/git", "/usr/bin/ssh"],
+      neutral: "/private/tmp",
+    });
+
+    // act
+    const pending = git.ssh("github-probe");
+    await started;
+    control.writeStderr(AUTHENTICATED);
+    control.close(1);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      kind: "ran",
+      exitCode: 1,
+      output: `\n${AUTHENTICATED}`,
+      timedOut: false,
+    });
+    assert.deepStrictEqual(control.launches(), [
+      [
+        "/usr/bin/ssh",
+        PROBE_ARGS,
+        {
+          cwd: "/private/tmp",
+          env: {
+            PATH: "relative::/opt/tools:/usr/bin",
+            SSH_AUTH_SOCK: "/run/user/1000/agent.sock",
+            GIT_SSH_COMMAND: "ssh -i /home/user/.ssh/work",
+          },
+          shell: false,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: true,
+          windowsHide: true,
+        },
+      ],
+    ]);
+    assert.deepStrictEqual(host.probes, ["/opt/tools/ssh", "/usr/bin/ssh"]);
+  });
+
+  test("SG-SSH-02: joins stdout and stderr with a newline in the probe's output", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit(
+      { PATH: "/usr/bin" },
+      { files: ["/usr/bin/ssh"] },
+    );
+
+    // act
+    const pending = git.ssh("github-probe");
+    await started;
+    control.writeStdout("out");
+    control.writeStderr("git@github.com: Permission denied (publickey).\n");
+    control.close(255);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      kind: "ran",
+      exitCode: 255,
+      output: "out\ngit@github.com: Permission denied (publickey).\n",
+      timedOut: false,
+    });
+  });
+
+  test("SG-SSH-02, D-SG-04: reports a missing ssh and starts nothing when no absolute PATH entry holds one", async () => {
+    // arrange
+    const { git, control, host } = createFakeGit(
+      { PATH: "relative:/usr/bin" },
+      { files: ["/usr/bin/git", "relative/ssh"] },
+    );
+
+    // act
+    const run = await git.ssh("github-probe");
+
+    // assert
+    assert.deepStrictEqual(run, { kind: "missing" });
+    assert.deepStrictEqual(control.launches(), []);
+    assert.deepStrictEqual(host.probes, ["/usr/bin/ssh"]);
+  });
+
+  test("NFR-2: finds an ssh installed after a lookup missed", async () => {
+    // arrange
+    const { git, control, started, host } = createFakeGit({ PATH: "/usr/bin" }, { files: [] });
+    const missed = await git.ssh("github-probe");
+    host.files.add("/usr/bin/ssh");
+
+    // act
+    const pending = git.ssh("github-probe");
+    await started;
+    control.close(255);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(
+      [missed, run],
+      [{ kind: "missing" }, { kind: "ran", exitCode: 255, output: "\n", timedOut: false }],
+    );
+  });
+
+  test("SG-SSH-02, T-04-17: stops the probe's process tree at its 3000 ms limit and reports the timeout", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { git, started, host } = createFakeGit({ PATH: "/usr/bin" }, { files: ["/usr/bin/ssh"] });
+
+    // act
+    const pending = git.ssh("github-probe");
+    await started;
+    t.mock.timers.tick(2_999);
+    const signalsBeforeLimit = [...host.groupSignals];
+    t.mock.timers.tick(1);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, { kind: "ran", exitCode: null, output: "\n", timedOut: true });
+    assert.deepStrictEqual(signalsBeforeLimit, []);
+    assert.deepStrictEqual(host.groupSignals, [
+      [4242, "SIGTERM"],
+      [4242, "SIGKILL"],
+    ]);
+  });
+
+  test("SG-SSH-02: rejects with the start error of an ssh that cannot start", async () => {
+    // arrange
+    const startError = Object.assign(new Error("spawn /usr/bin/ssh EACCES"), { code: "EACCES" });
+    const { git, control, started } = createFakeGit(
+      { PATH: "/usr/bin" },
+      { files: ["/usr/bin/ssh"] },
+      null,
+    );
+
+    // act
+    const pending = git.ssh("github-probe");
+    await started;
+    control.fail(startError);
+
+    // assert
+    await assert.rejects(pending, (error: unknown) => {
+      assert.strictEqual(error, startError);
+      return true;
+    });
+  });
+
+  test("SG-PRC-03: rejects with the failure of a neutral directory that cannot be made, starting nothing", async () => {
+    // arrange
+    const neutralFailure = new Error("neutral directory is not private");
+    const { git, control } = createFakeGit(
+      { PATH: "/usr/bin" },
+      { files: ["/usr/bin/ssh"], neutralFailure },
+    );
+
+    // act & assert
+    await assert.rejects(git.ssh("github-probe"), (error: unknown) => {
+      assert.strictEqual(error, neutralFailure);
+      return true;
+    });
+    assert.deepStrictEqual(control.launches(), []);
+  });
+
+  test("SG-SSH-02, D-SG-04: on Windows runs the first ssh.exe outside Pi's working directory", async () => {
+    // arrange
+    const env: NodeJS.ProcessEnv = {
+      Path: String.raw`C:\work\project;C:\Windows\System32\OpenSSH`,
+    };
+    const neutral = String.raw`C:\Users\user\.pi\agent\pi-claude-marketplace\git-neutral`;
+    const { git, control, started } = createFakeGit(env, {
+      platform: "win32",
+      cwd: String.raw`C:\work\project`,
+      files: [
+        String.raw`C:\work\project\ssh.exe`,
+        String.raw`C:\Windows\System32\OpenSSH\ssh.cmd`,
+        String.raw`C:\Windows\System32\OpenSSH\ssh.exe`,
+      ],
+      neutral,
+    });
+
+    // act
+    const pending = git.ssh("github-probe");
+    await started;
+    control.close(255);
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(control.launches(), [
+      [
+        String.raw`C:\Windows\System32\OpenSSH\ssh.exe`,
+        PROBE_ARGS,
+        {
+          cwd: neutral,
+          env,
+          shell: false,
+          stdio: ["ignore", "pipe", "pipe"],
+          detached: false,
+          windowsHide: true,
+        },
+      ],
+    ]);
+  });
 });
 
 describe("NODE_GIT_HOST", () => {

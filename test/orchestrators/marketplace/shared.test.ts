@@ -10,6 +10,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   AgentsUnstageFailureError,
   DEFAULT_GIT_OPS,
+  DEFAULT_GITHUB_SSH_OPS,
   cascadeUnstagePlugin,
   loadVisibleMarketplaces,
   crossScopeFlag,
@@ -367,6 +368,14 @@ test("DEFAULT_GIT_OPS exposes each platform git function the orchestrators call 
 
   // assert
   assert.deepStrictEqual(references, expectedReferences);
+});
+
+test("T-04-15: DEFAULT_GITHUB_SSH_OPS probes the refusing ssh that the test run puts first on PATH", async () => {
+  // act
+  const probed = await DEFAULT_GITHUB_SSH_OPS.probe();
+
+  // assert
+  assert.strictEqual(probed, "not-configured");
 });
 
 test("AgentsUnstageFailureError preserves its typed failures and standard Error fields", () => {

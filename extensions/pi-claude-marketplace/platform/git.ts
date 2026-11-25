@@ -4,18 +4,20 @@ import * as path from "node:path";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import {
+  errorMessage,
   FetchedUrlCause,
   GitCommandError,
   StoredCredentialRejectedError,
 } from "../shared/errors.ts";
 import { gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
+import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 
 import { withOneShotCredential } from "./git-one-shot-credential.ts";
 import { NODE_GIT_PROCESS } from "./git-process.ts";
 import { gitTimeoutMs } from "./git-timeout.ts";
 
 import type { GitAuthBundle } from "./git-credential.ts";
-import type { GitProcess, GitRequest, GitResult } from "./git-process.ts";
+import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from "./git-process.ts";
 
 /**
  * platform/git.ts -- the git surface of the extension (D-18, D-19, D-20).
@@ -33,7 +35,8 @@ import type { GitProcess, GitRequest, GitResult } from "./git-process.ts";
  * names no commit, and `resolveRemoteRef` for a ref the remote does not
  * advertise. Each function takes the git process as a defaulted last
  * parameter, and every request it sends takes its limit from
- * `gitTimeoutMs()` (D-SG-13).
+ * `gitTimeoutMs()` (D-SG-13). SG-SSH-02: `probeGitHubSsh` runs Claude Code's
+ * ssh probe of GitHub through the same git process, with its own fixed limit.
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred)
@@ -875,6 +878,74 @@ export async function listRemotes(
   const urls = read.stdout.split("\0").slice(0, -1);
   const [url] = urls;
   return urls.length === 1 && url !== undefined ? { kind: "origin", url } : { kind: "no-origin" };
+}
+
+/**
+ * SG-SSH-02: what Claude Code's ssh probe of GitHub found. `configured`: the
+ * user's ssh authenticated. `not-configured`: GitHub refused every key, the
+ * host key is not known, or there is no ssh. `unknown`: anything else, such as
+ * a probe that did not answer in time.
+ */
+export type SshProbeResult = "configured" | "not-configured" | "unknown";
+
+// Claude Code's words in ssh's answers, read in stdout and stderr together.
+const SSH_AUTHENTICATED = "successfully authenticated";
+const SSH_REFUSALS = ["Permission denied (publickey", "Host key verification failed"] as const;
+
+// The exit codes of ssh: 1 is GitHub's own after it authenticated, because
+// it gives no shell; 255 is ssh's own failure.
+const GITHUB_SHELL_REFUSED = 1;
+const SSH_FAILED = 255;
+
+function probeVerdict(run: SshRun): SshProbeResult {
+  if (run.kind === "missing") {
+    return "not-configured";
+  }
+
+  if (run.exitCode === GITHUB_SHELL_REFUSED && run.output.includes(SSH_AUTHENTICATED)) {
+    return "configured";
+  }
+
+  if (run.timedOut) {
+    return "unknown";
+  }
+
+  return run.exitCode === SSH_FAILED && SSH_REFUSALS.some((text) => run.output.includes(text))
+    ? "not-configured"
+    : "unknown";
+}
+
+/**
+ * SG-SSH-02: Claude Code's probe of whether the user's ssh authenticates to
+ * GitHub, `ssh -T` in batch mode with strict host keys, a 2-second connect
+ * limit, and a 3-second run limit. Each run writes its exit code and whether
+ * ssh authenticated to the debug log. A launch that throws is `unknown`, and
+ * the debug log gets its message with absolute paths removed. Nothing is
+ * kept between calls.
+ */
+export async function probeGitHubSsh(
+  gitProcess: SystemGitProcess = NODE_GIT_PROCESS,
+): Promise<SshProbeResult> {
+  let run: SshRun;
+  try {
+    run = await gitProcess.ssh("github-probe");
+  } catch (error: unknown) {
+    hookDebugLog(
+      `SSH configuration check failed: ${redactAbsolutePaths(errorMessage(error))}`,
+      "git",
+    );
+    return "unknown";
+  }
+
+  const verdict = probeVerdict(run);
+  if (run.kind === "ran") {
+    hookDebugLog(
+      `SSH config check: code=${run.exitCode} configured=${verdict === "configured"}`,
+      "git",
+    );
+  }
+
+  return verdict;
 }
 
 /**
