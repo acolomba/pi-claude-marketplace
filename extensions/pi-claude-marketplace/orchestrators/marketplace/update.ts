@@ -131,8 +131,9 @@ import {
   hostedFetchFailureReason,
 } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
-import { type ContentReason } from "../../shared/notification-types.ts";
 import {
+  type CloneTransportNote,
+  type ContentReason,
   type PluginFailedMessage,
   type PluginUpdateSkippedMessage,
 } from "../../shared/notification-types.ts";
@@ -155,6 +156,7 @@ import {
   buildGitHubAuth,
   hostFromCloneUrl,
 } from "../auth-host.ts";
+import { createGitHubCloneNotes, type GitHubCloneNotes } from "../github-transport.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
 import {
@@ -452,6 +454,26 @@ interface RefreshOneArgs {
   readonly keepOnFailure: boolean;
 }
 
+/**
+ * D-SG-22: one marketplace's refresh, with the collector its re-clone records
+ * its note into under the marketplace's name. Each refresh has its own, so a
+ * bare update never shows one marketplace's note on another's block, such as
+ * a same-name marketplace of the other scope.
+ */
+interface RefreshRunArgs extends RefreshOneArgs {
+  readonly cloneNotes: GitHubCloneNotes;
+}
+
+/**
+ * D-SG-22: the `clone` field of the refresh's marketplace block: the note of
+ * the re-clone it ran, with its retries, or none when it cloned nothing, as a
+ * current, kept-unreachable, path, or hosted refresh does (OQ-3).
+ */
+function cloneField(args: RefreshRunArgs): { readonly clone?: CloneTransportNote } {
+  const clone = args.cloneNotes.noteFor(args.name);
+  return clone === undefined ? {} : { clone };
+}
+
 /** A dependency row's key in `reportedDependencies`: the same key in two scopes is two installs. */
 function dependencyRowKey(scope: Scope, name: string): string {
   return `${scope}:${name}`;
@@ -555,11 +577,12 @@ function attachStoredCredentialCause(
  * each plan their transports from the declared source, not from the
  * checkout's recorded origin (CONTEXT [Identity], OQ-5). D-SG-15: a valid
  * checkout whose remote cannot be reached is kept when the keep variable is
- * true.
+ * true. D-SG-22: a re-clone records its note under the marketplace's name, so
+ * its block can name the transport; the freshness check records none.
  */
 async function refreshGitSource(
   source: GitHubSource | UrlSource,
-  args: RefreshOneArgs,
+  args: RefreshRunArgs,
   marketplaces: ExtensionState["marketplaces"],
   onReplaced: () => void,
 ): Promise<CloneSwapResult> {
@@ -572,6 +595,8 @@ async function refreshGitSource(
       backupDir: await locations.sourceBackupDir(name),
       stagingDir: await locations.sourceSwapStagingDir(name),
       ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
+      notes: args.cloneNotes,
+      subject: name,
       surface: "marketplace",
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,
@@ -658,7 +683,7 @@ function keptRefresh(swapped: CloneSwapResult): RecordRefresh | undefined {
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
   marketplaces: ExtensionState["marketplaces"],
-  args: RefreshOneArgs,
+  args: RefreshRunArgs,
 ): Promise<RecordRefresh> {
   const { name, locations } = args;
   const source = record.source as ParsedSource;
@@ -791,7 +816,7 @@ interface RefreshSnapshot {
   readonly kept?: { readonly reason: ContentReason; readonly cause: Error };
 }
 
-async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot | undefined> {
+async function snapshotAfterRefresh(args: RefreshRunArgs): Promise<RefreshSnapshot | undefined> {
   const { name, locations } = args;
   // SPLIT-01 rewire: autoupdate lives in claude-plugins.json (config), not
   // state. Read it OUTSIDE the lock (read-only seam; mergeScopeConfigs is a
@@ -1036,7 +1061,9 @@ function refreshFailureReasons(err: unknown): readonly ContentReason[] {
   return reason === undefined ? [] : [reason];
 }
 
-async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
+async function refreshOneMarketplace(refresh: RefreshOneArgs): Promise<void> {
+  // D-SG-22: every block this refresh reports carries its re-clone's note.
+  const args: RefreshRunArgs = { ...refresh, cloneNotes: createGitHubCloneNotes() };
   const { ctx, cardinality, name, scope, locations, run } = args;
 
   let snapshot: RefreshSnapshot | undefined;
@@ -1067,8 +1094,16 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // renders via the central seam; the failed child row dispatches through
     // UPDATE_CONTEXT.
     const failedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
-      // D-03: a failed marketplace update -> error.
-      { name, scope, status: "failed", severity: "error", plugins: [failedRow] },
+      // D-03: a failed marketplace update -> error. D-SG-22: a re-clone that
+      // failed, or one whose manifest then failed, names its attempts.
+      {
+        name,
+        scope,
+        status: "failed",
+        severity: "error",
+        ...cloneField(args),
+        plugins: [failedRow],
+      },
     ];
     notifyWithContext(ctx, run, UPDATE_CONTEXT, failedRows, undefined, cardinality);
     return;
@@ -1120,10 +1155,12 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 /**
  * D-SG-10: a kept checkout's row. The marketplace is `skipped` with the kept
  * reason, at warning severity, and its one child row carries the cause, as a
- * failed refresh's row does.
+ * failed refresh's row does. D-SG-22: a new clone that could not replace the
+ * checkout names its transport; a checkout kept because its remote could not
+ * be reached cloned nothing, so it names none.
  */
 function notifyKept(
-  args: RefreshOneArgs,
+  args: RefreshRunArgs,
   kept: { readonly reason: ContentReason; readonly cause: Error },
 ): void {
   const { ctx, cardinality, name, scope, run } = args;
@@ -1144,20 +1181,26 @@ function notifyKept(
       status: "skipped",
       reasons: [kept.reason],
       severity: "warning",
+      ...cloneField(args),
       plugins: [keptRow],
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, keptRows, undefined, cardinality);
 }
 
-/** The refreshed marketplace's notification and the MCP config notices of its cascade. */
+/**
+ * The refreshed marketplace's notification and the MCP config notices of its
+ * cascade. D-SG-22: each block names the transport of the re-clone the refresh
+ * ran, including one whose manifest content did not change.
+ */
 function notifyRefreshed(
-  args: RefreshOneArgs,
+  args: RefreshRunArgs,
   snapshot: RefreshSnapshot,
   cascade: AutoupdateCascade,
 ): void {
   const { ctx, cardinality, name, scope, pluginUpdate, run } = args;
   const { outcomes, installs } = cascade;
+  const clone = cloneField(args);
 
   // CMC-32 / UXG-05 binding: BOTH the autoupdate-OFF (manifest-only refresh)
   // and the autoupdate-ON (cascade) paths now DISTINGUISH a no-op from a
@@ -1184,7 +1227,7 @@ function notifyRefreshed(
     if (!snapshot.changed) {
       // OUT-07 / D-12: one marketplace block, no child rows -> Single.
       const skippedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
-        { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
+        { name, scope, status: "skipped", reasons: ["up-to-date"], ...clone, plugins: [] },
       ];
       notifyWithContext(ctx, run, UPDATE_CONTEXT, skippedRows, undefined, cardinality);
       return;
@@ -1192,7 +1235,7 @@ function notifyRefreshed(
 
     // OUT-07 / D-12: manifest-only refresh, no child rows -> Single.
     const updatedRows: Single<MarketplaceRows<UpdateRowMsg>> = [
-      { name, scope, status: "updated", plugins: [] },
+      { name, scope, status: "updated", ...clone, plugins: [] },
     ];
     notifyWithContext(ctx, run, UPDATE_CONTEXT, updatedRows, undefined, cardinality);
     return;
@@ -1222,7 +1265,7 @@ function notifyRefreshed(
     // OUT-07 / D-12: autoupdate-ON no-op collapses to the OFF no-op shape
     // (plugins:[]) -> Single, one marketplace block.
     const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
-      { name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] },
+      { name, scope, status: "skipped", reasons: ["up-to-date"], ...clone, plugins: [] },
     ];
     notifyWithContext(ctx, run, UPDATE_CONTEXT, noopRows, undefined, cardinality);
     return;
@@ -1244,6 +1287,7 @@ function notifyRefreshed(
       name,
       scope,
       status: "updated",
+      ...clone,
       // WR-01: `outcomeToCascadePluginMessage` returns `UpdateRowMsg` by
       // construction, so the mapped rows are the narrowed Msg the
       // UPDATE_CONTEXT requires with no cast.

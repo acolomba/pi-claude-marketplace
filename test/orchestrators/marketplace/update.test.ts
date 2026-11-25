@@ -140,6 +140,12 @@ const LOCAL_COMMIT = "0000000000000000000000000000000000000001";
 /** D-SG-10: a remote commit other than the checkout's, so the checkout is stale. */
 const REMOTE_COMMIT = "abcdef0000000000000000000000000000000002";
 
+const OFFICIAL_SSH_URL = "git@github.com:anthropics/claude-plugins-official.git";
+const OFFICIAL_HTTPS_URL = "https://github.com/anthropics/claude-plugins-official.git";
+
+/** D-SG-22: the line under a block whose refresh re-cloned the default github source over HTTPS. */
+const HTTPS_CLONE_LINE = `  Cloning via HTTPS: ${OFFICIAL_HTTPS_URL}`;
+
 function createGitOps(options: MarketplaceGitOpsSeed = {}) {
   const git = createGitOpsFake({
     boundary: "memory",
@@ -479,6 +485,7 @@ for (const mode of ["json", "rpc"]) {
               name: "auto-mp",
               scope: "project",
               status: "updated",
+              clone: { note: "via-https", url: OFFICIAL_HTTPS_URL },
               plugins: ["hello", "second"].map((name) => ({
                 name,
                 id: `${name}@auto-mp`,
@@ -791,7 +798,7 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● official-device [project] (skipped) {up-to-date}" },
+      { message: `● official-device [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
     assert.deepStrictEqual(
@@ -864,7 +871,7 @@ test("MU-4 + D-SG-10: a stale github source is re-cloned into staging and swappe
     // UXG-05: the re-clone holds the same manifest content, so the row is the
     // no-op `(skipped) {up-to-date}` with no reload trailer.
     assert.deepStrictEqual(notifications, [
-      { message: "● official [project] (skipped) {up-to-date}" },
+      { message: `● official [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.deepStrictEqual(
       state.lsRemoteCalls.map(({ url, ref }) => ({ url, ref })),
@@ -989,7 +996,7 @@ test("D-SG-10: a github checkout that cannot be moved aside is kept, reported as
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations need attention.\n\n● official [project] (skipped) {permission denied}\n  ⊘ official (skipped) {permission denied}\n    cause: Could not replace the marketplace checkout because it is in use; the existing copy was kept and the next update will try again. -> ${refusal.error.message}`,
+        message: `Some operations need attention.\n\n● official [project] (skipped) {permission denied}\n${HTTPS_CLONE_LINE}\n  ⊘ official (skipped) {permission denied}\n    cause: Could not replace the marketplace checkout because it is in use; the existing copy was kept and the next update will try again. -> ${refusal.error.message}`,
         severity: "warning",
       },
     ]);
@@ -1086,9 +1093,6 @@ for (const { kind, seed } of [
   });
 }
 
-const OFFICIAL_SSH_URL = "git@github.com:anthropics/claude-plugins-official.git";
-const OFFICIAL_HTTPS_URL = "https://github.com/anthropics/claude-plugins-official.git";
-
 /** SG-SSH-02: a probe that finds the user's ssh authenticated to GitHub. */
 const SSH_CONFIGURED: GitHubSshOps = { probe: () => Promise.resolve("configured") };
 
@@ -1164,7 +1168,9 @@ test("D-SG-15, OQ-4: an owner/repo marketplace whose https freshness check answe
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● official [project] (skipped) {up-to-date}" },
+      {
+        message: `● official [project] (skipped) {up-to-date}\n  Cloning via SSH: ${OFFICIAL_SSH_URL}`,
+      },
     ]);
     assert.deepStrictEqual(
       {
@@ -1253,7 +1259,7 @@ test("D-SG-10: an update right after a replacing one is current, asks the remote
     );
     assert.deepStrictEqual(await directoryBytes(cloneDir), cloneAfterFirst);
     assert.deepStrictEqual(notifications, [
-      { message: "● tools [project] (skipped) {up-to-date}" },
+      { message: `● tools [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
       { message: "● tools [project] (skipped) {up-to-date}" },
     ]);
   });
@@ -1320,7 +1326,7 @@ test("Q13: the state lock stays fresh while a clone runs past one lock update in
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● tools [project] (skipped) {up-to-date}" },
+      { message: `● tools [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.strictEqual(lockTimes.length, 2);
     assert.ok((lockTimes[1] ?? 0) > (lockTimes[0] ?? 0), `lock mtimes ${lockTimes.join(", ")}`);
@@ -1358,7 +1364,7 @@ test("Q13: a second update of the same scope during the swap gets the held state
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● tools [project] (skipped) {up-to-date}" },
+      { message: `● tools [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.strictEqual(secondTransaction.length, 1);
     assert.ok(secondTransaction[0] instanceof StateLockHeldError);
@@ -1404,7 +1410,7 @@ test("D-PL9-10: an update carries the packages of installed plugins inside the c
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● tools [project] (skipped) {up-to-date}" },
+      { message: `● tools [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.strictEqual(
       await readFile(path.join(insideRoot, "node_modules", "dep", "index.js"), "utf8"),
@@ -1414,13 +1420,14 @@ test("D-PL9-10: an update carries the packages of installed plugins inside the c
   });
 });
 
-for (const { kind, name, seed, origin, declared } of [
+for (const { kind, name, seed, origin, declared, cloneLines } of [
   {
     kind: "github",
     name: "official",
     seed: (cwd: string) => seedGithubMarketplace({ cwd, name: "official", ref: "main" }),
     origin: "https://github.com/anthropics/earlier-name.git",
     declared: "https://github.com/anthropics/claude-plugins-official.git",
+    cloneLines: `\n${HTTPS_CLONE_LINE}`,
   },
   {
     kind: "url",
@@ -1428,6 +1435,7 @@ for (const { kind, name, seed, origin, declared } of [
     seed: (cwd: string) => seedUrlMarketplace({ cwd, name: "tools", ref: "main" }),
     origin: "https://gitlab.example.com/team/earlier-name.git",
     declared: "https://gitlab.example.com/team/tools",
+    cloneLines: "",
   },
 ] as const) {
   test(`CONTEXT [Identity], OQ-5: a ${kind} refresh asks and clones the declared source's URL, not the origin its checkout records`, async () => {
@@ -1450,7 +1458,7 @@ for (const { kind, name, seed, origin, declared } of [
 
       // assert
       assert.deepStrictEqual(notifications, [
-        { message: `● ${name} [project] (skipped) {up-to-date}` },
+        { message: `● ${name} [project] (skipped) {up-to-date}${cloneLines}` },
       ]);
       assert.deepStrictEqual(
         {
@@ -1463,9 +1471,18 @@ for (const { kind, name, seed, origin, declared } of [
   });
 }
 
-for (const { probe, first } of [
-  { probe: "configured", first: "git@github.com:anthropics/claude-plugins-official.git" },
-  { probe: "not-configured", first: "https://github.com/anthropics/claude-plugins-official.git" },
+for (const { probe, first, cloneLine } of [
+  {
+    probe: "configured",
+    first: "git@github.com:anthropics/claude-plugins-official.git",
+    cloneLine: "Cloning via SSH: git@github.com:anthropics/claude-plugins-official.git",
+  },
+  {
+    probe: "not-configured",
+    first: "https://github.com/anthropics/claude-plugins-official.git",
+    cloneLine:
+      "SSH not configured, cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git",
+  },
 ] as const) {
   test(`SG-SSH-02: an owner/repo marketplace whose probe answers ${probe} refreshes first over ${first}, probing once per plan`, async () => {
     await withHermeticHome(async ({ cwd }) => {
@@ -1498,7 +1515,7 @@ for (const { probe, first } of [
 
       // assert
       assert.deepStrictEqual(notifications, [
-        { message: "● official [project] (skipped) {up-to-date}" },
+        { message: `● official [project] (skipped) {up-to-date}\n  ${cloneLine}` },
       ]);
       assert.deepStrictEqual(
         {
@@ -1511,6 +1528,270 @@ for (const { probe, first } of [
     });
   });
 }
+
+/** D-SG-22: a re-clone that writes a manifest whose content differs, so the refresh reads `(updated)`. */
+function changedManifestGitOps(
+  options: MarketplaceGitOpsSeed = {},
+): ReturnType<typeof createGitOps> {
+  return createGitOps({
+    ...options,
+    onRefresh: (dir) =>
+      writeFile(
+        path.join(dir, ".claude-plugin", "marketplace.json"),
+        JSON.stringify({
+          name: "official",
+          plugins: [{ name: "newly-added", source: "./newly-added" }],
+        }),
+        "utf8",
+      ),
+  });
+}
+
+/** D-SG-22: a JSON-mode context and run whose entries `capture` keeps. */
+function makeJsonCtx(): {
+  readonly capture: ReturnType<typeof createJsonCapture>;
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+} {
+  const capture = createJsonCapture();
+  const ctx: NotificationContext = {
+    mode: "json",
+    hasUI: false,
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = openNotificationRun(
+    { getAllTools: () => [], getCommands: () => [], appendEntry: capture.entrySink.appendEntry },
+    { kind: "command", commandId: "marketplace update", invocationId: "clone-note-run" },
+  );
+  return { capture, ctx, run };
+}
+
+/** D-SG-22: the status and clone member of each marketplace block of each entry. */
+function marketplaceClones(
+  capture: ReturnType<typeof createJsonCapture>,
+): readonly (readonly { readonly status: string; readonly clone?: unknown }[])[] {
+  return capture.entries.map((entry) => {
+    const payload = entry.payload as {
+      readonly marketplaces: readonly { readonly status: string; readonly clone?: unknown }[];
+    };
+    return payload.marketplaces.map(({ status, clone }) => ({
+      status,
+      ...(clone !== undefined && { clone }),
+    }));
+  });
+}
+
+test("D-SG-22: an owner/repo marketplace refresh that re-clones over ssh names the transport under its updated block", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      spelling: "anthropics/claude-plugins-official",
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = changedManifestGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      gitHubSsh: SSH_CONFIGURED,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `● official [project] (updated)\n  Cloning via SSH: ${OFFICIAL_SSH_URL}` },
+    ]);
+  });
+});
+
+test("D-SG-22: an owner/repo marketplace refresh that re-clones over ssh puts the clone note on its updated block in JSON", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      spelling: "anthropics/claude-plugins-official",
+    });
+    const { capture, ctx, run } = makeJsonCtx();
+    const { gitOps } = changedManifestGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      gitHubSsh: SSH_CONFIGURED,
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaceClones(capture), [
+      [{ status: "updated", clone: { note: "via-ssh", url: OFFICIAL_SSH_URL } }],
+    ]);
+    capture.assertValid();
+  });
+});
+
+test("D-SG-22, OQ-3: a current owner/repo marketplace refresh clones nothing and its block has no clone note", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      spelling: "anthropics/claude-plugins-official",
+    });
+    const { capture, ctx, run } = makeJsonCtx();
+    const { gitOps, state } = createGitOps({ remoteHead: LOCAL_COMMIT });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      gitHubSsh: SSH_CONFIGURED,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { blocks: marketplaceClones(capture), clones: state.cloneCalls },
+      { blocks: [[{ status: "skipped" }]], clones: [] },
+    );
+    capture.assertValid();
+  });
+});
+
+test("D-SG-22: an owner/repo marketplace refresh whose re-clone fails over both transports names both attempts above its failed row", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      spelling: "anthropics/claude-plugins-official",
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const fake = createGitOps();
+    const cloneUrls: string[] = [];
+    const gitOps: GitOps = {
+      ...fake.gitOps,
+      clone: (cloneOptions) => {
+        cloneUrls.push(cloneOptions.url);
+        return Promise.reject(new Error("clone refused"));
+      },
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      gitHubSsh: SSH_CONFIGURED,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { notifications, cloneUrls },
+      {
+        notifications: [
+          {
+            message: `Some operations have failed.\n\n⊘ official [project] (failed)\n  Cloning via SSH: ${OFFICIAL_SSH_URL}\n  SSH clone failed, retrying with HTTPS: ${OFFICIAL_HTTPS_URL}\n  ⊘ official (failed)\n    cause: Failed to update marketplace "official". -> clone refused`,
+            severity: "error",
+          },
+        ],
+        cloneUrls: [OFFICIAL_SSH_URL, OFFICIAL_HTTPS_URL],
+      },
+    );
+  });
+});
+
+test("D-SG-22: an owner/repo marketplace refresh whose re-clone fails over both transports puts the note and its retry on the failed block in JSON", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "official",
+      spelling: "anthropics/claude-plugins-official",
+    });
+    const { capture, ctx, run } = makeJsonCtx();
+    const fake = createGitOps();
+    const gitOps: GitOps = {
+      ...fake.gitOps,
+      clone: () => Promise.reject(new Error("clone refused")),
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      gitHubSsh: SSH_CONFIGURED,
+    });
+
+    // assert
+    assert.deepStrictEqual(marketplaceClones(capture), [
+      [
+        {
+          status: "failed",
+          clone: { note: "via-ssh", url: OFFICIAL_SSH_URL, retries: [OFFICIAL_HTTPS_URL] },
+        },
+      ],
+    ]);
+    capture.assertValid();
+  });
+});
+
+test("D-SG-22: a github refresh whose new clone cannot replace the checkout names the clone it ran under the kept block", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "official", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps();
+    const refusal = renameRefusing(cloneDir, "EBUSY");
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "official",
+      scope: "project",
+      cwd,
+      gitOps,
+      renameOps: { rename: refusal.rename },
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations need attention.\n\n● official [project] (skipped) {permission denied}\n  Cloning via HTTPS: ${OFFICIAL_HTTPS_URL}\n  ⊘ official (skipped) {permission denied}\n    cause: Could not replace the marketplace checkout because it is in use; the existing copy was kept and the next update will try again. -> ${refusal.error.message}`,
+        severity: "warning",
+      },
+    ]);
+  });
+});
 
 test("MU-5: a replaced checkout whose manifest cannot be read names the advanced clone", async () => {
   await withHermeticHome(async ({ cwd }) => {
@@ -1545,7 +1826,7 @@ test("MU-5: a replaced checkout whose manifest cannot be read names the advanced
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ official [project] (failed)\n  ⊘ official (failed)\n    cause: Marketplace "official" clone advanced but manifest could not be persisted. -> ${readError}`,
+        message: `Some operations have failed.\n\n⊘ official [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ official (failed)\n    cause: Marketplace "official" clone advanced but manifest could not be persisted. -> ${readError}`,
         severity: "error",
       },
     ]);
@@ -1920,7 +2201,7 @@ test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {aut
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-github [project] (failed)\n  ⊘ urlmp-github (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-github". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
+          'Some operations have failed.\n\n⊘ urlmp-github [project] (failed)\n  Cloning via HTTPS: https://github.com/team/urlmp-github.git\n  ⊘ urlmp-github (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-github". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
         severity: "error",
       },
     ]);
@@ -2001,7 +2282,7 @@ test("UXG-05: github-source refresh whose manifest content CHANGES renders `(upd
     // Content changed -> `(updated)`, severity success (undefined), no reload
     // trailer (no plugin children). Catalog UAT state `manifest-refresh-changed`.
     assert.equal(first.severity, undefined);
-    assert.equal(first.message, "● official [project] (updated)");
+    assert.equal(first.message, `● official [project] (updated)\n${HTTPS_CLONE_LINE}`);
     assert.equal(first.message.includes("/reload to pick up changes"), false);
   });
 });
@@ -2070,7 +2351,7 @@ test("D-SG-10: a github source without a ref asks the remote for its HEAD and cl
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● defaultbranch [project] (skipped) {up-to-date}" },
+      { message: `● defaultbranch [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.deepStrictEqual(
       state.lsRemoteCalls.map(({ url, ref }) => ({ url, ref })),
@@ -2089,9 +2370,14 @@ test("D-SG-10: a github source without a ref asks the remote for its HEAD and cl
   });
 });
 
-for (const { title, sha, expectedClones } of [
-  { title: "equal to HEAD is current", sha: LOCAL_COMMIT, expectedClones: 0 },
-  { title: "other than HEAD is cloned again", sha: REMOTE_COMMIT, expectedClones: 1 },
+for (const { title, sha, expectedClones, cloneLines } of [
+  { title: "equal to HEAD is current", sha: LOCAL_COMMIT, expectedClones: 0, cloneLines: "" },
+  {
+    title: "other than HEAD is cloned again",
+    sha: REMOTE_COMMIT,
+    expectedClones: 1,
+    cloneLines: `\n${HTTPS_CLONE_LINE}`,
+  },
 ]) {
   test(`D-SG-10: a github source pinned to a commit ${title} with no ls-remote`, async () => {
     await withHermeticHome(async ({ cwd }) => {
@@ -2113,7 +2399,7 @@ for (const { title, sha, expectedClones } of [
 
       // assert
       assert.deepStrictEqual(notifications, [
-        { message: "● pinned [project] (skipped) {up-to-date}" },
+        { message: `● pinned [project] (skipped) {up-to-date}${cloneLines}` },
       ]);
       assert.deepStrictEqual(state.lsRemoteCalls, []);
       assert.strictEqual(state.cloneCalls.length, expectedClones);
@@ -2432,7 +2718,9 @@ test("a legacy git record with a corrupt on-disk manifest recovers once the re-c
     });
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: "● corrupt [project] (updated)" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `● corrupt [project] (updated)\n${HTTPS_CLONE_LINE}` },
+    ]);
     assert.strictEqual(
       (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.corrupt
         ?.lastSuccessfulManifest,
@@ -3206,6 +3494,7 @@ test("autoupdate continues in installed order after an ordinary plugin failure",
         message:
           "A plugin operation has failed.\n\n" +
           "● ordered [project] (updated)\n" +
+          `${HTTPS_CLONE_LINE}\n` +
           "  ⊘ zeta (failed) {unreadable manifest}\n" +
           "    cause: zeta update failed\n" +
           "  ● alpha v1.0.0 → v1.1.0 (updated)\n\n" +
@@ -3702,7 +3991,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
     // severity to info per UXG-02 / D-28-06/07.
     const first = notifications[0];
     assert.ok(first !== undefined);
-    assert.equal(first.message, "● noupd [project] (skipped) {up-to-date}");
+    assert.equal(first.message, `● noupd [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}`);
     assert.equal(first.severity, undefined);
     assert.deepStrictEqual(await readPluginRecord(locations.extensionRoot, "noupd", "p"), before);
     // SNM-33 / D-22-01 (G-MIL-06): no plugin row carries a state-change token
@@ -3914,6 +4203,7 @@ test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a comment
         message:
           "A plugin operation has failed.\n\n" +
           "● official [project] (updated)\n" +
+          `${HTTPS_CLONE_LINE}\n` +
           "  ● alpha v0.0.1 → v0.0.2 (updated)\n" +
           "  ⊘ beta (failed) {permission denied}\n\n" +
           "/reload to pick up changes",
@@ -3980,6 +4270,7 @@ test("D-PL1-07 / D-PL1-09: an autoupdate cascade shows a moved plugin's staging 
       {
         message:
           "● official [project] (updated)\n" +
+          `${HTTPS_CLONE_LINE}\n` +
           "  ● alpha v0.0.1 → v0.0.2 (updated)\n\n" +
           "/reload to pick up changes",
       },
@@ -4062,6 +4353,7 @@ test("D-PL9-21: a marketplace update shows an autoupdated plugin's package note 
       {
         message:
           "● official [project] (updated)\n" +
+          `${HTTPS_CLONE_LINE}\n` +
           "  ● alpha v0.0.1 → v0.0.2 (updated)\n" +
           "  ● beta v0.0.1 → v0.0.2 (updated)\n\n" +
           "/reload to pick up changes",
@@ -4121,7 +4413,7 @@ test("AFILE-04: a no-op marketplace update over a commented mcp-adapter.json sen
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● noupd [project] (skipped) {up-to-date}" },
+      { message: `● noupd [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.equal(await readFile(adapterPath, "utf8"), adapter);
   });
@@ -5211,7 +5503,9 @@ test("drops a changed target after persistence and before its plugin cascade", a
       },
     };
     assert.deepStrictEqual(notifications, [
-      { message: "● official [project] (updated)\n  ⊘ alpha (skipped) {up-to-date}" },
+      {
+        message: `● official [project] (updated)\n${HTTPS_CLONE_LINE}\n  ⊘ alpha (skipped) {up-to-date}`,
+      },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), expectedState);
     assert.deepStrictEqual(rows, [{ name: "fresh-plugin", status: "available" }]);
@@ -5998,7 +6292,7 @@ test("GHB-02: updating a GitHub marketplace under the override clones with the o
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● ref-mp [project] (skipped) {up-to-date}" },
+      { message: `● ref-mp [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.deepStrictEqual(
       state.cloneCalls.map(({ auth }) => auth),
@@ -6037,7 +6331,7 @@ test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under th
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for mirror.example:8443; store one with: printf 'protocol=https\\nhost=mirror.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for mirror.example:8443; store one with: printf 'protocol=https\\nhost=mirror.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);
@@ -6072,7 +6366,7 @@ test("UPD-12 / GHB-01: a GitHub update under the override that the host answers 
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {network error}\n    cause: 500 on ${OVERRIDE_WIRE_URL} -> git ls-remote failed: network, exit code 128 -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {network error}\n    cause: 500 on ${OVERRIDE_WIRE_URL} -> git ls-remote failed: network, exit code 128 -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);
@@ -6105,7 +6399,7 @@ test("UPD-12 / GHB-01: a stored credential that the override host rejects keeps 
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> mirror.example:8443 rejected the stored credential -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> mirror.example:8443 rejected the stored credential -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);
@@ -6178,7 +6472,7 @@ test("GHB-04: a declined Device Flow on a GitHub update without the override kee
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ declined [project] (failed)\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace "declined". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
+          'Some operations have failed.\n\n⊘ declined [project] (failed)\n  Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace "declined". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
         severity: "error",
       },
     ]);
@@ -6855,12 +7149,17 @@ test("D-PL5-27: a path refresh to a reserved name fails and leaves the record un
   });
 });
 
-for (const { kind, seed } of [
+for (const { kind, seed, cloneLines } of [
   {
     kind: "github",
     seed: (cwd: string) => seedGithubMarketplace({ cwd, name: "tools", owner: "acme" }),
+    cloneLines: "\n  Cloning via HTTPS: https://github.com/acme/claude-plugins-official.git",
   },
-  { kind: "url", seed: (cwd: string) => seedUrlMarketplace({ cwd, name: "tools" }) },
+  {
+    kind: "url",
+    seed: (cwd: string) => seedUrlMarketplace({ cwd, name: "tools" }),
+    cloneLines: "",
+  },
 ]) {
   test(`D-PL5-27: a ${kind} refresh to a reserved name fails, leaves the record unstamped, and keeps the advanced checkout`, async () => {
     await withHermeticHome(async ({ cwd }) => {
@@ -6895,7 +7194,7 @@ for (const { kind, seed } of [
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Failed to update marketplace "tools". -> ${REPOSITORY_REFUSAL}`,
+          message: `Some operations have failed.\n\n⊘ tools [project] (failed)${cloneLines}\n  ⊘ tools (failed) {invalid manifest}\n    cause: Failed to update marketplace "tools". -> ${REPOSITORY_REFUSAL}`,
           severity: "error",
         },
       ]);
@@ -6937,7 +7236,7 @@ test("D-PL5-27: a github refresh from the anthropics organization keeps a reserv
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● claude-plugins-official [project] (updated)" },
+      { message: `● claude-plugins-official [project] (updated)\n${HTTPS_CLONE_LINE}` },
     ]);
     const state = await loadState(locationsFor("project", cwd).extensionRoot);
     assert.strictEqual(
@@ -7099,7 +7398,7 @@ test("D-PL5-28: a github refresh to one of Claude Code's own names fails and lea
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {invalid manifest}\n    cause: Failed to update marketplace "tools". -> Marketplace name "uv" is reserved for plugins installed from a Python package index through uv (reserved; not yet available)`,
+        message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  Cloning via HTTPS: https://github.com/acme/claude-plugins-official.git\n  ⊘ tools (failed) {invalid manifest}\n    cause: Failed to update marketplace "tools". -> Marketplace name "uv" is reserved for plugins installed from a Python package index through uv (reserved; not yet available)`,
         severity: "error",
       },
     ]);
