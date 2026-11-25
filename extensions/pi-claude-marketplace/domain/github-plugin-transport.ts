@@ -9,11 +9,17 @@
 // SSH, or over HTTPS when forced, with no check and no retry (D-SG-20,
 // upstream `KHi`). Every other source clones once, as written (OQ-1).
 //
+// SG-SSH-05: on Windows an `owner/repo` source clones over SSH first and runs
+// no probe, as upstream's Windows pass of `Qmt` does. Only an SSH failure that
+// names the key or the host key, with the Windows checks passing, gives HTTPS,
+// and an HTTPS failure then gives SSH once more.
+//
 // The module is pure: each check is a function the caller passes, called at
 // most once per plan, and only when the plan needs its answer. The marketplace
 // plan, whose probe reads its answer the other way (Pitfall 8), stays in
 // `github-transport.ts`.
 
+import { GitCommandError } from "../shared/errors.ts";
 import { gitHubAddressOf } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
@@ -40,6 +46,11 @@ export interface PluginSshChecks {
   readonly sshPresent: () => Promise<boolean>;
   /** Whether `ssh -G git@github.com` shows a direct hop to github.com, with no proxy. */
   readonly showsDirectGitHub: () => Promise<boolean>;
+  /**
+   * SG-SSH-05, Windows: whether the ssh git starts for `sshUrl`, run with
+   * `-G`, shows a direct hop to github.com, with no proxy.
+   */
+  readonly showsDirectGitHubThroughGit: (sshUrl: string) => Promise<boolean>;
 }
 
 /** The inputs of `planPluginClone`. */
@@ -51,6 +62,11 @@ export interface PluginClonePlanInput {
    * on SSH, unless forced.
    */
   readonly checks?: PluginSshChecks | undefined;
+  /**
+   * SG-SSH-05: the platform the clone runs on. `win32` takes the Windows
+   * plan; omitted, the plan is the one off Windows.
+   */
+  readonly platform?: NodeJS.Platform | undefined;
 }
 
 // The `after` of a plan with one attempt.
@@ -97,6 +113,13 @@ function gitHubAttempts(source: GitHubSource): {
   };
 }
 
+// Upstream `Qmt`'s first two checks, on every platform: the user chose the
+// ssh command, or the user's git config rewrites the ssh URL. The first that
+// answers yes stops the walk.
+async function userKeepsSsh(checks: PluginSshChecks, sshUrl: string): Promise<boolean> {
+  return (await checks.userOverride()) || checks.urlRewritten(sshUrl);
+}
+
 /**
  * Upstream `Qmt`, off Windows: whether every check that keeps a GitHub clone
  * on SSH passes, in Claude Code's order: no ssh choice of the user, no
@@ -106,11 +129,7 @@ function gitHubAttempts(source: GitHubSource): {
  * later check runs.
  */
 async function httpsMayGoFirst(checks: PluginSshChecks, sshUrl: string): Promise<boolean> {
-  if (await checks.userOverride()) {
-    return false;
-  }
-
-  if (await checks.urlRewritten(sshUrl)) {
+  if (await userKeepsSsh(checks, sshUrl)) {
     return false;
   }
 
@@ -121,12 +140,81 @@ async function httpsMayGoFirst(checks: PluginSshChecks, sshUrl: string): Promise
   return !(await checks.sshPresent()) || checks.showsDirectGitHub();
 }
 
+/**
+ * Upstream `Qmt`'s Windows pass: whether every check that keeps a GitHub
+ * clone on SSH passes, in Claude Code's order: no ssh choice of the user, no
+ * rewrite of the ssh URL, and then `-G` through git showing a direct hop. No
+ * probe runs on Windows.
+ */
+async function httpsMayFollowOnWindows(checks: PluginSshChecks, sshUrl: string): Promise<boolean> {
+  return !(await userKeepsSsh(checks, sshUrl)) && checks.showsDirectGitHubThroughGit(sshUrl);
+}
+
+/**
+ * SG-SSH-05, upstream `Jmt`: whether an SSH clone failed because GitHub
+ * refused every key or the host key was not the known one. The typed kind
+ * and detail decide, never stderr text (SG-PRC-05, T-04-35); a changed host
+ * key counts, as upstream's text test counts it.
+ */
+function isKeyFailure(failure: unknown): boolean {
+  if (!(failure instanceof GitCommandError)) {
+    return false;
+  }
+
+  const { failure: reason } = failure;
+  return (
+    (reason.kind === "ssh-auth" && reason.detail === "publickey") ||
+    reason.kind === "ssh-host-key-unknown" ||
+    reason.kind === "ssh-host-key-changed"
+  );
+}
+
+/**
+ * SG-SSH-05, upstream `zHi` on Windows: SSH first. After a key failure, and
+ * only when the Windows checks pass, HTTPS once; after that HTTPS attempt
+ * fails, SSH once more. Any other failure ends the clone. The checks run
+ * only after a key failure.
+ */
+function windowsPlan(
+  attempts: ReturnType<typeof gitHubAttempts>,
+  checks: PluginSshChecks,
+): TransportPlan {
+  const { ssh, https } = attempts;
+  let httpsTried = false;
+  return {
+    first: ssh,
+    note: "via-ssh",
+    after: async (failure, failed) => {
+      if (failed.transport === "https") {
+        return stopsTheClone(failure) ? undefined : ssh;
+      }
+
+      if (httpsTried || !isKeyFailure(failure)) {
+        return undefined;
+      }
+
+      if (!(await httpsMayFollowOnWindows(checks, ssh.url))) {
+        return undefined;
+      }
+
+      httpsTried = true;
+      return https;
+    },
+  };
+}
+
 // The plan of a GitHub source spelled `owner/repo`.
 async function ownerRepoPlan(
   source: GitHubSource,
   checks: PluginSshChecks | undefined,
+  platform: NodeJS.Platform | undefined,
 ): Promise<TransportPlan> {
-  const { ssh, https } = gitHubAttempts(source);
+  const attempts = gitHubAttempts(source);
+  const { ssh, https } = attempts;
+  if (checks !== undefined && platform === "win32") {
+    return windowsPlan(attempts, checks);
+  }
+
   if (checks === undefined || !(await httpsMayGoFirst(checks, ssh.url))) {
     return only(ssh);
   }
@@ -151,7 +239,9 @@ async function ownerRepoPlan(
  *   written as a URL. An `owner/repo` source walks the checks: when each one
  *   lets HTTPS go first, the plan clones over HTTPS first with the
  *   `ssh-not-configured` note and retries over SSH once after an HTTPS
- *   failure; otherwise, and with no checks, it clones over SSH only.
+ *   failure; otherwise, and with no checks, it clones over SSH only. On
+ *   Windows, with checks, it clones over SSH first and gives HTTPS, then SSH,
+ *   only after a key failure with the Windows checks passing (SG-SSH-05).
  */
 export async function planPluginClone(input: PluginClonePlanInput): Promise<TransportPlan> {
   const { source, force } = input;
@@ -172,5 +262,5 @@ export async function planPluginClone(input: PluginClonePlanInput): Promise<Tran
     return only({ transport: "https", url: networkCloneUrl(source) });
   }
 
-  return ownerRepoPlan(source, input.checks);
+  return ownerRepoPlan(source, input.checks, input.platform);
 }

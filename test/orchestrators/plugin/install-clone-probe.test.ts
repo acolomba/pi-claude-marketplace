@@ -5,18 +5,23 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
-import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
+import {
+  cloneOverGitHubTransports,
+  createPluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   probeInstallClone,
   type InstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { GitCommandError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { TransportAttempt } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
   AuthAttemptResult,
@@ -640,6 +645,7 @@ function contextWithOverride(override: boolean): PluginTransportContext {
       userOverride: () => Promise.resolve(override),
       urlRewritten: () => Promise.reject(new Error("the override keeps the url check")),
       showsDirectGitHub: () => Promise.reject(new Error("the override keeps ssh -G")),
+      showsDirectGitHubThroughGit: () => Promise.reject(new Error("the override keeps -G")),
     },
   });
 }
@@ -714,5 +720,70 @@ test("D-SG-21: a clone with no transport context clones once over https under th
     subject: "ghp@gits",
     first: { transport: "https", url: "https://github.com/acme/ghp.git" },
     note: "via-https",
+  });
+});
+
+test("SG-SSH-05: a Windows clone that ssh refuses for its key retries over https under the context", async (testContext) => {
+  // arrange
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, undefined);
+  const context = createPluginTransportContext({
+    env: {},
+    platform: "win32",
+    ssh: {
+      probe: () => Promise.reject(new Error("no probe runs on Windows")),
+      userOverride: () => Promise.resolve(false),
+      urlRewritten: () => Promise.resolve({ rewritten: false, exitCode: 0 }),
+      showsDirectGitHub: () => Promise.reject(new Error("Windows reads -G through git")),
+      showsDirectGitHubThroughGit: () => Promise.resolve(true),
+    },
+  });
+  const attempts: TransportAttempt[] = [];
+  const seam: InstallCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected pinned clone")),
+    async materializeOrRefreshPluginMirror({ transport }) {
+      assert.ok(transport !== undefined);
+      await cloneOverGitHubTransports({
+        plan: await transport.plan(),
+        notes: transport.notes,
+        subject: transport.subject,
+        surface: "plugin",
+        attempt: (attempt) => {
+          attempts.push(attempt);
+          return attempt.transport === "ssh"
+            ? Promise.reject(
+                new GitCommandError(
+                  { kind: "ssh-auth", detail: "publickey" },
+                  { operation: "clone --depth", exitCode: 128 },
+                ),
+              )
+            : Promise.resolve();
+        },
+      });
+      return { pluginRoot: root, resolvedSha: SHA };
+    },
+    materializePluginCommitCopy: () => Promise.resolve(root),
+  };
+
+  // act
+  await probeInstallClone({
+    source: OWNER_REPO_SOURCE,
+    seam,
+    locations,
+    auth: auth(),
+    transportContext: context,
+    subject: "ghp@gits",
+  });
+
+  // assert
+  assert.deepStrictEqual(attempts, [
+    { transport: "ssh", url: "git@github.com:acme/ghp.git" },
+    { transport: "https", url: "https://github.com/acme/ghp.git" },
+  ]);
+  assert.deepStrictEqual(context.notes.noteFor("ghp@gits"), {
+    note: "via-ssh",
+    url: "git@github.com:acme/ghp.git",
+    retries: ["https://github.com/acme/ghp.git"],
   });
 });

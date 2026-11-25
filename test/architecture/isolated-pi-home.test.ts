@@ -171,6 +171,25 @@ test("D-SG-18: the run's refusing ssh shows a direct hop to github.com for ssh -
   assert.strictEqual(stdout, "host github.com\nuser git\nhostname github.com\nport 22\n");
 });
 
+test("SG-SSH-05: the run's refusing ssh shows the same config for -G after git's options", async () => {
+  // arrange
+  const refusingSsh = path.join(path.dirname(os.homedir()), "bin", "ssh");
+
+  // act
+  const { stdout } = await promisify(execFile)(refusingSsh, [
+    "-o",
+    "BatchMode=yes",
+    "-G",
+    "-o",
+    "SendEnv=GIT_PROTOCOL",
+    "git@github.com",
+    "git-upload-pack 'acme/ghp.git'",
+  ]);
+
+  // assert
+  assert.strictEqual(stdout, "host github.com\nuser git\nhostname github.com\nport 22\n");
+});
+
 test("D-SG-18: this test process holds no git config variable of the shell that runs it", () => {
   // act
   const names = Object.keys(process.env).filter((name) =>

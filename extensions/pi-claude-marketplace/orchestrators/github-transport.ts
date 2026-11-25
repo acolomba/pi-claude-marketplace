@@ -127,24 +127,62 @@ function bothFailedError(
     : new GitHubTransportsFailedError(surface, attempts);
 }
 
-// Runs the plan's other attempt after the first failed with `firstError`.
-async function runRetry<T>(
+// Claude Code's longest chain: SSH, then HTTPS, then SSH again (upstream
+// `zHi` on Windows). A plan that gives more attempts stops there.
+const MAX_ATTEMPTS = 3;
+
+/** One failed attempt of a run, with what it failed with. */
+interface FailedAttempt {
+  readonly attempt: TransportAttempt;
+  readonly error: unknown;
+}
+
+// The failure of `failed` as the Error an attempt failure holds.
+function attemptFailure(failed: FailedAttempt): GitHubTransportAttemptFailure {
+  return { ...failed.attempt, error: asError(failed.error) };
+}
+
+/**
+ * Runs the attempt the plan gives after `failed`, once each attempt before it
+ * failed. `earlier` is the failure before `failed`, when there was one, and
+ * `retries` the URLs of the retries that ran. With no attempt to give, a
+ * first failure reaches the caller unchanged and a retry's failure throws
+ * `bothFailedError`'s error over the last two attempts.
+ */
+async function runAfter<T>(
   run: GitHubCloneRun<T>,
-  firstError: unknown,
-  next: TransportAttempt,
+  failed: FailedAttempt,
+  earlier: FailedAttempt | undefined,
+  retries: readonly string[],
 ): Promise<T> {
-  const { first } = run.plan;
-  try {
-    return await run.attempt(next);
-  } catch (lastError: unknown) {
+  const next =
+    retries.length + 1 < MAX_ATTEMPTS
+      ? await run.plan.after(failed.error, failed.attempt)
+      : undefined;
+  const label = TRANSPORT_LABELS[failed.attempt.transport];
+  if (next === undefined) {
+    if (earlier === undefined) {
+      throw failed.error;
+    }
+
     hookDebugLog(
-      `${TRANSPORT_LABELS[next.transport]} clone fallback also failed for ${run.surface} ${run.subject}: ${debugMessage(lastError)}`,
+      `${label} clone fallback also failed for ${run.surface} ${run.subject}: ${debugMessage(failed.error)}`,
       "git",
     );
-    throw bothFailedError(run.surface, [
-      { ...first, error: asError(firstError) },
-      { ...next, error: asError(lastError) },
-    ]);
+    throw bothFailedError(run.surface, [attemptFailure(earlier), attemptFailure(failed)]);
+  }
+
+  hookDebugLog(
+    `${label} clone failed for ${run.surface} ${run.subject} (${debugMessage(failed.error)}), falling back to ${TRANSPORT_LABELS[next.transport]}`,
+    "git",
+  );
+  await run.beforeRetry?.();
+  const ran = [...retries, next.url];
+  recordNote(run, ran);
+  try {
+    return await run.attempt(next);
+  } catch (error: unknown) {
+    return runAfter(run, { attempt: next, error }, failed, ran);
   }
 }
 
@@ -152,9 +190,11 @@ async function runRetry<T>(
  * SG-SSH-02: records the plan's note for `run.subject`, then runs the plan's
  * first attempt. When it fails and the plan gives another attempt, as Claude
  * Code's marketplace clone does after any error, the run logs the fallback,
- * runs `beforeRetry`, adds the retry's URL to the note, and runs that attempt.
- * A failure the plan gives no attempt after reaches the caller unchanged.
- * When the other attempt fails too, the run throws `bothFailedError`'s error.
+ * runs `beforeRetry`, adds the retry's URL to the note, and runs that attempt;
+ * a retry that fails asks the plan again, up to three attempts in all
+ * (SG-SSH-05). A first failure the plan gives no attempt after reaches the
+ * caller unchanged. When a retry fails and the plan gives nothing more, the
+ * run throws `bothFailedError`'s error over the last two attempts.
  */
 export async function cloneOverGitHubTransports<T>(run: GitHubCloneRun<T>): Promise<T> {
   const { plan, subject } = run;
@@ -167,18 +207,7 @@ export async function cloneOverGitHubTransports<T>(run: GitHubCloneRun<T>): Prom
   try {
     return await run.attempt(plan.first);
   } catch (error: unknown) {
-    const next = await plan.after(error, plan.first);
-    if (next === undefined) {
-      throw error;
-    }
-
-    hookDebugLog(
-      `${TRANSPORT_LABELS[plan.first.transport]} clone failed for ${run.surface} ${subject} (${debugMessage(error)}), falling back to ${TRANSPORT_LABELS[next.transport]}`,
-      "git",
-    );
-    await run.beforeRetry?.();
-    recordNote(run, [next.url]);
-    return runRetry(run, error, next);
+    return runAfter(run, { attempt: plan.first, error }, undefined, []);
   }
 }
 
@@ -203,6 +232,11 @@ export interface PluginSshOps {
     | { readonly kind: "missing" }
     | { readonly kind: "ran"; readonly direct: boolean; readonly exitCode: number | null }
   >;
+  /**
+   * SG-SSH-05, Windows: whether the ssh git starts for `sshUrl`, run with
+   * `-G`, shows a direct hop to github.com.
+   */
+  readonly showsDirectGitHubThroughGit: (sshUrl: string) => Promise<boolean>;
 }
 
 /**
@@ -213,6 +247,8 @@ export interface PluginSshOps {
  */
 export interface PluginTransportContext {
   readonly force: TransportForce | undefined;
+  /** SG-SSH-05: the platform the command's clones run on; Windows has its own plan. */
+  readonly platform: NodeJS.Platform;
   readonly checks: PluginSshChecks;
   readonly notes: GitHubCloneNotes;
 }
@@ -239,28 +275,36 @@ function once<T>(answer: () => Promise<T>): () => Promise<T> {
   };
 }
 
+// A function that runs `answer` the first time it is called for a URL and
+// gives that first answer to every call for the same URL.
+function oncePerUrl<T>(answer: (url: string) => Promise<T>): (url: string) => Promise<T> {
+  const answers = new Map<string, Promise<T>>();
+  return (url) => {
+    let answered = answers.get(url);
+    if (answered === undefined) {
+      answered = answer(url);
+      answers.set(url, answered);
+    }
+
+    return answered;
+  };
+}
+
 // The rewrite check of the user's git config, one read per URL. A rewritten
 // URL, or a read git could not answer, writes Claude Code's debug line.
 function urlRewrittenOnce(ssh: PluginSshOps): PluginSshChecks["urlRewritten"] {
-  const answers = new Map<string, Promise<boolean>>();
-  return (sshUrl) => {
-    let answer = answers.get(sshUrl);
-    if (answer === undefined) {
-      answer = ssh.urlRewritten(sshUrl).then(({ rewritten, exitCode }) => {
-        if (rewritten) {
-          hookDebugLog(
-            `GitHub SSH URL is rewritten by git config, or git could not say (code=${exitCode}): staying on SSH`,
-            "git",
-          );
-        }
+  return oncePerUrl((sshUrl) =>
+    ssh.urlRewritten(sshUrl).then(({ rewritten, exitCode }) => {
+      if (rewritten) {
+        hookDebugLog(
+          `GitHub SSH URL is rewritten by git config, or git could not say (code=${exitCode}): staying on SSH`,
+          "git",
+        );
+      }
 
-        return rewritten;
-      });
-      answers.set(sshUrl, answer);
-    }
-
-    return answer;
-  };
+      return rewritten;
+    }),
+  );
 }
 
 // The two checks that `ssh -G` answers, from one launch: whether an ssh was
@@ -292,12 +336,13 @@ function sshHopChecks(
  * D-SG-18: the transport context of one command. `force` is read from `env`
  * (`transportForce`) the first time a clone asks for it, so a command whose
  * clones are all warm never reads the GitHub base (NFR-5). Each check runs on
- * the port at most once for the context, the URL check once per URL, and the
- * notes start empty.
+ * the port at most once for the context, the URL checks once per URL, and the
+ * notes start empty. SG-SSH-05: `platform` defaults to this process's.
  */
 export function createPluginTransportContext(args: {
   readonly env: NodeJS.ProcessEnv;
   readonly ssh: PluginSshOps;
+  readonly platform?: NodeJS.Platform;
 }): PluginTransportContext {
   const { ssh } = args;
   let force: { readonly value: TransportForce | undefined } | undefined;
@@ -306,11 +351,13 @@ export function createPluginTransportContext(args: {
       force ??= { value: transportForce(args.env) };
       return force.value;
     },
+    platform: args.platform ?? process.platform,
     checks: {
       userOverride: once(() => ssh.userOverride()),
       urlRewritten: urlRewrittenOnce(ssh),
       probe: once(() => ssh.probe()),
       ...sshHopChecks(ssh),
+      showsDirectGitHubThroughGit: oncePerUrl((sshUrl) => ssh.showsDirectGitHubThroughGit(sshUrl)),
     },
     notes: createGitHubCloneNotes(),
   };

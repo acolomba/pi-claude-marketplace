@@ -3170,6 +3170,129 @@ describe("createGitProcess ssh", () => {
     });
   });
 
+  test("SG-SSH-05: adds the -G tail after Pi's own ssh command for a network-lane ls-remote on Windows", async () => {
+    // arrange
+    const base = { Path: String.raw`C:\Git\cmd`, git_ssh_command: "ssh -i C:/keys/work" };
+    const request: GitRequest = { ...SSH_LIST, sshTail: "print-config" };
+
+    // act
+    const launches = await runAfterSshRead(base, NO_SSH_CONFIG, request, {
+      platform: "win32",
+      files: [String.raw`C:\Git\cmd\git.exe`],
+      cwd: String.raw`C:\work\project`,
+      neutral: String.raw`C:\Temp`,
+    });
+
+    // assert
+    const env = launches[1]?.[2].env ?? {};
+    assert.deepStrictEqual(
+      Object.entries(env).filter(([key]) => key.toUpperCase() === "GIT_SSH_COMMAND"),
+      [
+        [
+          "GIT_SSH_COMMAND",
+          fromNeutral(`ssh -i C:/keys/work ${BATCH_OPTIONS} -G >&2`, String.raw`C:\Temp`),
+        ],
+      ],
+    );
+  });
+
+  test("SG-SSH-05: adds the -G tail after Pi's own ssh command off Windows too", async () => {
+    // arrange
+    const request: GitRequest = { ...SSH_LIST, sshTail: "print-config" };
+
+    // act
+    const launches = await runAfterSshRead({ PATH: "/usr/bin" }, NO_SSH_CONFIG, request);
+
+    // assert
+    assert.deepStrictEqual(
+      launches.map(([, args, options]) => [args, options.env.GIT_SSH_COMMAND]),
+      [
+        [SSH_READ, "false"],
+        [
+          [...hardening("/dev/null"), "ls-remote", "--end-of-options", "git@h.test:acme/tools.git"],
+          fromNeutral(`ssh ${BATCH_OPTIONS} -G >&2`),
+        ],
+      ],
+    );
+  });
+
+  test("SG-SSH-05: adds the -G tail after a GIT_SSH program the user set in another case on Windows", async () => {
+    // arrange
+    const base = { Path: String.raw`C:\Git\cmd`, Git_Ssh: String.raw`C:\OpenSSH\ssh.exe` };
+    const request: GitRequest = { ...SSH_LIST, sshTail: "print-config" };
+
+    // act
+    const launches = await runAfterSshRead(base, NO_SSH_CONFIG, request, {
+      platform: "win32",
+      files: [String.raw`C:\Git\cmd\git.exe`],
+      cwd: String.raw`C:\work\project`,
+      neutral: String.raw`C:\Temp`,
+    });
+
+    // assert
+    const env = launches[1]?.[2].env ?? {};
+    assert.deepStrictEqual(
+      Object.entries(env)
+        .filter(([key]) => key.toUpperCase().startsWith("GIT_SSH"))
+        .sort(([left], [right]) => left.localeCompare(right)),
+      [
+        [
+          "GIT_SSH_COMMAND",
+          fromNeutral(
+            String.raw`'C:\OpenSSH\ssh.exe' ${BATCH_OPTIONS} -G >&2`,
+            String.raw`C:\Temp`,
+          ),
+        ],
+        ["GIT_SSH_VARIANT", "ssh"],
+      ],
+    );
+  });
+
+  for (const { label, request } of [
+    {
+      label: "a local-lane ls-remote",
+      request: { ...SSH_LIST, lane: "local", sshTail: "print-config" },
+    },
+    {
+      label: "a network-lane fetch",
+      request: {
+        subcommand: "fetch",
+        lane: "network",
+        operands: ["origin"],
+        sshTail: "print-config",
+        timeoutMs: 5_000,
+      },
+    },
+    {
+      label: "a network-lane clone",
+      request: {
+        subcommand: "clone",
+        lane: "network",
+        operands: ["git@h.test:acme/tools.git", "/work/clone"],
+        sshTail: "print-config",
+        timeoutMs: 5_000,
+      },
+    },
+  ] satisfies ReadonlyArray<{ label: string; request: GitRequest }>) {
+    test(`SG-SSH-05, T-04-34: refuses the -G tail on ${label} before any lookup or spawn`, async () => {
+      // arrange
+      const { git, control, host } = createFakeGit();
+
+      // act & assert
+      await assert.rejects(
+        git.run(request),
+        gitFailure({
+          failure: { kind: "refused-input" },
+          operation: request.subcommand,
+          exitCode: null,
+          stderr: "",
+        }),
+      );
+      assert.deepStrictEqual(control.launches(), []);
+      assert.deepStrictEqual(host.probes, []);
+    });
+  }
+
   for (const { label, request, sshCommand } of [
     { label: "a network-lane credential", request: FILL, sshCommand: "ssh -i /home/user/key" },
     {

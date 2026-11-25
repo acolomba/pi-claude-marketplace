@@ -28,6 +28,7 @@ import {
   resolveRemoteRef,
   runWithGitAbortSignal,
   sshShowsDirectGitHub,
+  sshShowsDirectGitHubThroughGit,
   sshUrlRewritten,
   userSshOverride,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -56,6 +57,7 @@ import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/pl
 import type {
   GitProcess,
   GitRequest,
+  GitResult,
   SshRun,
   SystemGitProcess,
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
@@ -2677,6 +2679,123 @@ describe("sshShowsDirectGitHub", () => {
 
     // assert
     assert.deepStrictEqual(checked, { kind: "ran", direct: false, exitCode: null });
+  });
+});
+
+/** A git process that answers each run with `answer` and keeps each request. */
+function answeringGitProcess(answer: () => Promise<GitResult>): {
+  readonly gitProcess: GitProcess;
+  readonly requests: GitRequest[];
+} {
+  const requests: GitRequest[] = [];
+  return {
+    requests,
+    gitProcess: {
+      locate: () => Promise.reject(new Error("the check locates no git")),
+      run: (request) => {
+        requests.push(request);
+        return answer();
+      },
+    },
+  };
+}
+
+describe("sshShowsDirectGitHubThroughGit", () => {
+  const SSH_URL = "git@github.com:acme/ghp.git";
+  const DIRECT = "host github.com\nuser git\nhostname github.com\nport 22\n";
+  const NOT_READ = "fatal: Could not read from remote repository.\n";
+
+  test("SG-SSH-05: asks git for a network-lane ls-remote with the -G tail and reads a direct hop", async () => {
+    // arrange
+    const { gitProcess, requests } = answeringGitProcess(() =>
+      Promise.resolve({ exitCode: 0, stdout: "", stderr: DIRECT }),
+    );
+
+    // act
+    const direct = await sshShowsDirectGitHubThroughGit(SSH_URL, gitProcess);
+
+    // assert
+    assert.strictEqual(direct, true);
+    assert.deepStrictEqual(requests, [
+      {
+        subcommand: "ls-remote",
+        lane: "network",
+        operands: [SSH_URL],
+        sshTail: "print-config",
+        timeoutMs: 5_000,
+      },
+    ]);
+  });
+
+  test("SG-SSH-05: carries the abort scope's signal", async () => {
+    // arrange
+    const controller = new AbortController();
+    const { gitProcess, requests } = answeringGitProcess(() =>
+      Promise.resolve({ exitCode: 0, stdout: "", stderr: DIRECT }),
+    );
+
+    // act
+    await runWithGitAbortSignal(controller.signal, () =>
+      sshShowsDirectGitHubThroughGit(SSH_URL, gitProcess),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      requests.map((request) => request.signal),
+      [controller.signal],
+    );
+  });
+
+  for (const { label, stderr, direct } of [
+    { label: "a direct hop", stderr: `${DIRECT}${NOT_READ}`, direct: true },
+    { label: "a proxyjump line", stderr: `${DIRECT}proxyjump bastion\n${NOT_READ}`, direct: false },
+    {
+      label: "a proxycommand line",
+      stderr: `${DIRECT}ProxyCommand nc %h %p\n${NOT_READ}`,
+      direct: false,
+    },
+    { label: "no hostname line", stderr: NOT_READ, direct: false },
+  ]) {
+    test(`SG-SSH-05: reads ${label} in the stderr of git's failed run as ${direct ? "direct" : "not direct"}`, async () => {
+      // arrange
+      const failure = new GitCommandError(
+        { kind: "ssh-auth", detail: "unconfirmed" },
+        { operation: "ls-remote", exitCode: 128, stderr },
+      );
+      const { gitProcess } = answeringGitProcess(() => Promise.reject(failure));
+
+      // act
+      const checked = await sshShowsDirectGitHubThroughGit(SSH_URL, gitProcess);
+
+      // assert
+      assert.strictEqual(checked, direct);
+    });
+  }
+
+  test("SG-SSH-05: reads a run that timed out as not direct, whatever it printed", async () => {
+    // arrange
+    const failure = new GitCommandError(
+      { kind: "timeout", timeoutMs: 5_000 },
+      { operation: "ls-remote", stderr: DIRECT },
+    );
+    const { gitProcess } = answeringGitProcess(() => Promise.reject(failure));
+
+    // act
+    const direct = await sshShowsDirectGitHubThroughGit(SSH_URL, gitProcess);
+
+    // assert
+    assert.strictEqual(direct, false);
+  });
+
+  test("SG-SSH-05: reads a failure that is not git's as not direct", async () => {
+    // arrange
+    const { gitProcess } = answeringGitProcess(() => Promise.reject(new Error(DIRECT)));
+
+    // act
+    const direct = await sshShowsDirectGitHubThroughGit(SSH_URL, gitProcess);
+
+    // assert
+    assert.strictEqual(direct, false);
   });
 });
 

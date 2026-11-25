@@ -180,6 +180,14 @@ export interface GitRequest {
   readonly signal?: AbortSignal;
   /** The non-zero exit codes that resolve instead of rejecting. */
   readonly allowExit?: readonly number[];
+  /**
+   * SG-SSH-05, upstream `Qmt`'s Windows pass: `print-config` adds ssh's `-G`
+   * option, with its output sent to stderr, after the module's own ssh
+   * command, so the ssh git starts prints the config it resolves and connects
+   * to nothing. Only a network-lane `ls-remote` accepts it; any other request
+   * that asks for it is refused before anything starts.
+   */
+  readonly sshTail?: "print-config";
 }
 
 /** A run that exited with 0 or with an allowed code. */
@@ -590,14 +598,33 @@ function exportedVariant(
   return configVariant ?? (NAMED_VARIANTS.has(nameVariant) ? nameVariant : undefined);
 }
 
+// SG-SSH-05: the words a request's `sshTail` adds after the ssh command, as
+// upstream adds them to its own hardened command. A fixed literal: no
+// marketplace value reaches it (T-04-34).
+const SSH_TAILS: Readonly<Record<NonNullable<GitRequest["sshTail"]>, string>> = {
+  "print-config": " -G >&2",
+};
+
+// SG-SSH-05: whether `request` may carry its `sshTail`. Only a network-lane
+// `ls-remote` may, because only there does git start the user's ssh for a
+// request that changes nothing.
+function acceptsSshTail(request: GitRequest): boolean {
+  return (
+    request.sshTail === undefined ||
+    (request.lane === "network" && request.subcommand === "ls-remote")
+  );
+}
+
 // D-SG-05, Q14 `nn`: the user's ssh command with the variant's options, run
 // from the neutral directory. GIT_SSH_COMMAND outranks every config scope,
 // so a repository's own `core.sshCommand` never runs, and GIT_SSH goes.
+// SG-SSH-05: `tail` follows the whole command.
 function sshEnvironment(
   base: NodeJS.ProcessEnv,
   rules: PlatformRules,
   config: ReadonlyMap<string, string>,
   neutral: string,
+  tail: GitRequest["sshTail"],
 ): EnvironmentChange {
   const program = userValue(base, "GIT_SSH", rules);
   const command =
@@ -612,7 +639,8 @@ function sshEnvironment(
     .toLowerCase();
   const variant = userVariant ?? configVariant ?? nameVariant;
   const options = SSH_VARIANT_OPTIONS.get(variant.toLowerCase()) ?? OPENSSH_OPTIONS;
-  const wrapped = `CDPATH= cd -- ${shellQuoted(neutral)} 2>/dev/null || cd / || exit 1; ${[command, ...options].join(" ")}`;
+  const suffix = tail === undefined ? "" : SSH_TAILS[tail];
+  const wrapped = `CDPATH= cd -- ${shellQuoted(neutral)} 2>/dev/null || cd / || exit 1; ${[command, ...options].join(" ")}${suffix}`;
   const exported = exportedVariant(userVariant, configVariant, nameVariant);
   return {
     removed: ["GIT_SSH"],
@@ -1135,7 +1163,7 @@ export function createGitProcess(options: GitProcessOptions): SystemGitProcess {
 
     // A refused request starts nothing, and its error names no operand.
     const words = subcommandWords(request);
-    if (words === undefined) {
+    if (words === undefined || !acceptsSshTail(request)) {
       throw new GitCommandError({ kind: "refused-input" }, { operation });
     }
 
@@ -1195,7 +1223,7 @@ export function createGitProcess(options: GitProcessOptions): SystemGitProcess {
       deadline,
     );
     const neutral = await neutralDirectory(operationOf(request));
-    return sshEnvironment(options.env, rules, configValues(read.stdout), neutral);
+    return sshEnvironment(options.env, rules, configValues(read.stdout), neutral, request.sshTail);
   }
 
   // SG-PRC-03: a neutral directory that cannot be made fails the command.

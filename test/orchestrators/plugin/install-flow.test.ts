@@ -87,12 +87,15 @@ for (const { name, createOperation } of [
 function inertTransportContext(): PluginTransportContext {
   return {
     force: undefined,
+    platform: "linux",
     checks: {
       userOverride: () => Promise.reject(new Error("no check runs for a url source")),
       urlRewritten: () => Promise.reject(new Error("no check runs for a url source")),
       probe: () => Promise.reject(new Error("no check runs for a url source")),
       sshPresent: () => Promise.reject(new Error("no check runs for a url source")),
       showsDirectGitHub: () => Promise.reject(new Error("no check runs for a url source")),
+      showsDirectGitHubThroughGit: () =>
+        Promise.reject(new Error("no check runs for a url source")),
     },
     notes: createGitHubCloneNotes(),
   };
