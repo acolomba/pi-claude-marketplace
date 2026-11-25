@@ -3,6 +3,7 @@
 // Public composition root for install transaction sequencing.
 
 import { createRemovalOps } from "../../shared/fs-utils.ts";
+import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import {
   createInstallMissingDependencyLedger,
@@ -17,6 +18,7 @@ import { createInstallPlanning } from "./install-flow-planning.ts";
 
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
@@ -51,14 +53,22 @@ const INSTALL_PLANNING = createInstallPlanning(
   INSTALL_FILE_CAPABILITIES,
 );
 
-/** Binds install orchestration to one required semantic transaction owner. */
+/**
+ * Binds install orchestration to one required semantic transaction owner.
+ *
+ * D-SG-18: each install call that brings no transport context gets a new one
+ * from `newTransportContext`, by default bound to the user's real ssh, so one
+ * command probes once across its cascade. A caller that runs several installs
+ * as one command passes its own.
+ */
 export function createInstallPlugin(
   transaction: InstallTransaction,
   hooksRouting: InstallHooksRouting,
   completionCache: CompletionCache,
   env: ClaudeEnv = process.env,
+  newTransportContext: () => PluginTransportContext = defaultPluginTransportContext,
 ): (opts: InstallPluginOptions) => Promise<InstallPluginOutcome> {
-  return createInstallLedgerPlugin(
+  const install = createInstallLedgerPlugin(
     transaction,
     hooksRouting,
     completionCache,
@@ -66,6 +76,11 @@ export function createInstallPlugin(
     INSTALL_FILE_CAPABILITIES,
     env,
   );
+  return (opts) =>
+    install({
+      ...opts,
+      transportContext: opts.transportContext ?? newTransportContext(),
+    });
 }
 
 /** Binds the missing-dependency install to the install transaction owner. */

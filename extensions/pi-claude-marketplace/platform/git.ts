@@ -13,7 +13,7 @@ import { gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.t
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 
 import { withOneShotCredential } from "./git-one-shot-credential.ts";
-import { NODE_GIT_PROCESS } from "./git-process.ts";
+import { configValues, NODE_GIT_PROCESS, SSH_CONFIG_READ } from "./git-process.ts";
 import { gitTimeoutMs } from "./git-timeout.ts";
 
 import type { GitAuthBundle } from "./git-credential.ts";
@@ -37,6 +37,8 @@ import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from
  * parameter, and every request it sends takes its limit from
  * `gitTimeoutMs()` (D-SG-13). SG-SSH-02: `probeGitHubSsh` runs Claude Code's
  * ssh probe of GitHub through the same git process, with its own fixed limit.
+ * D-SG-18: `userSshOverride` and `sshUrlRewritten` are two of the checks that
+ * keep a GitHub plugin clone on SSH; both read the user's own settings only.
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred)
@@ -946,6 +948,83 @@ export async function probeGitHubSsh(
   }
 
   return verdict;
+}
+
+// D-SG-18: the variables whose presence means the user chose the ssh command.
+const SSH_COMMAND_VARIABLES = ["GIT_SSH_COMMAND", "GIT_SSH"] as const;
+
+// Claude Code's limit of each check of the user's ssh settings.
+const SSH_CHECK_TIMEOUT_MS = 5_000;
+
+// Whether `env` holds `name`, an empty value included, as Claude Code reads
+// presence. On Windows a spelling in another case counts too.
+function hasVariable(env: NodeJS.ProcessEnv, name: string, platform: NodeJS.Platform): boolean {
+  if (env[name] !== undefined) {
+    return true;
+  }
+
+  return (
+    platform === "win32" &&
+    Object.entries(env).some(([key, value]) => key.toUpperCase() === name && value !== undefined)
+  );
+}
+
+/**
+ * D-SG-18, upstream `Qmt`: whether the user chose the command git runs for
+ * ssh. `GIT_SSH_COMMAND` or `GIT_SSH` in `user.env` counts when present, an
+ * empty value included (Pitfall 4). So does `core.sshCommand` in the user's
+ * git config, read as the git process reads the user's ssh choice. `user.env`
+ * is the environment Pi started with, never a git child's, which holds Pi's
+ * own wrapper (D-SG-05). A config read that fails reads as no setting and
+ * writes a debug line, as Claude Code goes on without the user's ssh settings.
+ */
+export async function userSshOverride(
+  user: { readonly env: NodeJS.ProcessEnv; readonly platform?: NodeJS.Platform },
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<boolean> {
+  const platform = user.platform ?? process.platform;
+  if (SSH_COMMAND_VARIABLES.some((name) => hasVariable(user.env, name, platform))) {
+    return true;
+  }
+
+  let read: GitResult;
+  try {
+    read = await gitProcess.run({ ...SSH_CONFIG_READ, timeoutMs: gitTimeoutMs() });
+  } catch (error: unknown) {
+    hookDebugLog(
+      `could not read the user's git ssh settings: ${redactAbsolutePaths(errorMessage(error))}`,
+      "git",
+    );
+    return false;
+  }
+
+  return configValues(read.stdout).has("core.sshcommand");
+}
+
+/**
+ * D-SG-18, upstream `Qmt`: whether the user's git config rewrites `sshUrl`,
+ * as git's own URL read of `ls-remote` answers it on the local lane, with no
+ * Pi request pair (D-SG-16, D-SG-21) and a 5-second limit. Only an exit 0 that
+ * prints `sshUrl` unchanged reads as not rewritten; any other answer, a failed
+ * read included, reads as rewritten. `exitCode` is the read's exit code, or
+ * null when git gave none.
+ */
+export async function sshUrlRewritten(
+  sshUrl: string,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<{ readonly rewritten: boolean; readonly exitCode: number | null }> {
+  try {
+    const read = await gitProcess.run({
+      subcommand: "ls-remote",
+      lane: "local",
+      options: ["--get-url"],
+      operands: [sshUrl],
+      timeoutMs: SSH_CHECK_TIMEOUT_MS,
+    });
+    return { rewritten: read.stdout.trim() !== sshUrl, exitCode: read.exitCode };
+  } catch (error: unknown) {
+    return { rewritten: true, exitCode: error instanceof GitCommandError ? error.exitCode : null };
+  }
 }
 
 /**

@@ -1,5 +1,7 @@
 import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
+import { planPluginClone } from "../../domain/github-plugin-transport.ts";
 import { buildCloneAuth } from "../auth-host.ts";
+import { createGitHubCloneNotes, transportForce } from "../github-transport.ts";
 
 import {
   materializeOrRefreshPluginMirror,
@@ -16,6 +18,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 
 /** Clone-cache operations used to materialize an install source. */
 export interface InstallCloneCacheSeam {
@@ -38,6 +41,14 @@ export interface InstallCloneProbeOptions {
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
   };
+  /**
+   * D-SG-18: the command's transport context, whose checks and notes every
+   * clone of the command shares. Omitted, the clone stays on SSH unless the
+   * environment forces HTTPS.
+   */
+  readonly transportContext?: PluginTransportContext;
+  /** D-SG-22: the subject of the row that reports the clone, `<plugin>@<marketplace>`. */
+  readonly subject: string;
 }
 
 const REAL_INSTALL_CLONE_CACHE_SEAM: InstallCloneCacheSeam = {
@@ -48,11 +59,34 @@ const REAL_INSTALL_CLONE_CACHE_SEAM: InstallCloneCacheSeam = {
 };
 
 /**
+ * D-SG-18: the clone transport of one install source. With a context, the
+ * plan reads its force and its checks, and the note goes to its notes. With
+ * none, the plan reads the force of this process's environment, as Claude
+ * Code reads its HTTPS switch before it looks for a context (upstream `zHi`),
+ * and has no checks, so a GitHub clone stays on SSH unless forced; its note
+ * goes nowhere.
+ */
+function installCloneTransport(options: InstallCloneProbeOptions): CloneTransport {
+  const context = options.transportContext;
+  return {
+    plan: () =>
+      planPluginClone(
+        context === undefined
+          ? { source: options.source, force: transportForce(process.env) }
+          : { source: options.source, force: context.force, checks: context.checks },
+      ),
+    notes: context?.notes ?? createGitHubCloneNotes(),
+    subject: options.subject,
+  };
+}
+
+/**
  * Materializes one install source and classifies its clone-relative plugin root.
  *
  * A resolved sha is returned only with a materialized result. Missing or
  * escaping subdirectories cannot leak a stale sha into the install record, and
- * clone failures retain their original thrown value.
+ * clone failures retain their original thrown value. D-SG-18: every clone the
+ * source needs runs over the transport `installCloneTransport` plans.
  */
 export async function probeInstallClone(options: InstallCloneProbeOptions): Promise<{
   readonly result: GitPluginRootResult;
@@ -65,6 +99,8 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     options.cloneCandidates?.add(key);
   };
 
+  const transport = installCloneTransport(options);
+
   if (source.sha === undefined) {
     // GIT-01 / GIT-04: install already holds the scope's state lock, so the
     // mirror step and the copy run under it (GIT-03).
@@ -73,6 +109,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
       source,
       auth: buildCloneAuth(cloneUrl, source.kind, options.auth),
       onCloneCreated,
+      transport,
     });
     return {
       result,
@@ -89,6 +126,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     ...(pin.ref !== undefined && { ref: pin.ref }),
     resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),
     onCloneCreated,
+    transport,
   });
   const result = await resolveGitPluginRootWithSubdir(source, cloneRoot, pin.pin);
   return { result, resolvedSha: result.kind === "materialized" ? pin.pin : undefined };

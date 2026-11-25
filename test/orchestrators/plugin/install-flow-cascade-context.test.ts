@@ -4,6 +4,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { defaultPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -101,7 +102,7 @@ function emptyCapture(): InstallFailureCapture {
   return { rollbackPartials: [], version: undefined };
 }
 
-test("D-P3-11: builds member ledger options from shared and member inputs, gating consent on the run's MCP implementation", () => {
+test("D-P3-11, D-SG-18: builds member ledger options from shared and member inputs, gating consent on the run's MCP implementation", () => {
   // arrange
   const { ctx, run } = makeCtx({ mcpImplementation: "builtin" });
   const credentialOps: CredentialOps = {
@@ -121,6 +122,7 @@ test("D-P3-11: builds member ledger options from shared and member inputs, gatin
     pollToken: () => Promise.resolve({ kind: "expired_token" }),
   };
   const authMemo = new Map<string, AuthAttemptResult>();
+  const transportContext = defaultPluginTransportContext({});
   const cloneCacheSeam = {
     resolvePluginPin,
     materializePluginClone,
@@ -141,6 +143,7 @@ test("D-P3-11: builds member ledger options from shared and member inputs, gatin
       credentialOps,
       deviceFlowHttp,
       authMemo,
+      transportContext,
       cloneCacheSeam,
     },
     {},
@@ -186,9 +189,11 @@ test("D-P3-11: builds member ledger options from shared and member inputs, gatin
     credentialOps,
     deviceFlowHttp,
     authMemo,
+    transportContext,
     marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
     addedMarketplaces,
   });
+  assert.strictEqual(options.transportContext, transportContext);
 });
 
 test("builds member ledger options with only the required inputs", () => {

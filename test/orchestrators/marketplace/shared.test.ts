@@ -11,6 +11,7 @@ import {
   AgentsUnstageFailureError,
   DEFAULT_GIT_OPS,
   DEFAULT_GITHUB_SSH_OPS,
+  defaultPluginTransportContext,
   cascadeUnstagePlugin,
   loadVisibleMarketplaces,
   crossScopeFlag,
@@ -376,6 +377,49 @@ test("T-04-15: DEFAULT_GITHUB_SSH_OPS probes the refusing ssh that the test run 
 
   // assert
   assert.strictEqual(probed, "not-configured");
+});
+
+test("D-SG-18: DEFAULT_GITHUB_SSH_OPS reads no ssh choice in this process's environment and isolated home", async () => {
+  // act
+  const chosen = await DEFAULT_GITHUB_SSH_OPS.userOverride();
+
+  // assert
+  assert.strictEqual(chosen, false);
+});
+
+test("D-SG-18: DEFAULT_GITHUB_SSH_OPS reads a url no insteadOf names as not rewritten", async () => {
+  // act
+  const checked = await DEFAULT_GITHUB_SSH_OPS.urlRewritten("git@git.example.invalid:acme/ghp.git");
+
+  // assert
+  assert.deepStrictEqual(checked, { rewritten: false, exitCode: 0 });
+});
+
+test("D-SG-24: defaultPluginTransportContext reads its force from the environment it is given", () => {
+  // act
+  const context = defaultPluginTransportContext({ CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" });
+
+  // assert
+  assert.strictEqual(context.force, "prefer-https");
+});
+
+test("D-SG-18: defaultPluginTransportContext checks the user's settings through the default port", async (t) => {
+  // arrange
+  const previous = process.env.CLAUDE_CODE_PLUGIN_PREFER_HTTPS;
+  delete process.env.CLAUDE_CODE_PLUGIN_PREFER_HTTPS;
+  t.after(() => {
+    if (previous !== undefined) {
+      process.env.CLAUDE_CODE_PLUGIN_PREFER_HTTPS = previous;
+    }
+  });
+
+  // act
+  const context = defaultPluginTransportContext();
+
+  // assert
+  assert.strictEqual(await context.checks.userOverride(), false);
+  assert.strictEqual(await context.checks.probe(), "not-configured");
+  assert.strictEqual(context.notes.noteFor("ghp@gits"), undefined);
 });
 
 test("AgentsUnstageFailureError preserves its typed failures and standard Error fields", () => {

@@ -2,8 +2,10 @@
 //
 // SG-SSH-02: runs a GitHub clone over the transports its plan
 // (`domain/github-transport.ts`) orders, and keeps the D-SG-22 note of each
-// clone for the row that reports it. The module names no git surface: the
-// caller passes the attempt, so it stays outside NETWORK_SEAMS (NFR-5).
+// clone for the row that reports it. D-SG-18: it also holds one command's
+// transport context for its plugin clones, whose checks answer once per
+// command. The module names no git surface: the caller passes the attempt and
+// the port, so it stays outside NETWORK_SEAMS (NFR-5).
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage, GitHubTransportsFailedError } from "../shared/errors.ts";
@@ -12,6 +14,7 @@ import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 import { redactCredentials } from "../shared/redact-credentials.ts";
 import { preferHttps } from "../shared/upstream-flag.ts";
 
+import type { PluginSshChecks } from "../domain/github-plugin-transport.ts";
 import type {
   TransportAttempt,
   TransportForce,
@@ -177,4 +180,104 @@ export async function cloneOverGitHubTransports<T>(run: GitHubCloneRun<T>): Prom
     recordNote(run, [next.url]);
     return runRetry(run, error, next);
   }
+}
+
+/**
+ * D-SG-18: the user's ssh as a plugin clone's checks read it. The port of
+ * `orchestrators/marketplace/shared.ts` implements it.
+ */
+export interface PluginSshOps {
+  /** Claude Code's probe of whether the user's ssh authenticates to GitHub. */
+  readonly probe: () => Promise<"configured" | "not-configured" | "unknown">;
+  /** `GIT_SSH_COMMAND` or `GIT_SSH` in the user's environment, or `core.sshCommand`. */
+  readonly userOverride: () => Promise<boolean>;
+  /** Whether the user's git config rewrites `sshUrl`, with the read's exit code. */
+  readonly urlRewritten: (
+    sshUrl: string,
+  ) => Promise<{ readonly rewritten: boolean; readonly exitCode: number | null }>;
+}
+
+/**
+ * D-SG-18: one command's GitHub transport choice for its plugin clones. Each
+ * check answers once per command, the probe included, so an install and its
+ * dependencies probe once. The notes keep each clone's D-SG-22 note for the
+ * row that reports it.
+ */
+export interface PluginTransportContext {
+  readonly force: TransportForce | undefined;
+  readonly checks: PluginSshChecks;
+  readonly notes: GitHubCloneNotes;
+}
+
+/**
+ * D-SG-18: one plugin clone's plan, with the notes and the subject it reports
+ * under. The plan is made only when a clone step runs, so a warm cache asks
+ * no check and runs no probe (NFR-5).
+ */
+export interface CloneTransport {
+  readonly plan: () => Promise<TransportPlan>;
+  readonly notes: GitHubCloneNotes;
+  /** The subject of the row that reports the clone, such as `<plugin>@<marketplace>`. */
+  readonly subject: string;
+}
+
+// A function that runs `answer` the first time it is called and gives that
+// first answer to every call.
+function once<T>(answer: () => Promise<T>): () => Promise<T> {
+  let answered: Promise<T> | undefined;
+  return () => {
+    answered ??= answer();
+    return answered;
+  };
+}
+
+// The rewrite check of the user's git config, one read per URL. A rewritten
+// URL, or a read git could not answer, writes Claude Code's debug line.
+function urlRewrittenOnce(ssh: PluginSshOps): PluginSshChecks["urlRewritten"] {
+  const answers = new Map<string, Promise<boolean>>();
+  return (sshUrl) => {
+    let answer = answers.get(sshUrl);
+    if (answer === undefined) {
+      answer = ssh.urlRewritten(sshUrl).then(({ rewritten, exitCode }) => {
+        if (rewritten) {
+          hookDebugLog(
+            `GitHub SSH URL is rewritten by git config, or git could not say (code=${exitCode}): staying on SSH`,
+            "git",
+          );
+        }
+
+        return rewritten;
+      });
+      answers.set(sshUrl, answer);
+    }
+
+    return answer;
+  };
+}
+
+/**
+ * D-SG-18: the transport context of one command. `force` is read from `env`
+ * (`transportForce`) the first time a clone asks for it, so a command whose
+ * clones are all warm never reads the GitHub base (NFR-5). Each check runs on
+ * the port at most once for the context, the URL check once per URL, and the
+ * notes start empty.
+ */
+export function createPluginTransportContext(args: {
+  readonly env: NodeJS.ProcessEnv;
+  readonly ssh: PluginSshOps;
+}): PluginTransportContext {
+  const { ssh } = args;
+  let force: { readonly value: TransportForce | undefined } | undefined;
+  return {
+    get force() {
+      force ??= { value: transportForce(args.env) };
+      return force.value;
+    },
+    checks: {
+      userOverride: once(() => ssh.userOverride()),
+      urlRewritten: urlRewrittenOnce(ssh),
+      probe: once(() => ssh.probe()),
+    },
+    notes: createGitHubCloneNotes(),
+  };
 }

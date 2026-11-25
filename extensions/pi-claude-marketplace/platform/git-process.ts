@@ -480,8 +480,9 @@ const LANES: Readonly<Record<GitLane, LaneRules>> = {
 // local lane without a working directory, so it runs in the neutral
 // directory, and a repository's own config never answers it. Exit 1 means
 // that neither key is set. IN-02: `--null` ends each record with NUL, so a
-// value that holds a newline cannot pose as another key.
-const SSH_CONFIG_READ = {
+// value that holds a newline cannot pose as another key. D-SG-18: the plugin
+// clone's `core.sshCommand` check reads the same keys.
+export const SSH_CONFIG_READ = {
   subcommand: "config",
   lane: "local",
   options: ["--get-regexp", "--null"],
@@ -555,7 +556,7 @@ function userValue(env: NodeJS.ProcessEnv, name: string, rules: PlatformRules): 
 // newline, and the value, and ends with NUL; a key set with no value has no
 // newline. A CR before the newline goes with it. The last record of a key
 // wins, and an empty or missing value counts as unset.
-function configValues(stdout: string): ReadonlyMap<string, string> {
+export function configValues(stdout: string): ReadonlyMap<string, string> {
   const values = new Map<string, string>();
   for (const record of stdout.split("\0")) {
     const newline = record.indexOf("\n");

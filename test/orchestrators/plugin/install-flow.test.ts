@@ -6,6 +6,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   createInstallMissingDependency,
   createInstallPlugin,
@@ -16,13 +17,23 @@ import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 
 import {
+  createGitOps,
   INSTALL_HOST_HEAD,
   installGitAppAfterDependencyMove,
+  makeCtx,
+  offerGitPlugin,
   recordedSha,
+  seamWith,
+  seedCatalogScope,
   withHermeticHome,
 } from "./install-flow-fixture.ts";
 
+import type {
+  CloneTransport,
+  PluginTransportContext,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { InstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
+import type { InstallTestOwner } from "./install-flow-fixture.ts";
 
 const TRANSACTION: InstallTransaction = { runPhases, withLockedStateTransaction };
 
@@ -71,6 +82,112 @@ for (const { name, createOperation } of [
     assert.strictEqual(typeof explicitOperation, expectedType);
   });
 }
+
+/** A transport context whose checks fail a case that runs them. */
+function inertTransportContext(): PluginTransportContext {
+  return {
+    force: undefined,
+    checks: {
+      userOverride: () => Promise.reject(new Error("no check runs for a url source")),
+      urlRewritten: () => Promise.reject(new Error("no check runs for a url source")),
+      probe: () => Promise.reject(new Error("no check runs for a url source")),
+    },
+    notes: createGitHubCloneNotes(),
+  };
+}
+
+/** Installs `app@mp` from a url source and returns the transports its mirror step got. */
+async function mirrorTransportsOfInstall(
+  owner: InstallTestOwner,
+  installPlugin: ReturnType<typeof createInstallPlugin>,
+  transportContext?: PluginTransportContext,
+): Promise<ReadonlyArray<CloneTransport | undefined>> {
+  const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {});
+  const repository = await offerGitPlugin(marketplaceRoot, "app");
+  const inner = seamWith(
+    createGitOps({
+      fixtureSourceDir: repository,
+      head: INSTALL_HOST_HEAD,
+      localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+      remoteRefs: { "refs/remotes/origin/main": INSTALL_HOST_HEAD },
+    }).gitOps,
+  );
+  const transports: Array<CloneTransport | undefined> = [];
+  const { ctx, run } = makeCtx();
+  const outcome = await installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "app",
+    ...(transportContext !== undefined && { transportContext }),
+    cloneCacheSeam: {
+      ...inner,
+      materializeOrRefreshPluginMirror: (args) => {
+        transports.push(args.transport);
+        return inner.materializeOrRefreshPluginMirror(args);
+      },
+    },
+  });
+  assert.strictEqual(outcome.status, "installed");
+  return transports;
+}
+
+test("D-SG-18: an install with no transport context clones under a new one made for the call", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const made: PluginTransportContext[] = [];
+    const installPlugin = createInstallPlugin(
+      owner.transaction,
+      owner.hooksRouting,
+      owner.completionCache,
+      {},
+      () => {
+        const context = inertTransportContext();
+        made.push(context);
+        return context;
+      },
+    );
+
+    // act
+    const transports = await mirrorTransportsOfInstall(owner, installPlugin);
+
+    // assert
+    assert.strictEqual(made.length, 1);
+    assert.deepStrictEqual(
+      transports.map((transport) => transport?.notes === made[0]?.notes),
+      [true],
+    );
+    assert.deepStrictEqual(
+      transports.map((transport) => transport?.subject),
+      ["app@mp"],
+    );
+  });
+});
+
+test("D-SG-18: an install given a transport context clones under it and makes none", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const given = inertTransportContext();
+    const installPlugin = createInstallPlugin(
+      owner.transaction,
+      owner.hooksRouting,
+      owner.completionCache,
+      {},
+      () => assert.fail("an install given a context makes none"),
+    );
+
+    // act
+    const transports = await mirrorTransportsOfInstall(owner, installPlugin, given);
+
+    // assert
+    assert.deepStrictEqual(
+      transports.map((transport) => transport?.notes === given.notes),
+      [true],
+    );
+  });
+});
 
 test("composes an explicit environment through dependency planning and ledger persistence", async () => {
   await withHermeticHome(async (owner) => {

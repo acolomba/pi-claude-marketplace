@@ -160,6 +160,16 @@ function failedRun(error: unknown): { readonly exitCode: unknown; readonly stder
   return { exitCode, stderr };
 }
 
+test("D-SG-18: this test process holds no git config variable of the shell that runs it", () => {
+  // act
+  const names = Object.keys(process.env).filter((name) =>
+    /^GIT_CONFIG_(?:COUNT|PARAMETERS|KEY_\d+|VALUE_\d+)$/.test(name),
+  );
+
+  // assert
+  assert.deepStrictEqual(names, []);
+});
+
 test("this test process finds the run's refusing ssh first on PATH", async () => {
   // arrange
   const refusingSsh = path.join(path.dirname(os.homedir()), "bin", "ssh");

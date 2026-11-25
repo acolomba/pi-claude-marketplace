@@ -1421,8 +1421,10 @@ export interface GitHubTransportAttemptFailure {
  * then the SSH retry's, then the remedy that ends `Then install again.` The
  * whole text is redacted, so a URL's userinfo never shows (T-04-06).
  *
- * As Claude Code does, the caller throws the second error unchanged when the
- * two messages are equal, so this class always holds two different failures.
+ * As Claude Code does, a marketplace clone whose two messages are equal
+ * throws the second error unchanged, so a marketplace error of this class
+ * holds two different failures. A plugin clone that fails twice always throws
+ * this class, as Claude Code's plugin install does.
  */
 export class GitHubTransportsFailedError extends Error {
   readonly surface: "marketplace" | "plugin";

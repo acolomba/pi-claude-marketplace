@@ -86,7 +86,7 @@ function isOwnerRepoSpelling(source: GitHubSource): boolean {
 }
 
 /** Claude Code's SSH clone URL of a GitHub source: `git@github.com:<owner>/<repo>.git`. */
-function gitHubSshCloneUrl(source: GitHubSource): string {
+export function gitHubSshCloneUrl(source: GitHubSource): string {
   return ensureGitSuffix(`git@${GITHUB_HOST}:${source.owner}/${source.repo}`);
 }
 
@@ -97,7 +97,7 @@ function noRetry(): Promise<undefined> {
 
 // Whether `failure` stops the clone with no other attempt: git is missing,
 // the command was aborted, or print mode refused the sign-in.
-function stopsTheClone(failure: unknown): boolean {
+export function stopsTheClone(failure: unknown): boolean {
   if (failure instanceof DeviceFlowUnavailableError) {
     return true;
   }
@@ -117,7 +117,7 @@ function retryWith(first: TransportAttempt, other: TransportAttempt): TransportP
 }
 
 // The transport git uses for an address it is given as written.
-function addressTransport(url: string): GitHubTransport {
+export function addressTransport(url: string): GitHubTransport {
   return isScpGitAddress(url) || SSH_URL.test(url) ? "ssh" : "https";
 }
 

@@ -1,0 +1,165 @@
+// domain/github-plugin-transport.ts
+//
+// D-SG-18, SG-SSH-04: the transport plan of a plugin clone, as Claude Code's
+// shell `claude plugin install` orders it (upstream `zHi` and `Qmt`). A GitHub
+// source spelled `owner/repo` clones over SSH only, unless every check that
+// would keep it there passes: then it clones over HTTPS first and retries
+// over SSH once. A forced transport clones once over HTTPS and runs no check
+// (D-SG-24, D-SG-21). A git-subdir `owner/repo` shorthand clones once over
+// SSH, or over HTTPS when forced, with no check and no retry (D-SG-20,
+// upstream `KHi`). Every other source clones once, as written (OQ-1).
+//
+// The module is pure: each check is a function the caller passes, called at
+// most once per plan, and only when the plan needs its answer. The marketplace
+// plan, whose probe reads its answer the other way (Pitfall 8), stays in
+// `github-transport.ts`.
+
+import { gitHubAddressOf } from "../shared/github-base-url.ts";
+
+import { networkCloneUrl } from "./clone-key.ts";
+import { addressTransport, gitHubSshCloneUrl, stopsTheClone } from "./github-transport.ts";
+import { isGitSubdirShorthand } from "./source.ts";
+
+import type { CloneNoteKind } from "../shared/notification-types.ts";
+import type { TransportAttempt, TransportForce, TransportPlan } from "./github-transport.ts";
+import type { GitBackedSource, GitHubSource } from "./source.ts";
+
+/**
+ * D-SG-18: the checks, in Claude Code's order, that decide whether a GitHub
+ * plugin clone may try HTTPS first. Each one reads the user's own settings,
+ * never Pi's (D-SG-05, D-SG-16).
+ */
+export interface PluginSshChecks {
+  /** `GIT_SSH_COMMAND` or `GIT_SSH` in the user's environment, or `core.sshCommand`. */
+  readonly userOverride: () => Promise<boolean>;
+  /** Whether the user's git config rewrites the SSH clone URL, or git could not say. */
+  readonly urlRewritten: (sshUrl: string) => Promise<boolean>;
+  /** Claude Code's ssh probe of GitHub. */
+  readonly probe: () => Promise<"configured" | "not-configured" | "unknown">;
+}
+
+/** The inputs of `planPluginClone`. */
+export interface PluginClonePlanInput {
+  readonly source: GitBackedSource;
+  readonly force?: TransportForce | undefined;
+  /**
+   * The checks of the command's transport context. A clone with none stays
+   * on SSH, unless forced.
+   */
+  readonly checks?: PluginSshChecks | undefined;
+}
+
+// The `after` of a plan with one attempt.
+function noRetry(): Promise<undefined> {
+  return Promise.resolve(undefined);
+}
+
+// One attempt as written, with no retry. A GitHub address, however it is
+// spelled, notes the transport its scheme uses; any other address notes
+// nothing.
+function asWritten(url: string): TransportPlan {
+  const transport = addressTransport(url);
+  const note: CloneNoteKind = transport === "ssh" ? "via-ssh" : "via-https";
+  return {
+    first: { transport, url },
+    ...(gitHubAddressOf(url) !== undefined && { note }),
+    after: noRetry,
+  };
+}
+
+// One attempt over `attempt`'s transport, with its note and no retry.
+function only(attempt: TransportAttempt): TransportPlan {
+  return {
+    first: attempt,
+    note: attempt.transport === "ssh" ? "via-ssh" : "via-https",
+    after: noRetry,
+  };
+}
+
+// The GitHub source a git-subdir `owner/repo` shorthand names.
+function shorthandSource(shorthand: string): GitHubSource {
+  const [owner = "", repo = ""] = shorthand.split("/");
+  return { kind: "github", raw: shorthand, owner, repo };
+}
+
+// The SSH and HTTPS attempts of a GitHub source.
+function gitHubAttempts(source: GitHubSource): {
+  readonly ssh: TransportAttempt;
+  readonly https: TransportAttempt;
+} {
+  return {
+    ssh: { transport: "ssh", url: gitHubSshCloneUrl(source) },
+    https: { transport: "https", url: networkCloneUrl(source) },
+  };
+}
+
+/**
+ * Upstream `Qmt`, off Windows: whether every check that keeps a GitHub clone
+ * on SSH passes, in Claude Code's order. The first check that fails stops the
+ * walk, so no later check runs.
+ */
+async function httpsMayGoFirst(checks: PluginSshChecks, sshUrl: string): Promise<boolean> {
+  if (await checks.userOverride()) {
+    return false;
+  }
+
+  if (await checks.urlRewritten(sshUrl)) {
+    return false;
+  }
+
+  return (await checks.probe()) === "not-configured";
+}
+
+// The plan of a GitHub source spelled `owner/repo`.
+async function ownerRepoPlan(
+  source: GitHubSource,
+  checks: PluginSshChecks | undefined,
+): Promise<TransportPlan> {
+  const { ssh, https } = gitHubAttempts(source);
+  if (checks === undefined || !(await httpsMayGoFirst(checks, ssh.url))) {
+    return only(ssh);
+  }
+
+  return {
+    first: https,
+    note: "ssh-not-configured",
+    after: (failure, failed) =>
+      Promise.resolve(failed.transport === "https" && !stopsTheClone(failure) ? ssh : undefined),
+  };
+}
+
+/**
+ * D-SG-18, D-SG-20, OQ-1: the plan of a plugin clone of `source`.
+ *
+ * - A url source gives one attempt as written. Its note is the transport of
+ *   its scheme when the address folds to GitHub, and none otherwise.
+ * - A git-subdir shorthand gives one SSH attempt of
+ *   `git@github.com:<owner>/<repo>.git`, or one HTTPS attempt when forced.
+ *   Any other git-subdir url gives one attempt as written.
+ * - A GitHub source gives one HTTPS attempt when forced, or when it was
+ *   written as a URL. An `owner/repo` source walks the checks: when each one
+ *   lets HTTPS go first, the plan clones over HTTPS first with the
+ *   `ssh-not-configured` note and retries over SSH once after an HTTPS
+ *   failure; otherwise, and with no checks, it clones over SSH only.
+ */
+export async function planPluginClone(input: PluginClonePlanInput): Promise<TransportPlan> {
+  const { source, force } = input;
+  if (source.kind === "url") {
+    return asWritten(networkCloneUrl(source));
+  }
+
+  if (source.kind === "git-subdir") {
+    if (!isGitSubdirShorthand(source.url)) {
+      return asWritten(networkCloneUrl(source));
+    }
+
+    const { ssh, https } = gitHubAttempts(shorthandSource(source.url));
+    return only(force === undefined ? ssh : https);
+  }
+
+  if (force !== undefined || source.raw.includes("://")) {
+    return only({ transport: "https", url: networkCloneUrl(source) });
+  }
+
+  return ownerRepoPlan(source, input.checks);
+}

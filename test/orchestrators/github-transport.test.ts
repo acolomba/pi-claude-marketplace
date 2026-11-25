@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   cloneOverGitHubTransports,
   createGitHubCloneNotes,
+  createPluginTransportContext,
   transportForce,
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { GitHubTransportsFailedError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -14,6 +15,7 @@ import type {
   TransportAttempt,
   TransportPlan,
 } from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
+import type { PluginSshOps } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 
 const SSH_ATTEMPT = {
   transport: "ssh",
@@ -467,5 +469,118 @@ describe("cloneOverGitHubTransports", () => {
         return true;
       },
     );
+  });
+});
+
+/** A port that answers `answers` and records each call by its name. */
+function countingPort(answers: {
+  readonly userOverride?: boolean;
+  readonly rewritten?: boolean;
+  readonly probe?: Awaited<ReturnType<PluginSshOps["probe"]>>;
+}): { readonly ssh: PluginSshOps; readonly calls: string[] } {
+  const calls: string[] = [];
+  return {
+    calls,
+    ssh: {
+      probe: () => {
+        calls.push("probe");
+        return Promise.resolve(answers.probe ?? "not-configured");
+      },
+      userOverride: () => {
+        calls.push("userOverride");
+        return Promise.resolve(answers.userOverride ?? false);
+      },
+      urlRewritten: (sshUrl) => {
+        calls.push(`urlRewritten ${sshUrl}`);
+        return Promise.resolve({ rewritten: answers.rewritten ?? false, exitCode: 0 });
+      },
+    },
+  };
+}
+
+describe("createPluginTransportContext", () => {
+  test("D-SG-24: reads the force of the environment it is given", () => {
+    // act
+    const context = createPluginTransportContext({
+      env: { CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "true" },
+      ssh: countingPort({}).ssh,
+    });
+
+    // assert
+    assert.strictEqual(context.force, "prefer-https");
+  });
+
+  test("D-SG-18: asks the port each check once for the whole context", async () => {
+    // arrange
+    const { ssh, calls } = countingPort({ probe: "unknown", userOverride: true });
+    const context = createPluginTransportContext({ env: {}, ssh });
+
+    // act
+    const answers = [
+      await context.checks.probe(),
+      await context.checks.probe(),
+      await context.checks.userOverride(),
+      await context.checks.userOverride(),
+    ];
+
+    // assert
+    assert.deepStrictEqual(answers, ["unknown", "unknown", true, true]);
+    assert.deepStrictEqual(calls, ["probe", "userOverride"]);
+  });
+
+  test("D-SG-18: asks the port the rewrite check once per url and logs nothing for an unchanged url", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { ssh, calls } = countingPort({ rewritten: false });
+    const context = createPluginTransportContext({ env: {}, ssh });
+
+    // act
+    const answers = [
+      await context.checks.urlRewritten("git@github.com:acme/one.git"),
+      await context.checks.urlRewritten("git@github.com:acme/one.git"),
+      await context.checks.urlRewritten("git@github.com:acme/two.git"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(answers, [false, false, false]);
+    assert.deepStrictEqual(calls, [
+      "urlRewritten git@github.com:acme/one.git",
+      "urlRewritten git@github.com:acme/two.git",
+    ]);
+    assert.deepStrictEqual(logged, []);
+  });
+
+  test("D-SG-18: logs Claude Code's line with the exit code for a rewritten url", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const context = createPluginTransportContext({
+      env: {},
+      ssh: {
+        ...countingPort({}).ssh,
+        urlRewritten: () => Promise.resolve({ rewritten: true, exitCode: 128 }),
+      },
+    });
+
+    // act
+    const rewritten = await context.checks.urlRewritten("git@github.com:acme/one.git");
+
+    // assert
+    assert.strictEqual(rewritten, true);
+    assert.deepStrictEqual(logged, [
+      "[git] GitHub SSH URL is rewritten by git config, or git could not say (code=128): staying on SSH",
+    ]);
+  });
+
+  test("D-SG-22: starts each context with notes of its own", () => {
+    // arrange
+    const port = countingPort({}).ssh;
+    const first = createPluginTransportContext({ env: {}, ssh: port });
+    const second = createPluginTransportContext({ env: {}, ssh: port });
+
+    // act
+    first.notes.record("ghp@gits", { note: "via-ssh", url: "git@github.com:acme/ghp.git" });
+
+    // assert
+    assert.strictEqual(second.notes.noteFor("ghp@gits"), undefined);
   });
 });

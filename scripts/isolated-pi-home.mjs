@@ -14,6 +14,13 @@
  * github.com. A case that needs another ssh puts its own first on the PATH
  * of the processes it starts.
  *
+ * D-SG-18: it also removes the shell's `GIT_CONFIG_COUNT`,
+ * `GIT_CONFIG_KEY_<n>`, `GIT_CONFIG_VALUE_<n>`, and `GIT_CONFIG_PARAMETERS`,
+ * so a test that reaches the product's check of the user's git config, such
+ * as an `insteadOf` rewrite of a GitHub ssh URL, reads the run's own home and
+ * no setting of the shell that runs the suite. A case that needs a git config
+ * variable sets it on the processes it starts.
+ *
  * The test runner's process makes the root and removes it when it exits. Each
  * test file's process, and a child that a case forks, inherits `--import` too.
  * There the module finds `PI_CM_TEST_HOME` and changes nothing, so the child
@@ -47,6 +54,12 @@ if (process.env.PI_CM_TEST_HOME === undefined) {
   process.env.PI_CM_TEST_HOME = home;
   process.env.HOME = home;
   process.env.PI_CODING_AGENT_DIR = agentDir;
+  for (const name of Object.keys(process.env)) {
+    if (/^GIT_CONFIG_(?:COUNT|PARAMETERS|KEY_\d+|VALUE_\d+)$/.test(name)) {
+      Reflect.deleteProperty(process.env, name);
+    }
+  }
+
   process.on("exit", () => {
     rmSync(root, { recursive: true, force: true });
   });
