@@ -52,11 +52,13 @@ import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type {
+  HooksBridge,
   HooksHydrationDeps,
   TypedExpansionResolver,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { McpServerNamesReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-server-table.ts";
+import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type {
   HooksRuntime,
   HooksRuntimeChildEntry,
@@ -71,6 +73,7 @@ import type {
   ExtensionContext,
   InputEvent,
   SessionCompactEvent,
+  SessionStartEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -365,11 +368,12 @@ test(
       ({ event }) => event === "agent_settled",
     )?.handler;
     registrations.length = 0;
-    runtime.appendPendingSessionStartContext({
+    runtime.appendPendingPromptContext({
       context: "stale context",
       scope: "user",
       marketplace: "user-catalog",
       pluginId: "user-plugin",
+      event: "UserPromptSubmit",
     });
     const previousEnding = {
       type: "agent_end",
@@ -411,7 +415,7 @@ test(
       kill(signal?: NodeJS.Signals | number): boolean {
         assert.strictEqual(runtime.currentGeneration(), previousEpoch + 1);
         operationLog.push("epoch:bumped");
-        assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+        assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
         operationLog.push("pending:reset");
         const settleResult =
           typeof staleAgentSettledHandler === "function"
@@ -572,7 +576,7 @@ test(
       resolvedSource: entry.resolvedSource,
     }));
     const epochAfterReload = runtime.currentGeneration();
-    const pendingAfterReload = [...runtime.pendingSessionStartContextEntries()];
+    const pendingAfterReload = [...runtime.pendingPromptContextEntries()];
     const orphanTableExistsAfterReload = fs.existsSync(pidTablePath(projectLocations));
     const sharedDirectoriesAfterReload = {
       user: fs.existsSync(path.join(userLocations.dataRoot, "_shared")),
@@ -626,6 +630,7 @@ test(
       "register:tool_call",
       "register:tool_result",
       "register:before_agent_start",
+      "register:turn_start",
       "register:turn_end",
       "register:agent_end",
       "register:agent_before_settle",
@@ -644,6 +649,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_before_settle", handlerType: "function" },
@@ -829,6 +835,7 @@ function makeContext(
   sessionRoot: string,
   projectTrusted = true,
   notices: string[] = [],
+  pendingMessages = false,
 ): ExtensionContext {
   return {
     ui: {
@@ -852,7 +859,7 @@ function makeContext(
     abort(): never {
       throw new Error("event router must not abort Pi");
     },
-    hasPendingMessages: () => false,
+    hasPendingMessages: () => pendingMessages,
     shutdown(): never {
       throw new Error("event router must not shut down Pi");
     },
@@ -1003,6 +1010,7 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         scope: "user",
         marketplace: "catalog",
         pluginId: "alpha",
+        event: "UserPromptSubmit",
       } as const;
       const handler = registeredHandler(registrations, "before_agent_start");
       const event = {
@@ -1011,12 +1019,12 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         prompt: "hello",
         systemPromptOptions: {},
       };
-      runtime.appendPendingSessionStartContext(pending);
+      runtime.appendPendingPromptContext(pending);
 
       // act
       const supportedOutput = await handler(event, context);
-      const supportedPending = runtime.pendingSessionStartContextEntries();
-      runtime.appendPendingSessionStartContext(pending);
+      const supportedPending = runtime.pendingPromptContextEntries();
+      runtime.appendPendingPromptContext(pending);
       readMode = rejectMode;
       const rejectedOutput = await handler(event, context);
 
@@ -1024,13 +1032,13 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
       assert.deepStrictEqual(supportedOutput, {
         message: {
           customType: "claude-hook-additional-context",
-          content: [{ type: "text", text: "SessionStart hook additional context: pending" }],
+          content: [{ type: "text", text: "UserPromptSubmit hook additional context: pending" }],
           display: false,
         },
       });
       assert.deepStrictEqual(supportedPending, []);
       assert.strictEqual(rejectedOutput, undefined);
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
+      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [pending]);
     });
 
     test(`preserves assistant cache when agent_end changes from ${mode} to ${failure}`, async (t) => {
@@ -1413,52 +1421,6 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
   assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
-test("registered before_agent_start drains ordered context once and leaves an empty turn unchanged", async (t) => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const { root } = await createHermeticEnvironment(t, "hooks-router-before-agent-");
-  const { pi, registrations } = makeRecordingPi();
-  const context = makeContext(root, root);
-  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
-  await hydration.registerHooksBridge(pi, { cwd: root });
-  const handler = registeredHandler(registrations, "before_agent_start");
-  runtime.appendPendingSessionStartContext({
-    context: "alpha context",
-    scope: "project",
-    marketplace: "catalog",
-    pluginId: "alpha",
-  });
-  runtime.appendPendingSessionStartContext({
-    context: "beta context",
-    scope: "user",
-    marketplace: "catalog",
-    pluginId: "beta",
-  });
-  const event = {
-    type: "before_agent_start",
-    prompt: "prompt",
-    systemPrompt: "base prompt",
-    systemPromptOptions: {},
-  } as BeforeAgentStartEvent;
-
-  // act
-  const firstTurn = await handler(event, context);
-  const secondTurn = await handler(event, context);
-
-  // assert
-  assert.deepStrictEqual(firstTurn, {
-    message: {
-      customType: "claude-hook-additional-context",
-      content: [
-        { type: "text", text: "SessionStart hook additional context: alpha context\nbeta context" },
-      ],
-      display: false,
-    },
-  });
-  assert.strictEqual(secondTurn, undefined);
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-});
-
 // The registered `before_agent_start` handler of a fresh bridge, its runtime,
 // and a Pi context to call it with.
 async function beforeAgentStartFixture(t: TestContext): Promise<{
@@ -1651,11 +1613,12 @@ test(
     t.mock.method(sessionManager, "getHeader", () => {
       throw new Error("header unreadable");
     });
-    runtime.appendPendingSessionStartContext({
+    runtime.appendPendingPromptContext({
       context: "start context",
       scope: "user",
       marketplace: "catalog",
       pluginId: "demo",
+      event: "UserPromptSubmit",
     });
     enterChild(t, "main-session");
     const readDiagnostics = observeRouterDebug(t);
@@ -1667,7 +1630,9 @@ test(
     assert.deepStrictEqual(message, {
       message: {
         customType: "claude-hook-additional-context",
-        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        content: [
+          { type: "text", text: "UserPromptSubmit hook additional context: start context" },
+        ],
         display: false,
       },
     });
@@ -1713,8 +1678,9 @@ test(
       scope: "user",
       marketplace: "catalog",
       pluginId: "demo",
+      event: "UserPromptSubmit",
     } as const;
-    runtime.appendPendingSessionStartContext(pending);
+    runtime.appendPendingPromptContext(pending);
     enterChild(t, "main-session");
 
     // act
@@ -1725,7 +1691,7 @@ test(
     // assert
     assert.strictEqual(message, undefined);
     assert.strictEqual(runtime.childRootResolved("router-child"), false);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [pending]);
   },
 );
 
@@ -1742,11 +1708,12 @@ test(
       }
     });
     const { runtime, handler, context } = await beforeAgentStartFixture(t);
-    runtime.appendPendingSessionStartContext({
+    runtime.appendPendingPromptContext({
       context: "start context",
       scope: "user",
       marketplace: "catalog",
       pluginId: "demo",
+      event: "UserPromptSubmit",
     });
     process.env.PI_SUBAGENT_CHILD = "1";
     const event = {
@@ -1759,7 +1726,9 @@ test(
     assert.deepStrictEqual(result, {
       message: {
         customType: "claude-hook-additional-context",
-        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        content: [
+          { type: "text", text: "UserPromptSubmit hook additional context: start context" },
+        ],
         display: false,
       },
     });
@@ -2036,40 +2005,6 @@ test("before_agent_start adds no message for prompt context that is only whitesp
   assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
 });
 
-test("before_agent_start sends session start context first and prompt context second in one message (D-CF5-13)", async (t) => {
-  // arrange
-  const { runtime, handler, context } = await beforeAgentStartFixture(t);
-  runtime.appendPendingPromptContext({
-    context: "ups-ctx",
-    scope: "user",
-    marketplace: "catalog",
-    pluginId: "beta",
-    event: "UserPromptSubmit",
-  });
-  runtime.appendPendingSessionStartContext({
-    context: "ss-ctx",
-    scope: "project",
-    marketplace: "catalog",
-    pluginId: "alpha",
-  });
-
-  // act
-  const turn = await handler(PROMPT_TURN, context);
-
-  // assert
-  assert.deepStrictEqual(turn, {
-    message: {
-      customType: "claude-hook-additional-context",
-      content: [
-        { type: "text", text: "SessionStart hook additional context: ss-ctx" },
-        { type: "text", text: "UserPromptSubmit hook additional context: ups-ctx" },
-      ],
-      display: false,
-    },
-  });
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-});
-
 test("before_agent_start of a reloaded bridge sends no context buffered before the reload (D-CF5-13)", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
@@ -2084,7 +2019,6 @@ test("before_agent_start of a reloaded bridge sends no context buffered before t
     pluginId: "alpha",
     event: "UserPromptSubmit",
   } as const;
-  runtime.appendPendingSessionStartContext(entry);
   runtime.appendPendingPromptContext(entry);
   await hydration.registerHooksBridge(pi, { cwd: root });
   const liveHandler = registeredHandler(registrations, "before_agent_start", 1);
@@ -2106,11 +2040,12 @@ test("registered before_agent_start rejects a stale epoch without draining live 
   await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
   await hydration.registerHooksBridge(pi, { cwd: root });
-  runtime.appendPendingSessionStartContext({
+  runtime.appendPendingPromptContext({
     context: "live context",
     scope: "project",
     marketplace: "catalog",
     pluginId: "live",
+    event: "UserPromptSubmit",
   });
   const event = {
     type: "before_agent_start",
@@ -2124,12 +2059,13 @@ test("registered before_agent_start rejects a stale epoch without draining live 
 
   // assert
   assert.strictEqual(promptUpdate, undefined);
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
     {
       context: "live context",
       scope: "project",
       marketplace: "catalog",
       pluginId: "live",
+      event: "UserPromptSubmit",
     },
   ]);
 });
@@ -2860,7 +2796,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -2914,7 +2850,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 28);
+  assert.strictEqual(registrations.length, 30);
 });
 
 test(
@@ -3004,7 +2940,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 28);
+    assert.strictEqual(registrations.length, 30);
   },
 );
 
@@ -3034,12 +2970,15 @@ test(
     let deferDispatch = false;
     const executor: HookExecutor = () => {
       if (!deferDispatch) {
-        return Promise.resolve({ kind: "noop" });
+        return Promise.resolve({ kind: "mutate", additionalContext: "stale context" });
       }
 
       deferDispatch = false;
       dispatchStarted.resolve(undefined);
-      return releaseDispatch.promise.then(() => ({ kind: "noop" }));
+      return releaseDispatch.promise.then(() => ({
+        kind: "mutate",
+        additionalContext: "stale context",
+      }));
     };
 
     await hydration.registerHooksBridge(pi, { cwd: fixture.factoryRoot, executor });
@@ -3057,7 +2996,6 @@ test(
     await staleAtDispatch;
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
     assert.deepStrictEqual(messages, []);
   },
 );
@@ -3738,6 +3676,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_before_settle", handlerType: "function" },
@@ -3792,7 +3731,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
   },
 );
 
@@ -3845,7 +3784,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
   });
 }
 
@@ -4106,21 +4045,31 @@ function withSessionManager(
   });
 }
 
-// Registers the bridge with `processStartedAt` and returns its session_start
-// handler and the scope and event of each SessionStart dispatch.
+// The executor's answer to one dispatch.
+type DispatchAnswer = (entry: RoutingEntry) => Promise<HookExecResult>;
+
+// Registers the bridge with `processStartedAt` and returns its runtime, the
+// bridge, its session_start handler, and the scope and event of each
+// SessionStart dispatch. Each dispatch is answered with `noop` until
+// `answerWith` names another answer.
 async function launchRouter(
   t: TestContext,
   processStartedAt: number,
 ): Promise<{
   readonly root: string;
   readonly projectRoot: string;
+  readonly runtime: HooksRuntime;
+  readonly bridge: HooksBridge;
   readonly sessionStart: (...args: unknown[]) => unknown;
-  readonly dispatched: readonly unknown[];
+  readonly dispatched: readonly { readonly scope: string; readonly event: unknown }[];
+  readonly answerWith: (next: DispatchAnswer) => void;
 }> {
   const { root, projectRoot } = await makeSessionStartFixture(t);
   const { pi, registrations } = makeRecordingPi();
-  const dispatched: unknown[] = [];
-  await createHooksHydration(createHooksRuntime(), {
+  const dispatched: { readonly scope: string; readonly event: unknown }[] = [];
+  let answer: DispatchAnswer = () => Promise.resolve({ kind: "noop" });
+  const runtime = createHooksRuntime();
+  const bridge = await createHooksHydration(runtime, {
     loadState,
     readHooksJson,
     readMcpServerNames: readStoredServerNames,
@@ -4129,15 +4078,89 @@ async function launchRouter(
     processStartedAt,
     executor: (entry, event) => {
       dispatched.push({ scope: entry.scope, event });
-      return Promise.resolve({ kind: "noop" });
+      return answer(entry);
     },
   });
   return {
     root,
     projectRoot,
+    runtime,
+    bridge,
     sessionStart: registeredHandler(registrations, "session_start"),
     dispatched,
+    answerWith: (next) => {
+      answer = next;
+    },
   };
+}
+
+// The router context with `mode` in place of its own.
+function withMode(context: ExtensionContext, mode: string): ExtensionContext {
+  return new Proxy(context, {
+    get(target, property, receiver): unknown {
+      return property === "mode" ? mode : Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+// Gives the plugin `pluginId` a project-scope SessionStart route, as a load's
+// autoapply does.
+function addSessionStartRoute(runtime: HooksRuntime, pluginId: string, projectRoot: string): void {
+  runtime.setRoutingBucket("SessionStart", [
+    ...runtime.getRoutingBucket("SessionStart"),
+    routeEntry("SessionStart", "*", pluginId, projectRoot),
+  ]);
+}
+
+// Registers the bridge, runs the session's SessionStart for Pi's `reason` in
+// `mode`, then gives the plugin `added` a project-scope SessionStart route, as
+// a load's autoapply does.
+async function sessionWithAddedPlugin(
+  t: TestContext,
+  options: {
+    readonly mode: string;
+    readonly reason: SessionStartEvent["reason"];
+    readonly prepare?: (context: ExtensionContext, root: string) => ExtensionContext;
+  },
+): Promise<{
+  readonly bridge: HooksBridge;
+  readonly runtime: HooksRuntime;
+  readonly root: string;
+  readonly projectRoot: string;
+  readonly context: ExtensionContext;
+  readonly dispatched: readonly { readonly scope: string; readonly event: unknown }[];
+  readonly answerWith: (next: DispatchAnswer) => void;
+}> {
+  const { root, projectRoot, runtime, bridge, sessionStart, dispatched, answerWith } =
+    await launchRouter(t, 0);
+  const modeContext = withMode(makeContext(projectRoot, root), options.mode);
+  const context = options.prepare?.(modeContext, root) ?? modeContext;
+  await sessionStart({ type: "session_start", reason: options.reason }, context);
+  addSessionStartRoute(runtime, "added", projectRoot);
+  return { bridge, runtime, root, projectRoot, context, dispatched, answerWith };
+}
+
+// What one dispatch received: its scope, its source, and the plugins a late
+// run names.
+function dispatchSummary(dispatch: { readonly scope: string; readonly event: unknown }): {
+  readonly scope: string;
+  readonly source: string;
+  readonly plugins: readonly string[];
+} {
+  const event = dispatch.event as ClaudeSessionStartEvent;
+  return {
+    scope: dispatch.scope,
+    source: event.source,
+    plugins: [...(event.newPluginsOnly ?? [])],
+  };
+}
+
+// The two dispatches of the session's own SessionStart, project scope first.
+function sessionRuns(source: string): readonly ReturnType<typeof dispatchSummary>[] {
+  return [
+    { scope: "project", source, plugins: [] },
+    { scope: "user", source, plugins: [] },
+  ];
 }
 
 for (const { launch, header, holdsMessage, processStartedAt, source } of [
@@ -4195,6 +4218,236 @@ for (const { launch, header, holdsMessage, processStartedAt, source } of [
     ]);
   });
 }
+
+for (const mode of ["print", "json", "rpc"] as const) {
+  test(`a ${mode} load runs SessionStart for the plugin that gained a route after the session's SessionStart, with its source (HOOKLATESS-D1)`, async (t) => {
+    // arrange
+    const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+      mode,
+      reason: "startup",
+    });
+
+    // act
+    await bridge.runLateSessionStart("startup", context);
+
+    // assert
+    assert.deepStrictEqual(dispatched.map(dispatchSummary), [
+      ...sessionRuns("startup"),
+      { scope: "project", source: "startup", plugins: ["added@catalog"] },
+    ]);
+  });
+}
+
+test("a load after a resumed launch sends source resume (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "json",
+    reason: "startup",
+    prepare: (modeContext, root) =>
+      withSessionManager(modeContext, launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true)),
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), [
+    ...sessionRuns("resume"),
+    { scope: "project", source: "resume", plugins: ["added@catalog"] },
+  ]);
+});
+
+test("a tui load runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "tui",
+    reason: "startup",
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), sessionRuns("startup"));
+});
+
+test("a reload runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "print",
+    reason: "startup",
+  });
+
+  // act
+  await bridge.runLateSessionStart("reload", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), sessionRuns("startup"));
+});
+
+test("a second load runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, runtime, projectRoot, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "rpc",
+    reason: "startup",
+  });
+  await bridge.runLateSessionStart("startup", context);
+  addSessionStartRoute(runtime, "later", projectRoot);
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), [
+    ...sessionRuns("startup"),
+    { scope: "project", source: "startup", plugins: ["added@catalog"] },
+  ]);
+});
+
+test("a load after a new session runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "json",
+    reason: "new",
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), sessionRuns("clear"));
+});
+
+test(
+  "a load in a pi-subagents child runs no late SessionStart (HOOKLATESS-D1)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    enterChild(t, undefined);
+    const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+      mode: "json",
+      reason: "startup",
+    });
+
+    // act
+    await bridge.runLateSessionStart("startup", context);
+
+    // assert
+    assert.deepStrictEqual(dispatched.map(dispatchSummary), []);
+  },
+);
+
+test("a load whose mode is not a notification mode debug-logs and runs no late SessionStart (HOOKLATESS-D1, NFR-2)", async (t) => {
+  // arrange
+  const debugLines = observeRouterDebug(t);
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "print",
+    reason: "startup",
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", withMode(context, "web"));
+
+  // assert
+  assert.deepStrictEqual(
+    { dispatched: dispatched.map(dispatchSummary), debugLines: debugLines() },
+    {
+      dispatched: sessionRuns("startup"),
+      debugLines: ["[hooks] late SessionStart skipped: Unsupported notification mode: web"],
+    },
+  );
+});
+
+// The delivery hint of the last dispatch, the late run's.
+function lateHint(
+  dispatched: readonly { readonly scope: string; readonly event: unknown }[],
+): boolean | undefined {
+  return (dispatched.at(-1)?.event as ClaudeSessionStartEvent | undefined)?.heldForNextPrompt?.();
+}
+
+test("a late SessionStart that ends within 10 seconds holds the load until it ends and sends its context at once (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "print",
+    reason: "startup",
+  });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(
+    { dispatched: dispatched.map(dispatchSummary), heldForNextPrompt: lateHint(dispatched) },
+    {
+      dispatched: [
+        ...sessionRuns("startup"),
+        { scope: "project", source: "startup", plugins: ["added@catalog"] },
+      ],
+      heldForNextPrompt: false,
+    },
+  );
+});
+
+test("a late SessionStart that passes 10 seconds lets the load end while its hook runs and holds its context for the next prompt (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched, answerWith } = await sessionWithAddedPlugin(t, {
+    mode: "json",
+    reason: "startup",
+  });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hookStarted = createDeferred<undefined>();
+  const hookEnded = createDeferred<HookExecResult>();
+  let ended = false;
+  void hookEnded.promise.then(() => {
+    ended = true;
+  });
+  answerWith(() => {
+    hookStarted.resolve(undefined);
+    return hookEnded.promise;
+  });
+
+  // act
+  const load = bridge.runLateSessionStart("startup", context);
+  await hookStarted.promise;
+  t.mock.timers.tick(10_000);
+  await load;
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      ended,
+      dispatched: dispatched.map(dispatchSummary),
+      heldForNextPrompt: lateHint(dispatched),
+    },
+    {
+      ended: false,
+      dispatched: [
+        ...sessionRuns("startup"),
+        { scope: "project", source: "startup", plugins: ["added@catalog"] },
+      ],
+      heldForNextPrompt: true,
+    },
+  );
+  hookEnded.resolve({ kind: "noop" });
+});
+
+test("a late SessionStart whose hooks fail debug-logs the failure and the load ends (HOOKLATESS-D1, NFR-2)", async (t) => {
+  // arrange
+  const debugLines = observeRouterDebug(t);
+  const { bridge, context, answerWith } = await sessionWithAddedPlugin(t, {
+    mode: "rpc",
+    reason: "startup",
+  });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  answerWith(() => Promise.reject(new Error("hook runner lost")));
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(debugLines(), ["[hooks] late SessionStart failed: hook runner lost"]);
+});
 
 for (const read of ["getHeader", "getEntries"] as const) {
   test(`session_start at Pi startup debug-logs a ${read} that throws and dispatches SessionStart with source startup (NFR-2)`, async (t) => {
@@ -4440,7 +4693,7 @@ test("SessionStart runs a repeat whose first event was skipped for its mode", as
 });
 
 test(
-  "session_start lazily hydrates project routes and drains their context on the next agent turn",
+  "session_start lazily hydrates project routes and sends their context when the hooks finish",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -4529,18 +4782,23 @@ test(
       { pluginId: "alpha", event: "SessionStart" },
       { pluginId: "beta", event: "SessionStart" },
     ]);
-    assert.deepStrictEqual(firstTurn, {
-      message: {
-        customType: "claude-hook-additional-context",
-        content: [
-          {
-            type: "text",
-            text: "SessionStart hook additional context: alpha context\nbeta context",
-          },
-        ],
-        display: false,
+    assert.deepStrictEqual(messages, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            {
+              type: "text",
+              text: "SessionStart hook additional context: alpha context\nbeta context",
+            },
+          ],
+          display: false,
+          details: { event: "SessionStart", values: ["alpha context", "beta context"] },
+        },
+        options: { triggerTurn: false },
       },
-    });
+    ]);
+    assert.strictEqual(firstTurn, undefined);
     assert.strictEqual(secondTurn, undefined);
     assert.deepStrictEqual(routes, [
       { scope: "project", pluginId: "alpha", command: "alpha-0" },
@@ -4551,8 +4809,6 @@ test(
       { scope: "project", marketplace: "catalog", pluginId: "alpha" },
     ]);
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-    assert.deepStrictEqual(messages, []);
   },
 );
 
@@ -4656,7 +4912,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 14);
+  assert.strictEqual(registrations.length, 15);
 });
 
 /** A manual compaction event whose entry carries `summary`. */
@@ -4692,6 +4948,22 @@ function routeCompactionHooks(runtime: HooksRuntime, cwd: string): void {
   }
 }
 
+// Whether `value` is the compaction leg's delivery hint (HKRL-03).
+function isDeliveryHint(value: unknown): value is () => boolean {
+  return typeof value === "function";
+}
+
+// The event a hook reads, with the compaction leg's delivery hint answered
+// (HKRL-03), so a log of it compares as data.
+function withDeliveryHintRead(event: unknown): unknown {
+  return typeof event === "object" &&
+    event !== null &&
+    "nextCallReadsSteer" in event &&
+    isDeliveryHint(event.nextCallReadsSteer)
+    ? { ...event, nextCallReadsSteer: event.nextCallReadsSteer() }
+    : event;
+}
+
 test("session_compact runs SessionStart with source compact to completion, then PostCompact (D-CF5-04)", async (t) => {
   // arrange
   const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-");
@@ -4701,7 +4973,7 @@ test("session_compact runs SessionStart with source compact to completion, then 
   await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
     cwd: root,
     executor: async (entry, event) => {
-      log.push({ start: entry.claudeEvent, event });
+      log.push({ start: entry.claudeEvent, event: withDeliveryHintRead(event) });
       await new Promise((resolve) => setImmediate(resolve));
       log.push({ end: entry.claudeEvent });
       return { kind: "noop" };
@@ -4719,7 +4991,7 @@ test("session_compact runs SessionStart with source compact to completion, then 
   // assert
   assert.strictEqual(update, undefined);
   assert.deepStrictEqual(log, [
-    { start: "SessionStart", event: { source: "compact" } },
+    { start: "SessionStart", event: { source: "compact", nextCallReadsSteer: false } },
     { end: "SessionStart" },
     { start: "PostCompact", event },
     { end: "PostCompact" },
@@ -4861,6 +5133,468 @@ test("session_compact dispatches nothing when the generation goes stale while it
     fs.existsSync(path.join(locationsFor("project", root).dataRoot, "_shared")),
     true,
   );
+});
+
+// A reply that ends its turn with a tool call, so Pi calls the model again
+// for the tool results.
+const TOOL_CALL_REPLY = {
+  role: "assistant",
+  content: [{ type: "toolCall", id: "call-1", name: "bash", arguments: {} }],
+  stopReason: "toolUse",
+} as const;
+
+// A reply that ends its turn with text, so the run reads a queued follow-up.
+const TEXT_REPLY = {
+  role: "assistant",
+  content: [{ type: "text", text: "Done." }],
+  stopReason: "stop",
+} as const;
+
+// A reply that a context overflow ended, so Pi ends the run and may retry it.
+const OVERFLOW_REPLY = {
+  role: "assistant",
+  content: [],
+  stopReason: "error",
+} as const;
+
+// A queued user message with `text`, as Pi queues a steer or a follow-up.
+function queuedUserMessage(text: string): unknown {
+  return { role: "user", content: [{ type: "text", text }] };
+}
+
+/** The Pi events of an agent run that come before a compaction in a delivery row. */
+const RUN_EVENTS = {
+  turn_start: { type: "turn_start" },
+  turn_end: { type: "turn_end", message: TEXT_REPLY, context: { pendingMessages: [] } },
+  tool_turn_end: { type: "turn_end", message: TOOL_CALL_REPLY, context: { pendingMessages: [] } },
+  turn_end_with_queued_message: {
+    type: "turn_end",
+    message: TEXT_REPLY,
+    context: { pendingMessages: [queuedUserMessage("queued prompt")] },
+  },
+  turn_end_with_queued_follow_up: {
+    type: "turn_end",
+    message: TEXT_REPLY,
+    context: { pendingMessages: [queuedUserMessage("also say hi")] },
+  },
+  tool_turn_end_with_hook_context: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: {
+      pendingMessages: [
+        {
+          role: "custom",
+          customType: "claude-hook-additional-context",
+          content: [{ type: "text", text: "UserPromptSubmit hook additional context: held" }],
+          display: false,
+        },
+      ],
+    },
+  },
+  tool_turn_end_with_tool_context: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: {
+      pendingMessages: [
+        {
+          role: "custom",
+          customType: "claude-hook-tool-context",
+          content: "PostToolUse:Bash hook additional context: checked",
+          display: false,
+        },
+      ],
+    },
+  },
+  tool_turn_end_with_other_message: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: {
+      pendingMessages: [
+        { role: "custom", customType: "other-extension-context", content: "x", display: false },
+      ],
+    },
+  },
+  tool_turn_end_with_queued_follow_up: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: { pendingMessages: [queuedUserMessage("also say hi")] },
+  },
+  tool_turn_end_with_two_queued_follow_ups: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: {
+      pendingMessages: [queuedUserMessage("also say hi"), queuedUserMessage("also say hi")],
+    },
+  },
+  overflow_turn_end: {
+    type: "turn_end",
+    message: OVERFLOW_REPLY,
+    context: { pendingMessages: [] },
+  },
+  overflow_turn_end_with_queued_message: {
+    type: "turn_end",
+    message: OVERFLOW_REPLY,
+    context: { pendingMessages: [queuedUserMessage("queued prompt")] },
+  },
+  overflow_turn_end_with_queued_follow_up: {
+    type: "turn_end",
+    message: OVERFLOW_REPLY,
+    context: { pendingMessages: [queuedUserMessage("also say hi")] },
+  },
+  follow_up_input: {
+    type: "input",
+    text: "also say hi",
+    source: "interactive",
+    streamingBehavior: "followUp",
+  },
+  steer_input: {
+    type: "input",
+    text: "also say hi",
+    source: "interactive",
+    streamingBehavior: "steer",
+  },
+  agent_end: { type: "agent_end", messages: [] },
+} as const;
+
+// The handler of a run event of a delivery row: an input goes to the bridge's
+// last `input` subscription, which tells the run phase what Pi queues.
+function runEventHandler(
+  registrations: readonly RecordedRegistration[],
+  runEvent: keyof typeof RUN_EVENTS,
+): (...args: unknown[]) => unknown {
+  const { type } = RUN_EVENTS[runEvent];
+  return registeredHandler(registrations, type, type === "input" ? 2 : 0);
+}
+
+for (const { title, before, queuedAtRunEnd = false, reason, willRetry, options } of [
+  {
+    title:
+      "steers the SessionStart context of an overflow compaction into the retried model call (HKRL-03)",
+    before: ["overflow_turn_end", "agent_end"],
+    reason: "overflow",
+    willRetry: true,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of an overflow compaction while a queued message waits ahead of the retry (HKRL-03)",
+    before: ["overflow_turn_end_with_queued_message", "agent_end"],
+    reason: "overflow",
+    willRetry: true,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of an overflow compaction while only a follow-up waits (HKRL-03)",
+    before: ["follow_up_input", "overflow_turn_end_with_queued_follow_up", "agent_end"],
+    reason: "overflow",
+    willRetry: true,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of an overflow compaction after the user steers the run (HKRL-03)",
+    before: ["overflow_turn_end", "agent_end", "steer_input"],
+    reason: "overflow",
+    willRetry: true,
+    options: { triggerTurn: false },
+  },
+  {
+    title: "holds the SessionStart context of a manual compaction for the next prompt (HKRL-03)",
+    before: [],
+    reason: "manual",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction between two turns into the next model call (HKRL-03)",
+    before: ["tool_turn_end"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction before a queued message's turn to that turn's end (HKRL-03)",
+    before: ["turn_end_with_queued_message"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction before a queued follow-up's turn to that turn's end (HKRL-03)",
+    before: ["follow_up_input", "turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a tool call whose held prompt context Pi appends at the turn end (HKRL-03)",
+    before: ["tool_turn_end_with_hook_context"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a tool call whose held tool context Pi appends at the turn end (HKRL-03)",
+    before: ["tool_turn_end_with_tool_context"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after a tool call while another extension's message waits (HKRL-03)",
+    before: ["tool_turn_end_with_other_message"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a tool call while a follow-up waits, as the tool results take the next call (HKRL-03)",
+    before: ["follow_up_input", "tool_turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after a tool call while a message that no follow-up input gave waits (HKRL-03)",
+    before: ["tool_turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after a tool call while more queued messages wait than follow-up inputs gave (HKRL-03)",
+    before: ["follow_up_input", "tool_turn_end_with_two_queued_follow_ups"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a tool call while two follow-ups wait (HKRL-03)",
+    before: ["follow_up_input", "follow_up_input", "tool_turn_end_with_two_queued_follow_ups"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "keeps a follow-up waiting after a tool call, so a compaction after the next tool call steers the SessionStart context (HKRL-03)",
+    before: [
+      "follow_up_input",
+      "tool_turn_end_with_queued_follow_up",
+      "tool_turn_end_with_queued_follow_up",
+    ],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "counts a follow-up the run read as gone, so the same text queued later holds the SessionStart context (HKRL-03)",
+    before: [
+      "follow_up_input",
+      "turn_end_with_queued_follow_up",
+      "tool_turn_end_with_queued_follow_up",
+    ],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "forgets the follow-up inputs of a run that ended with nothing queued, so the same text queued later holds the SessionStart context (HKRL-03)",
+    before: ["follow_up_input", "agent_end", "tool_turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "keeps the follow-up inputs of a failed run that leaves them queued, so a compaction after a tool call of the retried run steers the SessionStart context (HKRL-03)",
+    before: [
+      "follow_up_input",
+      "overflow_turn_end_with_queued_follow_up",
+      "agent_end",
+      "tool_turn_end_with_queued_follow_up",
+    ],
+    queuedAtRunEnd: true,
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction between two turns after the user steers the run (HKRL-03)",
+    before: ["tool_turn_end", "steer_input"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction between two turns after the user queues a follow-up (HKRL-03)",
+    before: ["tool_turn_end", "follow_up_input"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after the run ended for the next prompt (HKRL-03)",
+    before: ["turn_end", "agent_end"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction during a model call to the turn end (HKRL-03)",
+    before: ["turn_end", "turn_start"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+] satisfies ReadonlyArray<{
+  readonly title: string;
+  readonly before: ReadonlyArray<keyof typeof RUN_EVENTS>;
+  readonly queuedAtRunEnd?: boolean;
+  readonly reason: SessionCompactEvent["reason"];
+  readonly willRetry: boolean;
+  readonly options: unknown;
+}>) {
+  test(title, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-delivery-");
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) =>
+        Promise.resolve(
+          entry.claudeEvent === "SessionStart"
+            ? { kind: "mutate", additionalContext: "compact context" }
+            : { kind: "noop" },
+        ),
+    });
+    routeCompactionHooks(runtime, root);
+    const context = makeContext(root, root, true, [], queuedAtRunEnd);
+    for (const runEvent of before) {
+      await runEventHandler(registrations, runEvent)(RUN_EVENTS[runEvent], context);
+    }
+
+    // act
+    await registeredHandler(registrations, "session_compact")(
+      { ...compactionEvent("delivery summary"), reason, willRetry },
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(messages, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            { type: "text", text: "SessionStart hook additional context: compact context" },
+          ],
+          display: false,
+          details: { event: "SessionStart", values: ["compact context"] },
+        },
+        options,
+      },
+    ]);
+  });
+}
+
+test("holds the SessionStart context of a compaction between two turns when the user steers while the hook runs (HKRL-03)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-late-steer-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const context = makeContext(root, root);
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: async (entry) => {
+      if (entry.claudeEvent !== "SessionStart") {
+        return { kind: "noop" };
+      }
+
+      await runEventHandler(registrations, "steer_input")(RUN_EVENTS.steer_input, context);
+      return { kind: "mutate", additionalContext: "compact context" };
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  await runEventHandler(registrations, "tool_turn_end")(RUN_EVENTS.tool_turn_end, context);
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    { ...compactionEvent("late steer summary"), reason: "threshold" },
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(messages, [
+    {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: compact context" }],
+        display: false,
+        details: { event: "SessionStart", values: ["compact context"] },
+      },
+      options: { triggerTurn: false },
+    },
+  ]);
+});
+
+test("starts a new registration's run idle, so its compaction holds the SessionStart context (HKRL-03)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-reregister-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  const options = {
+    cwd: root,
+    executor: (entry: RoutingEntry) =>
+      Promise.resolve(
+        entry.claudeEvent === "SessionStart"
+          ? ({ kind: "mutate", additionalContext: "compact context" } as const)
+          : ({ kind: "noop" } as const),
+      ),
+  };
+  await hydration.registerHooksBridge(pi, options);
+  const context = makeContext(root, root);
+  await registeredHandler(registrations, "turn_end")(RUN_EVENTS.tool_turn_end, context);
+  await hydration.registerHooksBridge(pi, options);
+  routeCompactionHooks(runtime, root);
+
+  // act
+  await registeredHandler(
+    registrations,
+    "session_compact",
+    1,
+  )({ ...compactionEvent("reregistered summary"), reason: "threshold" }, context);
+
+  // assert
+  assert.deepStrictEqual(messages, [
+    {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: compact context" }],
+        display: false,
+        details: { event: "SessionStart", values: ["compact context"] },
+      },
+      options: { triggerTurn: false },
+    },
+  ]);
 });
 
 /** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
@@ -5025,20 +5759,29 @@ for (const { claudeEvent, event } of [
   }
 }
 
-function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
+function routeEntry(
+  claudeEvent: BucketAEvent,
+  rawMatcher: string,
+  pluginId: string,
+  cwd: string,
+): RoutingEntry {
   return {
     scope: "project",
     marketplace: "catalog",
     pluginId,
     resolvedSource: asAbsolutePluginRoot(path.join(cwd, pluginId)),
-    claudeEvent: "PreToolUse",
-    matcher: parseMatcher("Bash"),
-    rawMatcher: "Bash",
+    claudeEvent,
+    matcher: parseMatcher(rawMatcher),
+    rawMatcher,
     handlerDecl: { type: "command", command: `run-${pluginId}` },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
     options: resolveOptions(undefined),
   };
+}
+
+function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
+  return routeEntry("PreToolUse", "Bash", pluginId, cwd);
 }
 
 /**
@@ -5654,7 +6397,7 @@ for (const scenario of [
 // of its folder after `load` runs (D-PG5-15).
 async function hookOutputAfterLoad(
   loc: ReturnType<typeof locationsFor>,
-  load: () => Promise<void>,
+  load: () => Promise<unknown>,
 ): Promise<string[]> {
   const savedPath = await saveHookOutput(loc, "old-output", "additionalContext", "saved");
   const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
@@ -5668,7 +6411,7 @@ test("a bridge load removes the old saved hook output of each scope it reaps (D-
   const { root } = await createHermeticEnvironment(t, "event-router-output-sweep-");
   const runtime = createHooksRuntime();
   const { pi } = makeRecordingPi();
-  const load = (): Promise<void> =>
+  const load = (): Promise<unknown> =>
     createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, { cwd: root });
 
   // act
@@ -5941,13 +6684,13 @@ async function expansionFixture(
   readonly registrations: RecordedRegistration[];
   readonly runs: ExpansionRun[];
   readonly context: ExtensionContext;
-  readonly register: () => Promise<void>;
+  readonly register: () => Promise<unknown>;
 }> {
   const { root } = await createHermeticEnvironment(t, "hooks-router-expansion-");
   const runtime = createHooksRuntime();
   const { pi, registrations } = makeRecordingPi();
   const runs: ExpansionRun[] = [];
-  const register = (): Promise<void> =>
+  const register = (): Promise<unknown> =>
     createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
       cwd: root,
       executor: (entry, event) => {

@@ -17,7 +17,7 @@ Feature: Plugin executables
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                       |
       |       | bash | {"command": "if command -v hello >/dev/null; then hello; else echo absent; fi"} |
@@ -97,7 +97,7 @@ Feature: Plugin executables
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin install plain@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                               |
       |       | bash | {"command": "printf %s \"$PI_CLAUDE_MARKETPLACE_PATH\""} |

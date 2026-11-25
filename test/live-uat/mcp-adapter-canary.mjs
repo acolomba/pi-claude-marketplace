@@ -5,7 +5,7 @@
 // graph is its intended shape, not a defect.
 // fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 //
-// This driver imports `../pi-runtime.ts` and nothing else from the repository,
+// This driver imports `../../features/lib/pi-runtime.ts` and nothing else from the repository,
 // so every Pi launch resolves the lock-pinned CLI through that one module. It
 // imports nothing from a `test/live-uat/` sibling and runs on its own as
 // `node test/live-uat/mcp-adapter-canary.mjs`.
@@ -107,7 +107,7 @@ import path from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
-import { resolvePiRuntime } from "../pi-runtime.ts";
+import { resolvePiRuntime } from "../../features/lib/pi-runtime.ts";
 
 const TAG = "mcp-adapter-canary";
 const HERE = path.dirname(fileURLToPath(import.meta.url));

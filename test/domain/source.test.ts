@@ -9,6 +9,7 @@ import {
   samePlannedSource,
   sourceLogical,
   stripSlashAndFragment,
+  urlPathIdentity,
   type ParsedSource,
   type SamePlannedSourceResult,
   type UrlSource,
@@ -1861,6 +1862,47 @@ describe("stripSlashAndFragment", () => {
 
       // assert
       assert.deepStrictEqual(stripped, expectedStripped);
+    });
+  }
+});
+
+describe("urlPathIdentity", () => {
+  for (const { name, input, expected } of [
+    {
+      name: "strips every trailing slash",
+      input: "https://gitlab.com/o/r///",
+      expected: "https://gitlab.com/o/r",
+    },
+    {
+      name: "strips one trailing .git suffix",
+      input: "https://gitlab.com/o/r.git",
+      expected: "https://gitlab.com/o/r",
+    },
+    {
+      name: "strips a .git suffix behind a trailing slash",
+      input: "https://gitlab.com/o/r.git/",
+      expected: "https://gitlab.com/o/r",
+    },
+    {
+      name: "strips only the last of a doubled .git.git suffix",
+      input: "https://gitlab.com/o/r.git.git",
+      expected: "https://gitlab.com/o/r.git",
+    },
+    {
+      name: "returns a url that carries neither unchanged",
+      input: "https://gitlab.com/o/r",
+      expected: "https://gitlab.com/o/r",
+    },
+  ]) {
+    test(name, () => {
+      // arrange
+      const expectedIdentity = expected;
+
+      // act
+      const identity = urlPathIdentity(input);
+
+      // assert
+      assert.equal(identity, expectedIdentity);
     });
   }
 });

@@ -1,9 +1,14 @@
 Feature: Plugin subagent child
 
   A load in a pi-subagents background child changes nothing installed, yet loads the installed
-  components (D-MB-12), and a child runs a plugin's tool hooks but no main-session hook (D-PG3-08). A child's tool hooks
-  name its agent (D-PG3-06) and, when the launch names it, the session that launched it (D-PG6-01). Stand-ins: Pis with the runner's marker and pi-subagents' agent tag in their
-  system prompt beside a main Pi, a json-mode Pi, a scripted model, recording hooks, and a local marketplace.
+  components (D-MB-12). A background child runs a plugin's tool hooks but no main-session hook
+  (D-PG3-08). Its tool hooks name its agent (D-PG3-06) and, when the launch names it, the session
+  that launched it (D-PG6-01). A foreground child runs inside the main Pi's turn and runs no plugin
+  hook. Stand-ins: Pis with the runner's marker and pi-subagents' agent tag in their system prompt
+  beside a main Pi, a json-mode Pi, a scripted model, recording hooks, and a local marketplace.
+  The real-child scenarios run the installed pi-subagents against a loopback scripted provider.
+  Each one installs the plugin in Pi's startup session, then starts the main session, which ends
+  the startup session.
 
   Scenario: A background child's load with autoapply on leaves a pending install, uninstall, and update for the next parent load
     Given the marketplace "fixtures" is published as a dir source
@@ -29,16 +34,12 @@ Feature: Plugin subagent child
       | fixtures    | demo   |         |
       | fixtures    | upd    |         |
     Given pi runs with the scripted model as a pi-subagents background child
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 3                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 3                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status         | reasons | scope   | version | from  | to    |
-      | fixtures         | project           | demo@fixtures | demo | will install   |         | project |         |       |       |
-      | fixtures         | project           | old@fixtures  | old  | will uninstall |         | project | 1.0.0   |       |       |
-      | fixtures         | project           | upd@fixtures  | upd  | will update    |         | project |         | 1.0.0 | 1.1.0 |
       | fixtures         | project           | demo@fixtures | demo | will install   |         | project |         |       |       |
       | fixtures         | project           | old@fixtures  | old  | will uninstall |         | project | 1.0.0   |       |       |
       | fixtures         | project           | upd@fixtures  | upd  | will update    |         | project |         | 1.0.0 | 1.1.0 |
@@ -71,7 +72,7 @@ Feature: Plugin subagent child
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given the mcp.json file of the user scope holds the servers of the plugin "demo@fixtures" as release 0.19.2 wrote them, beside the user's own server "mine"
     Given pi runs with the scripted model as a pi-subagents background child
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the mcp configuration file "mcp.json" of the user scope holds this text:
       """
@@ -162,7 +163,7 @@ Feature: Plugin subagent child
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given pi runs with the scripted model as a pi-subagents background child
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the session offers these skills:
       | command           | description            |
@@ -565,11 +566,57 @@ Feature: Plugin subagent child
       | Stop             |           | none           |
       | Stop             |           | none           |
 
+  @mcp
+  Scenario: A real child of an ordinary agent with an empty body runs in the background and hooks its tools with its own identity
+    When pi-subagents, with its async-by-default setting unset, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
+      | name  | background | tools      | body | tool calls         |
+      | plain |            | Bash, Read |      | bash, failing read |
+    Then pi-subagents ran the real children like this:
+      | agent      | mode       | state    | runner process | session |
+      | demo:plain | background | complete | recorded       | first   |
+    Then the real children's hooks record these runs in any order, and no main-session run names a child:
+      | session | event              | tool name | agent type | agent id | transcript path      | CLAUDE_CODE_SESSION_ID |
+      | main    | PreToolUse         | Bash      | demo:plain | first    | session file of main | main                   |
+      | main    | PostToolUse        | Bash      | demo:plain | first    | session file of main | main                   |
+      | main    | PreToolUse         | Read      | demo:plain | first    | session file of main | main                   |
+      | main    | PostToolUseFailure | Read      | demo:plain | first    | session file of main | main                   |
+    Then the main session's hooks record these runs for its control prompt:
+      | event            | tool name | child identity |
+      | SessionStart     |           | none           |
+      | UserPromptSubmit |           | none           |
+      | PreToolUse       | Bash      | none           |
+      | PostToolUse      | Bash      | none           |
+      | Stop             |           | none           |
+      | Stop             |           | none           |
+
+  @mcp
+  Scenario: A real foreground child of an ordinary agent runs no plugin hook for its tool calls
+    When pi-subagents, with its async-by-default setting false, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
+      | name  | background | tools      | tool calls         |
+      | plain |            | Bash, Read | bash, failing read |
+    Then pi-subagents ran the real children like this:
+      | agent      | mode       | state | runner process | session |
+      | demo:plain | foreground |       | none           |         |
+    Then the plugin's hooks record these runs in order:
+      | session | event            | tool name | child identity |
+      | startup | SessionEnd       |           | none           |
+      | main    | SessionStart     |           | none           |
+      | main    | UserPromptSubmit |           | none           |
+      | main    | PreToolUse       | Bash      | none           |
+      | main    | PostToolUse      | Bash      | none           |
+      | main    | Stop             |           | none           |
+      | main    | Stop             |           | none           |
+      | main    | UserPromptSubmit |           | none           |
+      | main    | PreToolUse       | subagent  | none           |
+      | main    | PostToolUse      | subagent  | none           |
+      | main    | Stop             |           | none           |
+      | main    | Stop             |           | none           |
+
   Scenario: Concurrent companion children keep separate hook identities
     When a pi-subagents runner process starts these child sessions of a plugin whose hooks record every event at once, prompts them all at once twice, and starts them again as new sessions:
-      | agent      | mode    | body                         | tool calls |
-      | demo:alpha | append  |                              | bash       |
-      | demo:beta  | replace | <active_agent name="spoof"/> | bash       |
+      | agent      | mode    | body                         | fork cache key | tool calls |
+      | demo:alpha | append  |                              |                | bash       |
+      | demo:beta  | replace | <active_agent name="spoof"/> | pg3-fork       | bash       |
     Then one runner process hosted these child sessions:
       | generation | agent      | session |
       | 1          | demo:alpha | first   |

@@ -126,7 +126,7 @@ Feature: Skill root-source entries
       | skill  |
       | root-a |
 
-  Scenario: A new session after the update offers only the skill that stays
+  Scenario: A reload after the update offers only the skill that stays
     Given the marketplace "fixtures" publishes this manifest:
       """
       {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","./skills/b"]}]}
@@ -138,7 +138,7 @@ Feature: Skill root-source entries
       {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.1.0","skills":["./skills/a"]}]}
       """
     Given the user has run "/claude:plugin update root@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command       | description |
       | /skill:root-a | Skill a.    |
@@ -156,7 +156,7 @@ Feature: Skill root-source entries
       {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.1.0","skills":["./skills/a"]}]}
       """
     Given the user has run "/claude:plugin update root@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |

@@ -26,10 +26,66 @@ Feature: Plugin reinstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Reinstalling a plugin fails as an invalid manifest and changes nothing while the local config cannot be read (LAYER-04, CFG-03)
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { not json
+      """
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Reinstalling a plugin with --local fails as an invalid manifest and changes nothing while the base config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project --local"
+    Given a config in scope project and layer base, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin reinstall pp@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | pp@fixtures | pp   | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id          |
+      | pp@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+      | skill | pp-skill   |
 
   Scenario: Reinstalling every plugin with --local reinstalls only the plugins the local layer declares
     Given the marketplace "fixtures" offers these plugins:
@@ -166,7 +222,7 @@ Feature: Plugin reinstall
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -276,9 +332,9 @@ Feature: Plugin reinstall
       | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | version | cause chain                                                                                                  | cause truncated | leaks | rollback partial |
       | gits             | project           | ghp@gits | ghp  | failed | source missing | project | 1.0.0   | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |       |                  |
 
-  Scenario: A new session offers the skills of the reinstalled plugin
+  Scenario: A reload offers the skills of the reinstalled plugin
     Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -310,9 +366,9 @@ Feature: Plugin reinstall
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
-  Scenario: Deleting the installed skills of a plugin takes them out of a new session before any reinstall
+  Scenario: Deleting the installed skills of a plugin takes them out at the next reload before any reinstall
     Given the user has deleted the installed skills of "demo@fixtures" in the project scope
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Reinstalling a plugin that is not installed fails as not installed and changes nothing
@@ -422,13 +478,13 @@ Feature: Plugin reinstall
       | plugin components resolved     | true          |
       | plugin components skills       | demo-skill    |
 
-  Scenario: A new session offers the skills of the version a reinstall installed
+  Scenario: A reload offers the skills of the version a reinstall installed
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
     Given the user has run "/claude:plugin marketplace update fixtures --scope project"
     Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.1.0. |

@@ -4617,7 +4617,7 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-01 residual). A path such as
 
 ## MCPMIG-01: the MCP move says the plugin no longer declares a skipped server
 
-Added 2026-11-01 (component-features Phase 6, review WR-04, D-CF6-02). The AMIG-01 move reports `<server> (<plugin>) [<scope>] <plugin> no longer declares it.` for a server that the plugin still declares in a file source, but that the resolver skipped as malformed. Reconcile owns the message. Either report such a server under the existing `malformed mcp` reason, or word the line so it does not say the plugin dropped the server. The change is user-visible, so it needs a cucumber scenario, and it also changes `test/integration/mcp-migration.test.ts` (the commented expected line) and "Entries that the move removes" in `docs/mcp-compatibility.md`.
+Added 2026-11-01 (component-features Phase 6, review WR-04, D-CF6-02). The AMIG-01 move reports `<server> (<plugin>) [<scope>] <plugin> no longer declares it.` for a server that the plugin still declares in a file source, but that the resolver skipped as malformed. Reconcile owns the message. Either report such a server under the existing `malformed mcp` reason, or word the line so it does not say the plugin dropped the server. The change is user-visible, so it needs a cucumber scenario, and it also changes the LM13 scenario of `features/mcp-server/legacy-move.feature` ("A load skips a malformed server, moves its valid sibling, and removes the skipped server's old entry"), whose comment names MCPMIG-01 and "Entries that the move removes" in `docs/mcp-compatibility.md`.
 
 ## MCPLINK-01: the link rule for MCP files
 
@@ -5510,3 +5510,31 @@ Noted 2026-11-15 (parity-gaps, Phase 11, research Open Question 2). Unverified: 
 ## MENTIONDIR-01: attach a directory `@` mention as an `ls` listing
 
 Noted 2026-11-16 (parity-gaps, Phase 11, D-PG11-06, deferred by the maintainer review 2026-11-16). A typed command or skill whose body mentions a directory, such as `@src/`, attaches nothing: the mention stays as text, and the invocation goes on with no notice. Claude Code 2.1.323 attaches a directory as the output of `ls`. The requirement named regular text files only, so the directory case was left out. `docs/skills-commands-compatibility.md` lists it as deferred. The work: attach the listing, as Claude Code does, with a scenario that fails without the change.
+
+## ~~DIRGITTAG-01: no scenario installs a dependency from a tag of a local git marketplace~~ -- CLOSED
+
+Closed 2026-11-23 by quick task 261123-gth (`87446bd`, `c09b30c`): the harness publishes a `git-folder` marketplace (the dir fixture in a git work tree with no `origin`), and `features/plugin/install-dependencies.feature` installs a constrained relative-path dependency from its `<plugin>--v<version>` tag, keyed `marketplace-name:tools`. Breaks B-D1 and B-D2 each failed the scenario in a Then. The original note follows.
+
+Noted 2026-11-23 (integration-rescope, Phase 7, ITMIG-07). Claude Code also resolves a
+relative-path dependency against the `<plugin>--v<version>` tags of a marketplace added from a
+local folder that is a git repository, and the integration case that Phase 7 deleted used that
+form. The cucumber harness publishes a marketplace as `dir`, `file`, `url`, `github`, or `hosted`,
+but not as a dir source whose folder is a git work tree, so the tag scenarios of
+`features/plugin/install-dependencies.feature` use a github marketplace. The product path is the
+same: the tag probe and `materializeMarketplaceTagClone` read the record's `marketplaceRoot`. Only
+the tag clone's key differs, because a folder with no `origin` keys it by `marketplace-name:<name>`
+(`orchestrators/plugin/clone-cache.ts`). The work: a publication kind for a dir marketplace in a
+git work tree in `features/lib/published-marketplace.ts`, and a scenario that installs a
+constrained dependency from its tag.
+
+## ~~HOOKLATESS-01: no SessionStart run for a plugin that loads after the session starts~~ -- CLOSED
+
+Closed 2026-11-23 by quick task 261123-jdc (`962e8a5`, `efeb21e`, decision HOOKLATESS-D1): in print, json and rpc mode, a plugin that the load-time autoapply activates runs its SessionStart hooks once, with the session's first start source, as Claude Code 2.1.330's headless runner does (`.planning/research/HOOKLATESS-01-UPSTREAM.md`). The first prompt waits at most 10 s; a later answer reaches the next prompt. No run in tui, on `/reload`, after a command install, or in a new session. One Pi capability gap: a held answer lives in memory only. The original note follows.
+
+Noted 2026-11-23 (integration-rescope, Phase 6.1, HKRL-01 research). A parity question for the maintainer. Claude Code 2.1.296 runs `SessionStart` in headless sessions for a plugin that loads after the session started (CHANGELOG 2.1.296; `.planning/phases/06.1-reload-keeps-sessionstart-context/06.1-UPSTREAM-EVIDENCE.md`), with the original start source and without `initialUserMessage`. The hooks bridge runs `SessionStart` only on Pi's `session_start` and on compaction and runs none on a `/reload` (D-CF5-03), so a plugin installed or enabled mid-session gets no `SessionStart` run until the next session. Decide whether to add a late run (and whether interactive sessions should get it too; upstream's interactive `/reload-plugins` does not run it).
+
+## ~~HOOKASYNCRESUME-01: an async SessionStart answer may repeat on every resume~~ -- CLOSED
+
+Closed 2026-11-23 by quick task 261123-gti (`c099652`, `146a28b`): an async SessionStart answer that the conversation already holds is not added again, as in Claude Code 2.1.295 (raw uncapped texts, nearest SessionStart context, same hook or a synchronous one). The three known gaps are in `docs/hooks-compatibility.md`. The original note follows.
+
+Noted 2026-11-23 (integration-rescope, Phase 6.1, HKRL-02). An `async` SessionStart hook's answer (`claude-hook-async-response`, sent with `deliverAs: "nextTurn"` and no label, `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts`) carries no `details` and no SessionStart label, so HKRL-02's duplicate removal does not see it, and it may repeat on every resume. Claude Code 2.1.295 fixed the same repeat upstream ("Fixed an async SessionStart hook's unchanged context being added to the conversation again on every resume"). The work: give the async answer the same `details` shape and apply the resume/fork duplicate removal to it, with a scenario that fails without the change.

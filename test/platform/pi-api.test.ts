@@ -227,6 +227,7 @@ void ({
 } satisfies PiBoundary.PiInventory);
 void ({
   mode: "tui",
+  hasUI: true,
   ui: { notify: (): void => undefined },
 } satisfies PiBoundary.NotificationContext);
 
@@ -253,7 +254,7 @@ void ({ getCommands: () => [] } satisfies PiBoundary.PiInventory);
 // @ts-expect-error a Pi inventory must expose getCommands
 void ({ getAllTools: () => [] } satisfies PiBoundary.PiInventory);
 // @ts-expect-error a notification context must expose ui.notify
-void ({ mode: "tui", ui: {} } satisfies PiBoundary.NotificationContext);
+void ({ mode: "tui", hasUI: true, ui: {} } satisfies PiBoundary.NotificationContext);
 
 function proveSoftDepStatusReadonly(snapshot: PiBoundary.SoftDepStatus): void {
   // @ts-expect-error the pi-subagents flag of a snapshot is readonly

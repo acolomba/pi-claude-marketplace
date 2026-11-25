@@ -33,7 +33,7 @@ Feature: Skill collisions
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
-  Scenario: A new session offers no skill that shares its name with a command of its plugin
+  Scenario: A reload offers no skill that shares its name with a command of its plugin
     Given the published plugin "demo" of the marketplace "fixtures" has the skill "clash" described as "Clash skill" with this body:
       """
       SKILL CLASH BODY
@@ -48,7 +48,7 @@ Feature: Skill collisions
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project", which skipped a skill of the plugin
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -69,7 +69,7 @@ Feature: Skill collisions
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project", which skipped a skill of the plugin
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Clash ran. |
@@ -93,7 +93,7 @@ Feature: Skill collisions
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-clash | Clash skill            |
@@ -119,7 +119,7 @@ Feature: Skill collisions
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project", which skipped a skill of the plugin
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -164,7 +164,7 @@ Feature: Skill collisions
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project", which skipped a skill of the plugin
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

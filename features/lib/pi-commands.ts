@@ -1,10 +1,11 @@
 /**
- * @fileoverview Runs `/claude:plugin` commands and new sessions in the run's headless Pi.
+ * @fileoverview Runs `/claude:plugin` commands, reloads, and new sessions in
+ * the run's headless Pi.
  *
  * In RPC mode the extension appends each result as a `claude-plugin` custom
  * entry (JOUT-01), so a step reads structured payloads and never parses
- * text. A command, or a new session, returns every payload it emits, in
- * emission order, each validated against the published payload schema
+ * text. A command, a reload, or a new session returns every payload it emits,
+ * in emission order, each validated against the published payload schema
  * (DRV-01). State persists between commands through the sandbox directories,
  * as it does between two Pi sessions of one user. A plain message returns the
  * payloads that follow it in the session, such as a background update's.
@@ -29,19 +30,26 @@ export type NotificationPayload = Type.Static<typeof NOTIFICATION_PAYLOAD_SCHEMA
 /** The payload of most plugin and marketplace commands. */
 export type CascadePayload = Type.Static<typeof CASCADE_PAYLOAD_SCHEMA>;
 
-/** One skill a new session offers as a `/skill:<name>` command. */
+/** One skill a session offers as a `/skill:<name>` command after it starts or reloads. */
 export interface OfferedSkill {
   readonly command: string;
   readonly description: string;
 }
 
-/** What a new session offers and the payloads it emits, such as its reconcile report. */
+/**
+ * What a session offers after it starts or reloads, and the payloads its load
+ * emits, such as its reconcile report.
+ */
 export interface SessionReport {
   readonly skills: readonly OfferedSkill[];
   readonly payloads: readonly NotificationPayload[];
 }
 
 const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+// Pi's own `/reload` runs only in its terminal, and RPC has no reload request,
+// so an RPC client reloads through the extension's own subcommand.
+const RELOAD_COMMAND = "/claude:plugin reload";
 
 // The part of Pi's `get_commands` response that the skill steps read.
 const COMMANDS_VALIDATOR = Compile(
@@ -158,8 +166,12 @@ export async function runCommand(pi: PiProcess, command: string): Promise<Cascad
 
 /**
  * Starts a new session in `pi` and returns what `readSession` reads from it.
- * A new session rebuilds the extension runtime and discovers its resources
- * again, which is what makes installed plugins visible, as `/reload` does.
+ * A new session does more than a reload. It ends the old session, which runs
+ * the SessionEnd hooks, and then runs the SessionStart hooks with the source
+ * `clear`. It empties the conversation and gets a new session id. It creates a
+ * session runtime, and Pi decides project trust for that runtime. Its load
+ * runs with the reason `startup`. A step that only needs Pi to load what
+ * changed uses `reloadSession`.
  */
 export async function startSession(pi: PiProcess): Promise<SessionReport> {
   const started = await pi.request({ type: "new_session" });
@@ -172,6 +184,67 @@ export async function startSession(pi: PiProcess): Promise<SessionReport> {
   return readSession(pi);
 }
 
+// Every skill the current session of `pi` offers, in Pi's order.
+async function offeredSkills(pi: PiProcess): Promise<readonly OfferedSkill[]> {
+  const listed = await pi.request({ type: "get_commands" });
+  assertQuiet(listed);
+  const { response } = listed;
+  assert.ok(
+    COMMANDS_VALIDATOR.Check(response),
+    JSON.stringify(COMMANDS_VALIDATOR.Errors(response)),
+  );
+  return response.data.commands
+    .filter((command) => command.source === "skill")
+    .map(({ name, description }) => ({ command: `/${name}`, description }));
+}
+
+/**
+ * Reloads `pi` through `/claude:plugin reload` and returns the skills the
+ * session offers after the reload and the payloads of the reloaded runtime's
+ * load, in session order, each valid against the payload schema (DRV-01).
+ *
+ * The command appends its own `reload-started` payload first. Then Pi reloads,
+ * and the reloaded runtime's load appends its payloads, which can be none.
+ * Pi answers the prompt only after the reload has finished (`rpc-mode.js`,
+ * `agent-session.js`), so the answer follows every payload of the load. The
+ * driver requires that first payload to be exactly the command's
+ * `reload-started` payload and drops it. Any other first payload fails the
+ * step, a `usage-error` refusal included.
+ *
+ * A reload keeps the session: its conversation, its id, and the entries from
+ * before the command. So the driver reads only the entries after the command.
+ * A reload builds one extension runtime and loads every extension module again
+ * (`resource-loader.js`), so it binds the extension once, and a lasting load
+ * failure appears once. It runs no SessionStart and no SessionEnd hook
+ * (D-CF5-03). It decides no project trust and keeps the trust of the runtime
+ * it reloads, so `PiProcess` does not count it as a request that decides
+ * trust.
+ */
+export async function reloadSession(pi: PiProcess): Promise<SessionReport> {
+  const before = (await readCustomEntries(pi)).length;
+  const exchange = await pi.request({ type: "prompt", message: RELOAD_COMMAND });
+  assertQuiet(exchange);
+  assert.deepStrictEqual(exchange.response.data, { disposition: "handled" }, RELOAD_COMMAND);
+  const [started, ...payloads] = claudePluginPayloads((await readCustomEntries(pi)).slice(before));
+  const invocationId = started?.origin.kind === "command" ? started.origin.invocationId : "";
+  assert.ok(
+    invocationId !== "",
+    `${RELOAD_COMMAND} did not report reload-started first: ${JSON.stringify(started)}`,
+  );
+  assert.deepStrictEqual(
+    started,
+    {
+      schemaVersion: 1,
+      kind: "reload-started",
+      origin: { kind: "command", commandId: "plugin reload", invocationId },
+      severity: "info",
+      needsReload: false,
+    },
+    `${RELOAD_COMMAND} did not report reload-started first`,
+  );
+  return { skills: await offeredSkills(pi), payloads };
+}
+
 /**
  * Returns every skill the current session of `pi` offers, in Pi's order, and
  * every payload the session emitted, in session order, each valid against the
@@ -180,16 +253,7 @@ export async function startSession(pi: PiProcess): Promise<SessionReport> {
  * reconcile report.
  */
 export async function readSession(pi: PiProcess): Promise<SessionReport> {
-  const listed = await pi.request({ type: "get_commands" });
-  assertQuiet(listed);
-  const { response } = listed;
-  assert.ok(
-    COMMANDS_VALIDATOR.Check(response),
-    JSON.stringify(COMMANDS_VALIDATOR.Errors(response)),
-  );
-  const skills = response.data.commands
-    .filter((command) => command.source === "skill")
-    .map(({ name, description }) => ({ command: `/${name}`, description }));
+  const skills = await offeredSkills(pi);
   return { skills, payloads: claudePluginPayloads(await readCustomEntries(pi)) };
 }
 

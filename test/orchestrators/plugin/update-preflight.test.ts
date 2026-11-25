@@ -2660,7 +2660,7 @@ test("passes authenticated clone context and refs through both clone arms", asyn
     fill: () => Promise.resolve(null),
     reject: () => Promise.resolve(),
   };
-  const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
+  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
   const deviceFlowHttp: DeviceFlowHttp = {
     requestCode: () => Promise.reject(new Error("unexpected device flow")),
     pollToken: () => Promise.reject(new Error("unexpected device flow")),

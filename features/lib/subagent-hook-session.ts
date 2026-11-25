@@ -40,12 +40,11 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { promptDisposition } from "../../test/e2e/_rpc.ts";
-
 import { closeHookGate, openHookGate, readHookScriptPids } from "./hook-files.ts";
 import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "./hook-recorder.ts";
 import { startSession } from "./pi-commands.ts";
 import { DIALOG_METHODS, PiProcess } from "./pi-process.ts";
+import { promptDisposition } from "./pi-rpc.ts";
 import { harnessDirectory, isRunning, readLogLengths, readLogLinesSince } from "./turn-records.ts";
 
 import type { HookGate } from "./hook-files.ts";
@@ -298,9 +297,20 @@ async function restoreChildPromptSections(
 }
 
 // The environment of process `pid` as name-value lines, or none once it exited.
+// A process that exited but is not yet reaped still has its /proc entry, and
+// reading its environ then fails with ESRCH instead of ENOENT.
 async function processEnvironment(pid: number): Promise<readonly string[]> {
-  const text = await readOptional(`/proc/${pid}/environ`);
+  const text = await readFile(`/proc/${pid}/environ`, "utf8").catch(absentWhenExited);
   return text?.split("\0") ?? [];
+}
+
+function absentWhenExited(error: unknown): undefined {
+  if (error instanceof Error && "code" in error && error.code === "ESRCH") {
+    return undefined;
+  }
+
+  absentWhenMissing(error);
+  return undefined;
 }
 
 // The dispatch marker in the environment of process `pid`, if it carries one.

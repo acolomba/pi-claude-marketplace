@@ -68,7 +68,7 @@ Feature: Plugin git source update
       | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from  | to    |
       | gits             | project           | subq@gits | subq | updated |         | project | 1.0.0 | 2.0.0 |
     Then the git host receives no request
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:subp-skill | A skill of subp 2.0.0. |

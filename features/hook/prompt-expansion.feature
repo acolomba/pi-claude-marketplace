@@ -32,7 +32,7 @@ Feature: Hook prompt expansion
       | guard | UserPromptExpansion | demo:deploy | script | 2         | no deploys today |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -69,7 +69,7 @@ Feature: Hook prompt expansion
       | quiet | UserPromptExpansion |         | script | {"decision":"block","reason":"not now","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user prompts "/demo:cmd first second"
     Then the hooks record these runs:
       | event               | session | expansion type | command name | command args | command source | prompt                 | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
@@ -106,7 +106,7 @@ Feature: Hook prompt expansion
       | expansion-log | UserPromptExpansion |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -145,7 +145,7 @@ Feature: Hook prompt expansion
       | expansion-log | UserPromptExpansion |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -178,7 +178,7 @@ Feature: Hook prompt expansion
       | expansion-log | UserPromptExpansion |         |        |           |                  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user prompts "/demo:cmd first second"
     Then the hooks record these runs:
       | event            | session | prompt                 | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
@@ -207,7 +207,7 @@ Feature: Hook prompt expansion
       | halt | UserPromptExpansion |         | script | {"continue":false,"stopReason":"not now"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user prompts "/demo:cmd first second"
     Then the hooks record these runs:
       | event               | session | expansion type | command name | command args | command source | prompt                 | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
@@ -236,7 +236,7 @@ Feature: Hook prompt expansion
       | ctx  | UserPromptExpansion |         | script | {"hookSpecificOutput":{"hookEventName":"UserPromptExpansion","additionalContext":"ctx-from-hook"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -264,7 +264,7 @@ Feature: Hook prompt expansion
       | expansion-log | UserPromptExpansion |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |

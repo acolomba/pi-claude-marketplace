@@ -27,7 +27,7 @@ Feature: Skill model reads
   Scenario: A skill file the model reads has its variables filled and its arguments empty
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | tool | arguments                                                                                |
       |        | read | {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"} |
@@ -52,7 +52,7 @@ Feature: Skill model reads
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | tool | arguments                                                                         |
       |        | read | {"path":"{agent dir}/pi-claude-marketplace/resources/skills/demo-where/SKILL.md"} |
@@ -68,7 +68,7 @@ Feature: Skill model reads
   Scenario: A part of a skill file the model reads keeps its frontmatter and fills its body lines
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | tool | arguments                                                                                                     |
       |        | read | {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md","offset":2,"limit":7} |
@@ -84,7 +84,7 @@ Feature: Skill model reads
   Scenario: A file the model reads that pi did not load as a skill stays as it is
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | tool | arguments                                                                   |
       |        | read | {"path":"{home}/marketplaces/fixtures/plugins/demo/skills/status/SKILL.md"} |
@@ -103,7 +103,7 @@ Feature: Skill model reads
       | observe | PostToolUse | Read    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | tool | arguments                                                                                |
       |        | read | {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"} |
@@ -125,7 +125,7 @@ Feature: Skill model reads
       | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"Head 1 at effort ${CLAUDE_EFFORT}.\\nHead 2.\\nHead 3.\\nHead 4.\\nHead 5.\\nHead 6 at effort ${CLAUDE_EFFORT}.\\nTail 7 at effort ${CLAUDE_EFFORT}, arguments [$ARGUMENTS]."}}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | tool | arguments                                                                                |
       |        | read | {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"} |

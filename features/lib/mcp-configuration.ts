@@ -6,10 +6,13 @@
  *
  * A declared server runs a command that does not exist, so nothing ever
  * starts it: a scenario observes only how Pi stages the server in the scope's
- * MCP configuration. Each function but the legacy writer writes one file it
- * creates and refuses to replace a file it did not create. The legacy writer
- * rewrites a scope's two MCP configuration files, under the scope root its
- * caller names, which lies in the scenario's sandbox (D-BG-13).
+ * MCP configuration. `legacyMcpServers` builds, without writing, the entries
+ * release 0.19.2 wrote for a plugin, which the legacy writer and the step
+ * that checks a 0.19.2 `mcp.json` text share. Each other function but the
+ * legacy writer writes one file it creates and refuses to replace a file it
+ * did not create. The legacy writer rewrites a scope's two MCP configuration
+ * files, under the scope root its caller names, which lies in the scenario's
+ * sandbox (D-BG-13).
  */
 
 import assert from "node:assert/strict";
@@ -18,7 +21,7 @@ import path from "node:path";
 
 import { jsonObject, readObject } from "./earlier-version-state.ts";
 import { isPlainObject } from "./field-rows.ts";
-import { readPluginRecord } from "./installation-record.ts";
+import { readPluginRecord, splitPluginId } from "./installation-record.ts";
 import { writePublishedPluginFile } from "./published-marketplace.ts";
 
 import type { PublishedMarketplace } from "./published-marketplace.ts";
@@ -137,22 +140,52 @@ function legacyEntry(
 }
 
 /**
+ * The servers release 0.19.2 wrote into `<scopeRoot>/mcp.json` for the plugin
+ * `pluginId` (`<plugin>@<marketplace>`) whose root was `pluginRoot`, in its
+ * order: each server the plugin's `.mcp.json` declares, under its declared
+ * name, with the declared members, a stdio server's env with
+ * `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` injected, and the marker
+ * `_piClaudeMarketplace: { plugin, marketplace }`. A declared server that
+ * names a variable 0.19.2 substituted fails, because that substitution is not
+ * reproduced. Any other reference, such as a plugin option, stays as written,
+ * as 0.19.2 left it.
+ */
+export async function legacyMcpServers(args: {
+  readonly scopeRoot: string;
+  readonly pluginId: string;
+  readonly pluginRoot: string;
+}): Promise<Record<string, unknown>> {
+  const { scopeRoot, pluginId, pluginRoot } = args;
+  const { plugin, marketplace } = splitPluginId(pluginId);
+  const declaredFile = path.join(pluginRoot, ".mcp.json");
+  const declared = serversOf(
+    jsonObject(JSON.parse(await readFile(declaredFile, "utf8")), declaredFile),
+    declaredFile,
+  );
+  const env = {
+    CLAUDE_PLUGIN_ROOT: pluginRoot,
+    CLAUDE_PLUGIN_DATA: path.join(scopeRoot, "pi-claude-marketplace", "data", marketplace, plugin),
+  };
+  return Object.fromEntries(
+    Object.entries(declared).map(([name, entry]): [string, unknown] => [
+      name,
+      legacyEntry(name, entry, env, { plugin, marketplace }),
+    ]),
+  );
+}
+
+/**
  * Makes the MCP configuration files of the scope at `scopeRoot` look as
  * release 0.19.2 left them for the installed plugin `pluginId`
  * (`<plugin>@<marketplace>`), beside the user's own server `userServer`, and
  * returns the `mcp.json` it wrote. Commit `94160614` (#250), first released
  * in 0.20.0, moved plugin servers to `mcp-adapter.json`.
  *
- * Each server the plugin's `.mcp.json` declares goes into `<scopeRoot>/mcp.json`
- * under its declared name, as 0.19.2's stage wrote it: the declared members, a
- * stdio server's env with `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`
- * injected, and the marker `_piClaudeMarketplace: { plugin, marketplace }`.
- * The user's server, which carries no marker, comes first. The entries
- * today's install wrote into `<scopeRoot>/mcp-adapter.json` under their
- * generated keys are removed. Every other member of both files stays. A
- * declared server that names a variable 0.19.2 substituted fails the write,
- * because that substitution is not reproduced. Any other reference, such as a
- * plugin option, stays as written, as 0.19.2 left it.
+ * The plugin's servers go into `<scopeRoot>/mcp.json` as `legacyMcpServers`
+ * builds them from the plugin root the record names. The user's server, which
+ * carries no marker, comes first. The entries today's install wrote into
+ * `<scopeRoot>/mcp-adapter.json` under their generated keys are removed.
+ * Every other member of both files stays.
  *
  * The installation record keeps today's shape unless the scenario also
  * rewrites it.
@@ -163,27 +196,13 @@ export async function writeLegacyMcpConfig(args: {
   readonly userServer: { readonly name: string; readonly command: string };
 }): Promise<Record<string, unknown>> {
   const { scopeRoot, pluginId, userServer } = args;
-  const at = pluginId.lastIndexOf("@");
-  const plugin = pluginId.slice(0, at);
-  const marketplace = pluginId.slice(at + 1);
+  const { plugin, marketplace } = splitPluginId(pluginId);
   const { resolvedSource } = await readPluginRecord(scopeRoot, pluginId);
   if (typeof resolvedSource !== "string") {
     throw new Error(`the record of ${pluginId} names no plugin root`);
   }
 
-  const declaredFile = path.join(resolvedSource, ".mcp.json");
-  const declared = serversOf(
-    jsonObject(JSON.parse(await readFile(declaredFile, "utf8")), declaredFile),
-    declaredFile,
-  );
-  const env = {
-    CLAUDE_PLUGIN_ROOT: resolvedSource,
-    CLAUDE_PLUGIN_DATA: path.join(scopeRoot, "pi-claude-marketplace", "data", marketplace, plugin),
-  };
-  const legacy = Object.entries(declared).map(([name, entry]): [string, unknown] => [
-    name,
-    legacyEntry(name, entry, env, { plugin, marketplace }),
-  ]);
+  const legacy = await legacyMcpServers({ scopeRoot, pluginId, pluginRoot: resolvedSource });
 
   const adapterFile = path.join(scopeRoot, "mcp-adapter.json");
   const adapter = await readObject(adapterFile);
@@ -199,7 +218,7 @@ export async function writeLegacyMcpConfig(args: {
     mcpServers: {
       ...serversOf(mcp, mcpFile),
       [userServer.name]: { command: userServer.command },
-      ...Object.fromEntries(legacy),
+      ...legacy,
     },
   };
   await writeJsonFile(mcpFile, written);

@@ -1,5 +1,6 @@
 // test/integration/provenance-invisibility.test.ts
 //
+// Peer conformance (ITSCOPE-01) against pi-subagents' own frontmatter parser.
 // T-d8i-01 headline safety claim, verified against pi-subagents' OWN parser:
 // the provenance folded under the frontmatter `provenance:` mapping stays
 // invisible to the child subagent. The child subagent's system prompt is

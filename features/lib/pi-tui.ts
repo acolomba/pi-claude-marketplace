@@ -9,14 +9,9 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import {
-  killProcessGroup,
-  piArguments,
-  resolveRpcSandbox,
-  rpcChildEnvironment,
-} from "../../test/e2e/_rpc.ts";
+import { killProcessGroup, piArguments, resolveRpcSandbox, rpcChildEnvironment } from "./pi-rpc.ts";
 
-import type { RpcGitEnvironment, RpcSandbox } from "../../test/e2e/_rpc.ts";
+import type { RpcGitEnvironment, RpcSandbox } from "./pi-rpc.ts";
 import type { ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 

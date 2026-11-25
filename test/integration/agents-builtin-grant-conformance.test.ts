@@ -1,5 +1,6 @@
 // test/integration/agents-builtin-grant-conformance.test.ts
 //
+// Peer conformance (ITSCOPE-01) against pi-subagents' own selector resolver.
 // MGRT-01: the `mcp:` selectors that `convertAgent` writes in the built-in
 // grant form, verified against pi-subagents' OWN selector resolver. With a
 // host whose `mcp` command comes from `builtin:mcp` and which has no
@@ -8,7 +9,11 @@
 // namespace, a per-tool selector takes the tool Pi names. So the test lists
 // each granted tool under the name and namespace Pi 1.5.0 gives it, computed
 // here from Pi's rule, and asserts that every built-in selector resolves and
-// that every adapter selector of the same agent stays unresolved.
+// that every adapter selector of the same agent stays unresolved. The
+// scenarios stage these grants (`features/mcp-server/agent-grants.feature`)
+// and launch a real child with an MCP grant
+// (`features/agent/frontmatter.feature`); the whole-server selectors and the
+// unresolved adapter selectors need pi-subagents' own resolver.
 //
 // pi-subagents is an optional peer. The test imports its compiled
 // `src/runs/shared/mcp-direct-tool-allowlist.js` in place from the suite

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Compile } from "typebox/compile";
 
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
-import { resolvePiRuntime, type PiRuntime } from "../pi-runtime.ts";
+import { resolvePiRuntime, type PiRuntime } from "../../features/lib/pi-runtime.ts";
 
 import { runJsonOutputRuntime } from "./json-output-runtime.ts";
 
@@ -36,9 +36,9 @@ function resolvePeerFloor(): PiRuntime {
       "name" in manifest,
   );
   assert.strictEqual(manifest.name, "@earendil-works/pi-coding-agent");
-  assert.strictEqual(manifest.version, "1.5.0");
+  assert.strictEqual(manifest.version, "1.5.1");
   const runtime = resolvePiRuntime(fixtureRoot);
-  assert.strictEqual(runtime.version, "1.5.0");
+  assert.strictEqual(runtime.version, "1.5.1");
   const relativeCli = path.relative(realpathSync(packageRoot), realpathSync(runtime.cliPath));
   assert.ok(
     relativeCli.length > 0 &&

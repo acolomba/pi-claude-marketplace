@@ -90,6 +90,7 @@ import {
   promptBlockedText,
 } from "./hook-labels.ts";
 import { ifFires } from "./if-field/index.ts";
+import { sessionStartRunsPlugin } from "./late-session-start.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 import { withToolFacts } from "./payloads/tool-event-facts.ts";
@@ -345,14 +346,19 @@ interface MutateOutcome {
   readonly result: MutateResult;
 }
 
-// Every hook's non-empty `additionalContext`, joined in routing order, or
-// `undefined` when no hook gave one.
-function joinedContext(outcomes: readonly BucketOutcome[]): string | undefined {
-  const contexts = outcomes.flatMap(({ result }) =>
+// Every hook's non-empty `additionalContext`, in routing order.
+function contextValues(outcomes: readonly BucketOutcome[]): readonly string[] {
+  return outcomes.flatMap(({ result }) =>
     result.additionalContext === undefined || result.additionalContext === ""
       ? []
       : [result.additionalContext],
   );
+}
+
+// Every hook's non-empty `additionalContext`, joined in routing order, or
+// `undefined` when no hook gave one.
+function joinedContext(outcomes: readonly BucketOutcome[]): string | undefined {
+  const contexts = contextValues(outcomes);
   return contexts.length === 0 ? undefined : contexts.join("\n");
 }
 
@@ -870,7 +876,7 @@ function showHookNotices(
  * prompt and session context type and from the Stop and async-rewake
  * re-entry types, so each carrier stays separable in the transcript.
  */
-const TOOL_CONTEXT_CUSTOM_TYPE = "claude-hook-tool-context" as const;
+export const TOOL_CONTEXT_CUSTOM_TYPE = "claude-hook-tool-context" as const;
 
 /**
  * D-CF5-13: send the folded `additionalContext` of a PreToolUse,
@@ -1442,7 +1448,7 @@ async function runEditResultPairs(
  * adapter. The PreCompact adapter reads every hook's own result instead
  * (D-CF5-18), because the fold lets a stop hide a block. Observation events
  * have no Pi-side return slot -- their adapter
- * is invoked for the SessionStart context buffer and the block/stop
+ * is invoked for the SessionStart context message and the block/stop
  * debug-log side effect and always returns undefined.
  */
 async function adaptForEvent(
@@ -1469,6 +1475,13 @@ async function adaptForEvent(
     case "PreCompact":
       return adaptPreCompactResult(folded.outcomes.map((outcome) => outcome.result));
     case "SessionStart":
+      // HKRL-02: the adapter compares each hook's value with what a resumed
+      // or forked session holds, so it gets the values and the `source`.
+      adaptObservationResultForEvent(result, claudeEvent, context, {
+        event: event as ClaudeSessionStartEvent,
+        values: contextValues(folded.outcomes),
+      });
+      return undefined;
     case "SessionEnd":
     case "PostCompact":
       adaptObservationResultForEvent(result, claudeEvent, context);
@@ -1655,6 +1668,14 @@ function entryFires(
       entry.matcher,
       (view.event as UserPromptExpansionEvent).command_name,
     );
+  }
+
+  // A late SessionStart runs only the hooks of the plugins that it names (HOOKLATESS-D1).
+  if (
+    claudeEvent === "SessionStart" &&
+    !sessionStartRunsPlugin(view.event as ClaudeSessionStartEvent, entry)
+  ) {
+    return false;
   }
 
   const value = matchValue(claudeEvent, view.event);

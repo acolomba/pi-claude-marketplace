@@ -1,7 +1,7 @@
 Feature: Skill lifecycle
 
-  Each plugin verb changes what a new session offers for a bridged skill and what the model
-  receives when the user invokes it. Changes apply at a new session, as Pi's /reload does.
+  Each plugin verb changes what a reload offers for a bridged skill and what the model
+  receives when the user invokes it. Changes apply at the next reload.
   A local marketplace stands in for a published one, and a scripted model for a real one.
 
   Background:
@@ -16,15 +16,15 @@ Feature: Skill lifecycle
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
 
-  Scenario: Disabling a plugin removes its skills from a new session
+  Scenario: Disabling a plugin removes its skills at the next reload
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: A disabled plugin's skill reaches the model as the typed text
     Given pi runs with the scripted model
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply       |
       | Hello, Ada. |
@@ -36,28 +36,28 @@ Feature: Skill lifecycle
   Scenario: Enabling a disabled plugin offers its skills again
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
     Given the user has run "/claude:plugin enable demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description              |
       | /skill:demo-greet | Greets a person by name. |
       | /skill:demo-skill | A skill of demo 1.0.0.   |
 
-  Scenario: Uninstalling a plugin removes its skills from a new session
+  Scenario: Uninstalling a plugin removes its skills at the next reload
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Invoking a skill that an uninstall removed before a reload reports the missing file
     Given pi runs with the scripted model
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
     When the user runs "/skill:demo-greet Ada"
     Then the result has these fields:
-      | kind         | usage-error                                                                                                                                                                                                                        |
-      | severity     | error                                                                                                                                                                                                                              |
-      | needs reload | false                                                                                                                                                                                                                              |
-      | message      | Cannot read the skill /skill:demo-greet: ENOENT: no such file or directory, open '{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md'. Run /reload to load the installed skills again. |
-      | usage        |                                                                                                                                                                                                                                    |
+      | kind         | usage-error                                                                                                                                                                                                                    |
+      | severity     | error                                                                                                                                                                                                                          |
+      | needs reload | false                                                                                                                                                                                                                          |
+      | message      | Cannot read the skill /skill:demo-greet: ENOENT: no such file or directory, open '{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-greet/SKILL.md'. Run /claude:plugin reload to load the installed skills again. |
+      | usage        |                                                                                                                                                                                                                                |
 
   Scenario: Updating a plugin lists the new description of its skill
     Given the marketplace "fixtures" offers these plugins:
@@ -73,7 +73,7 @@ Feature: Skill lifecycle
       Greet the person warmly.
       """
     Given the user has run "/claude:plugin update demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-greet | Greets someone warmly. |
@@ -94,7 +94,7 @@ Feature: Skill lifecycle
       Greet the person warmly.
       """
     Given the user has run "/claude:plugin update demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply          |
       | Hello, warmly. |

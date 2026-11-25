@@ -1273,6 +1273,7 @@ function recordingCtx(): {
   const notifications: { message: string; severity?: Severity }[] = [];
   const ctx: NotificationContext = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify(message: string, severity?: Severity): void {
         notifications.push(severity === undefined ? { message } : { message, severity });

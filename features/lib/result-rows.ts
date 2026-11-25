@@ -1,6 +1,6 @@
 /**
- * @fileoverview Projects the results of a command or a new session into the
- * records the field and row steps compare.
+ * @fileoverview Projects the results of a command, a new session, or a reload
+ * into the records the field and row steps compare.
  *
  * A result's row arrays, `marketplaces`, `blocks`, and `plugins`, have row
  * steps of their own. Every other field is an envelope field, which the field

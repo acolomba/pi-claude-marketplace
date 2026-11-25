@@ -103,9 +103,9 @@ Feature: Plugin install
     Then the command result contains no absolute sandbox path
     Then the project scope has no installed plugins
 
-  Scenario: A new session offers the skills of the installed plugin
+  Scenario: A reload offers the skills of the installed plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -247,7 +247,7 @@ Feature: Plugin install
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -271,6 +271,66 @@ Feature: Plugin install
     Then the "claude-plugins.local.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
+  Scenario: Installing a plugin fails as an invalid manifest and changes nothing while the local config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin install pp@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | pp@fixtures | pp   | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { not json
+      """
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Installing a plugin with --local fails as an invalid manifest and changes nothing while the base config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given a config in scope project and layer base, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin install pp@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | pp@fixtures | pp   | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
   Scenario: Installing with --local from a marketplace only the base layer declares also declares the marketplace in the local layer
     When the user runs "/claude:plugin install demo@fixtures --scope project --local"
     Then the result has these fields:
@@ -291,7 +351,7 @@ Feature: Plugin install
   Scenario: A plugin installed with --local from a marketplace the base layer declares stays installed after the user removes the marketplace from the base layer
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     Given the user has run "/claude:plugin marketplace remove fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

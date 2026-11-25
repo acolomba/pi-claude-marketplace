@@ -89,7 +89,7 @@ import type {
   ToolResultEvent,
 } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { Notification } from "./edge/notification-boundary.ts";
-import type { TurnEndEvent } from "@earendil-works/pi-coding-agent";
+import type { TurnEndEvent, TurnStartEvent } from "@earendil-works/pi-coding-agent";
 
 /**
  * The listener shape every `on` overload accepts. Each overload declares
@@ -468,6 +468,11 @@ async function loadExtension(
       "before_agent_start",
       It.willCapture<EventListener<BeforeAgentStartEvent>>("before agent start"),
     );
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("turn_start", It.willCapture<EventListener<TurnStartEvent>>("turn start"));
   })
     .thenReturn()
     .times(1);

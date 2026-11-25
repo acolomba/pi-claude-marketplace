@@ -918,6 +918,15 @@ const HOOK_NOTICE_PAYLOAD = Type.Object(
 );
 
 /**
+ * RELOADCMD-D1: the outcome of `/claude:plugin reload`, appended right before
+ * Pi reloads. Pi answers the prompt after the reload.
+ */
+const RELOAD_STARTED_PAYLOAD = Type.Object(
+  { ...RAW_ENVELOPE_FIELDS, kind: Type.Literal("reload-started") },
+  { additionalProperties: false },
+);
+
+/**
  * WIRE-01 / D-01..D-03: the one payload union, keyed by `kind`. Kinds appear
  * in their declared order. D-12: production reads only its static type.
  */
@@ -945,6 +954,7 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   MCP_MIGRATION_PAYLOAD,
   BACKGROUND_UPDATE_PAYLOAD,
   HOOK_NOTICE_PAYLOAD,
+  RELOAD_STARTED_PAYLOAD,
   Type.Object(
     {
       schemaVersion: Type.Literal(1),

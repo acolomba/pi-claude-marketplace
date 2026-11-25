@@ -73,7 +73,7 @@ import type { Phase } from "../../../extensions/pi-claude-marketplace/transactio
 import type { TestContext } from "node:test";
 
 function notificationContext(): NotificationContext {
-  return { mode: "tui", ui: { notify: () => undefined } };
+  return { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
 }
 
 /**

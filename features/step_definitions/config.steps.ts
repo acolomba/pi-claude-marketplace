@@ -13,7 +13,8 @@
  * Every other step only reads, so this module writes nothing else and deletes
  * nothing else. `holds this text` compares the raw text of a
  * config, while the byte snapshot steps prove a no-op leaves both the base
- * config and installation record untouched.
+ * config and installation record untouched, or the installation record alone
+ * when the command writes the base config.
  *
  * A missing file fails every step that reads one; it never reads as zero
  * declarations. A file whose `marketplaces` map is empty declares that no
@@ -52,11 +53,14 @@ const CONFIG_FILES: ReadonlySet<string> = new Set([
   "claude-plugins.local.json",
 ]);
 
+function recordBytes(world: ScenarioWorld, scope: string): Promise<Buffer> {
+  return readFile(path.join(world.scopeRoot(scope), "pi-claude-marketplace", "state.json"));
+}
+
 async function scopeBytes(world: ScenarioWorld, scope: string): Promise<ScopeBytes> {
-  const scopeRoot = world.scopeRoot(scope);
   return {
-    config: await readFile(path.join(scopeRoot, "claude-plugins.json")),
-    state: await readFile(path.join(scopeRoot, "pi-claude-marketplace", "state.json")),
+    config: await readFile(path.join(world.scopeRoot(scope), "claude-plugins.json")),
+    state: await recordBytes(world, scope),
   };
 }
 
@@ -175,6 +179,13 @@ Given(
 );
 
 Given(
+  "the installation record bytes of the {word} scope are remembered",
+  async function (this: ScenarioWorld, scope: string) {
+    this.rememberedRecordBytes.set(scope, await recordBytes(this, scope));
+  },
+);
+
+Given(
   "a config in scope {word} and layer {word}, with these marketplaces:",
   async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
     const file = layerConfigPath(this, scope, layer);
@@ -243,6 +254,15 @@ Then(
     const remembered = this.rememberedScopeBytes.get(scope);
     assert.ok(remembered !== undefined, `the ${scope} scope bytes were not remembered`);
     assert.deepStrictEqual(await scopeBytes(this, scope), remembered);
+  },
+);
+
+Then(
+  "the installation record bytes of the {word} scope are unchanged",
+  async function (this: ScenarioWorld, scope: string) {
+    const remembered = this.rememberedRecordBytes.get(scope);
+    assert.ok(remembered !== undefined, `the ${scope} record bytes were not remembered`);
+    assert.deepStrictEqual(await recordBytes(this, scope), remembered);
   },
 );
 

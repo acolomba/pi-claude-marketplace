@@ -24,6 +24,7 @@ import Type from "typebox";
 import { expandStagedCommand, listModelCommands } from "../orchestrators/command-invocation.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
+import { reloadCommandFor } from "../shared/session-host.ts";
 
 import type {
   CommandInvocationOutcome,
@@ -117,6 +118,7 @@ export function registerCommandTool(
       projectTrusted: ctx.isProjectTrusted(),
       sessionId: ctx.sessionManager.getSessionId(),
       thinkingLevel: pi.getThinkingLevel(),
+      reloadCommand: reloadCommandFor(ctx.mode, ctx),
     };
     try {
       return callResult(command, await ports.expand(request, RUN_PLUGIN_COMMAND_TOOL));

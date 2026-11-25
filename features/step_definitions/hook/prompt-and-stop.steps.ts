@@ -44,7 +44,6 @@ import assert from "node:assert/strict";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { BOUNDARY_CONTINUER_EXTENSION } from "../../lib/boundary-continuer.ts";
 import { BOUNDARY_REFUSER_EXTENSION } from "../../lib/boundary-refuser.ts";
 import {
@@ -52,6 +51,7 @@ import {
   HOOK_RUNS_LOG,
   waitForHookLifecycle,
 } from "../../lib/hook-recorder.ts";
+import { promptDisposition } from "../../lib/pi-rpc.ts";
 import { RUN_START_PROBE_EXTENSION, RUN_STARTS_LOG } from "../../lib/run-start-probe.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { callMessageRows, modelCallsOf } from "../../lib/scripted-model/script.ts";

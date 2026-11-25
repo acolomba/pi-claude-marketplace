@@ -24,6 +24,7 @@ describe("surfaceDiscoveryWarnings", () => {
       const capture = createJsonCapture();
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -210,6 +211,7 @@ describe("surfaceStagingDiagnostics", () => {
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },
@@ -300,6 +302,7 @@ describe("surfaceCascadeStagingDiagnostics", () => {
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },

@@ -1,22 +1,24 @@
 /**
- * @fileoverview Steps that start a new Pi session and check the skills it
- * offers and the results it reports.
+ * @fileoverview Steps that start a new Pi session or reload Pi, and check the
+ * skills the session offers and the results it reports.
  *
- * A result can claim an install that never reached disk. These steps look
- * where the user looks: the `/skill:` commands of the next session. A new
- * session also reports its own payloads, such as its reconcile report. They
- * become the last results, so the row steps compare them and a scenario
- * fails when their rows go uncompared. A new session can also be set up, so a
- * scenario shows that what it set up survives the session. A session in
- * another project runs in a project directory of its own, so it shows what
- * the user scope alone offers. A plain message is sent in the current
- * session, and the results that follow it, such as a background update's
- * notice, become the last results the same way. A prompt to a profile Pi
- * runs a model turn, and every record and stand-in log line the turn
- * produced becomes the last model turn (HAR-03). A Pi in the terminal with
- * the scripted model can reload before its turn, which Pi offers only in the
- * terminal, and the stand-in log lines of that turn become the last model
- * turn the same way. A profile Pi also lists the slash commands it offers
+ * A result can claim an install that never reached disk. These steps look where
+ * the user looks: the `/skill:` commands of the next session. A new session
+ * also reports its own payloads, such as its reconcile report. They become the
+ * last results, so the row steps compare them and a scenario fails when their
+ * rows go uncompared. A reload's payloads become the last results the same way.
+ * Pi's own `/reload` runs only in the terminal, so an RPC scenario reloads
+ * through `/claude:plugin reload`. A new session can also be set up, so a
+ * scenario shows that what it set up survives the session, and a setup session
+ * can be one that warns. A session in another project runs in a project
+ * directory of its own, so it shows what the user scope alone offers. A plain
+ * message is sent in the current session, and the results that follow it, such
+ * as a background update's notice, become the last results the same way. A
+ * prompt to a profile Pi runs a model turn, and every record and stand-in log
+ * line the turn produced becomes the last model turn (HAR-03). A Pi in the
+ * terminal with the scripted model can reload before its turn, which Pi offers
+ * only in the terminal, and the stand-in log lines of that turn become the last
+ * model turn the same way. A profile Pi also lists the slash commands it offers
  * through its registry probe, and the listing stays on the world for the step
  * that compares it (HAR-04).
  */
@@ -25,17 +27,17 @@ import assert from "node:assert/strict";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../test/e2e/_rpc.ts";
-import { sendMessage, startSession } from "../lib/pi-commands.ts";
+import { reloadSession, sendMessage, startSession } from "../lib/pi-commands.ts";
 import { DIALOG_METHODS } from "../lib/pi-process.ts";
 import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "../lib/pi-registry-probe/snapshot.ts";
+import { promptDisposition } from "../lib/pi-rpc.ts";
 import { resultsTable } from "../lib/result-rows.ts";
 import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 import { modelCallsOf } from "../lib/scripted-model/script.ts";
 import { lastScriptReply, sendTerminalTurn } from "../lib/scripted-model/terminal-turn.ts";
 import { readLogLengths, readLogLinesSince } from "../lib/turn-records.ts";
 
-import type { SessionReport } from "../lib/pi-commands.ts";
+import type { NotificationPayload, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcRecord } from "../lib/pi-process.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -68,18 +70,55 @@ function keepSession(world: ScenarioWorld, report: SessionReport): void {
   world.skills = report.skills;
 }
 
-// startSession asserts that the session started; the setup keeps nothing on
-// the world, and like a setup command it must report nothing but info.
-Given("the user has started a new pi session", async function (this: ScenarioWorld) {
-  const { payloads } = await startSession(this.pi);
+// A setup load, like a setup command, must report nothing but info.
+function assertAllInfo(payloads: readonly NotificationPayload[]): void {
   assert.deepStrictEqual(
     payloads.filter((payload) => payload.severity !== "info"),
     [],
   );
+}
+
+// A setup load that warned must report at least one result, and only warnings.
+function assertAllWarnings(payloads: readonly NotificationPayload[]): void {
+  assert.notDeepStrictEqual(payloads, []);
+  assert.deepStrictEqual(
+    payloads.filter((payload) => payload.severity !== "warning"),
+    [],
+  );
+}
+
+// startSession asserts that the session started; the setup keeps nothing on
+// the world.
+Given("the user has started a new pi session", async function (this: ScenarioWorld) {
+  assertAllInfo((await startSession(this.pi)).payloads);
 });
 
+// A setup session whose every result warns, such as a legacy move that removed
+// a server pi-mcp-adapter cannot run (D-P3-16).
+Given("the user has started a new pi session, which warned", async function (this: ScenarioWorld) {
+  assertAllWarnings((await startSession(this.pi)).payloads);
+});
+
+// The reload steps send `/claude:plugin reload`. The command appends one
+// `reload-started` payload first, and reloadSession checks it and drops it.
+// So these steps keep only the payloads of the reloaded runtime's load. A
+// `usage-error` refusal fails them.
+Given("the user has reloaded pi", async function (this: ScenarioWorld) {
+  assertAllInfo((await reloadSession(this.pi)).payloads);
+});
+
+// A new session is not a reload. It runs the SessionEnd hooks and then the
+// SessionStart hooks with the source `clear`, empties the conversation, and
+// gets a new session id. It creates a session runtime, for which Pi decides
+// project trust, loads with the reason `startup`, and binds the extension
+// twice over RPC. A scenario starts a new session only to test one of these,
+// and reloads Pi otherwise.
 When("the user starts a new pi session", async function (this: ScenarioWorld) {
   keepSession(this, await startSession(this.pi));
+});
+
+When("the user reloads pi", async function (this: ScenarioWorld) {
+  keepSession(this, await reloadSession(this.pi));
 });
 
 When("the user starts a new pi session in another project", async function (this: ScenarioWorld) {
@@ -127,18 +166,19 @@ When("the user prompts {string}", async function (this: ScenarioWorld, text: str
   this.recordTurn({ prompt, disposition, records, logs });
 });
 
-// Pi offers `/reload` only in the terminal, so the step starts a terminal Pi
-// with the scripted model beside the profile Pi, in the same sandbox, where it
-// plays the profile Pi's script (D-CF2-05). Pi reports the reload done only
-// after the new extensions' session handlers ran, and the turn keeps every
-// stand-in log line from the reload on.
+// Pi offers `/reload` only in the terminal, so the step reloads the terminal
+// Pi the scenario started, which a step started with the scripted model, or
+// else starts one with the scripted model beside the profile Pi, in the same
+// sandbox, where it plays the profile Pi's script (D-CF2-05). Pi reports the
+// reload done only after the new extensions' session handlers ran, and the
+// turn keeps every stand-in log line from the reload on.
 When(
   "the user reloads pi in the terminal and then prompts {string}",
   { timeout: TERMINAL_RELOAD_STEP_TIMEOUT_MS },
   async function (this: ScenarioWorld, text: string): Promise<void> {
     const harness = this.profileHarness();
     const reply = await lastScriptReply(harness);
-    const tui = await this.startTuiSession("scripted");
+    const tui = this.startedTuiSession() ?? (await this.startTuiSession("scripted"));
     const lengths = await readLogLengths(harness);
     await tui.reload();
     const prompt = expandTokens(text, this.tokens);
@@ -204,8 +244,9 @@ Then(
   },
 );
 
-// D-02 for a new session: one row per payload, in session order. Pi reports a
-// lasting reconcile failure twice, and both rows are stated.
+// D-02 for a new session or a reload: one row per payload, in session order.
+// A new session reports a lasting reconcile failure twice, and both rows are
+// stated. A reload reports one load, so it reports such a failure once.
 Then("the session reports these results:", function (this: ScenarioWorld, table: DataTable) {
   const [stated = []] = table.raw();
   assert.deepStrictEqual(resultsTable(stated, this.resultsOf("session"), this.tokens), table.raw());

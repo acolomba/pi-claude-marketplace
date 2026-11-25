@@ -33,7 +33,7 @@ Feature: Plugin project locality
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
 
   Scenario: A project skill runs its context command with no record of the install in the user scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -44,7 +44,7 @@ Feature: Plugin project locality
     Then the user scope holds no record of project installs
 
   Scenario: A project command runs its context command with no record of the install in the user scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -55,7 +55,7 @@ Feature: Plugin project locality
     Then the user scope holds no record of project installs
 
   Scenario: A project hook runs with no record of the install in the user scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |

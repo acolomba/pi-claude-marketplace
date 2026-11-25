@@ -1,10 +1,10 @@
 Feature: Plugin autoapply
 
-  When autoapply is on, a new session applies its configs and marketplaces, and the project's only when
+  When autoapply is on, a reload or a new session applies its configs and marketplaces, and the project's only when
   Pi trusts the project. /claude:plugin autoapply shows or changes that setting. A local marketplace
   and a git host on this machine stand in for published ones.
 
-  Scenario: A new session installs the plugins a project config declares when the config turns autoapply on
+  Scenario: A reload installs the plugins a project config declares when the config turns autoapply on
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -17,7 +17,7 @@ Feature: Plugin autoapply
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
@@ -31,7 +31,7 @@ Feature: Plugin autoapply
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: A new session clones and installs a git-source plugin that a project config declares when autoapply is on
+  Scenario: A reload clones and installs a git-source plugin that a project config declares when autoapply is on
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -47,7 +47,7 @@ Feature: Plugin autoapply
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | gits        | ghp    |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
@@ -75,7 +75,7 @@ Feature: Plugin autoapply
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
@@ -103,14 +103,12 @@ Feature: Plugin autoapply
       """
       { "autoapply": false }
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
     Then the project scope has no installed plugins
     Then the session offers no skills
@@ -132,14 +130,12 @@ Feature: Plugin autoapply
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
     Then the project scope has no installed plugins
     Then the session offers no skills
@@ -161,7 +157,7 @@ Feature: Plugin autoapply
       """
       { "autoapply": true }
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
@@ -172,7 +168,7 @@ Feature: Plugin autoapply
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: A config that turns autoapply off keeps a new session read-only
+  Scenario: A config that turns autoapply off keeps a reload read-only
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -185,14 +181,12 @@ Feature: Plugin autoapply
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
     Then the project scope has no installed plugins
     Then the session offers no skills
@@ -249,7 +243,7 @@ Feature: Plugin autoapply
       | fixtures         | user              | demo@fixtures | demo | will install |         | user  |
     Then the user scope has no installed plugins
 
-  Scenario: A config whose autoapply is not a boolean is reported as invalid and keeps a new session read-only
+  Scenario: A config whose autoapply is not a boolean is reported as invalid and keeps a reload read-only
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -266,14 +260,12 @@ Feature: Plugin autoapply
       """
       { "autoapply": "yes" }
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | summary                      | tally label       | tally failures | tally warnings |
       | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
-      | cascade | error    | false        | Some operations have failed. | Reconcile pending | 2              | 0              |
     Then the results list these marketplaces and plugins:
       | marketplace name          | marketplace scope | marketplace status | marketplace reasons | id                                                  | name                      | status | reasons          | scope   | cause chain                                           | cause truncated | leaks | rollback partial |
-      | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | schema validation failed: /autoapply: must be boolean | false           |       |                  |
       | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | schema validation failed: /autoapply: must be boolean | false           |       |                  |
     Then the project scope has no installed plugins
     Then the session offers no skills
@@ -295,14 +287,12 @@ Feature: Plugin autoapply
       | marketplace | plugin | enabled |
       | gits        | ghp    |         |
     Given the git host answers 404 for the plugin "ghp"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
       | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
     Then the project scope has no installed plugins
     When the user runs "/claude:plugin pending --scope project"
@@ -372,7 +362,7 @@ Feature: Plugin autoapply
       """
       { "autoapply": true }
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
@@ -641,7 +631,7 @@ Feature: Plugin autoapply
       | set file     | claude-plugins.json                                             |
       | set value    | true                                                            |
     Then the project scope has no installed plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |

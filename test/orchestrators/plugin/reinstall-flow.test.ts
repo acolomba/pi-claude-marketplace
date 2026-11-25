@@ -156,6 +156,7 @@ function makeCtx(softDeps?: Partial<SoftDepStatus>): {
   const notifications: NotifyRecord[] = [];
   const ctx = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify(message: string, severity?: string): void {
         notifications.push(severity === undefined ? { message } : { message, severity });
@@ -6900,6 +6901,7 @@ for (const mode of ["json", "rpc"]) {
         const capture = createJsonCapture();
         const ctx = {
           mode,
+          hasUI: mode === "tui" || mode === "rpc",
           get ui() {
             return capture.ui;
           },

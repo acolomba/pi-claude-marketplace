@@ -16,8 +16,7 @@ import { loadState } from "../../extensions/pi-claude-marketplace/persistence/st
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusReaders } from "../platform/mcp-status-seed.ts";
-
-import { makeCtx, makeMockPi } from "./_helpers.ts";
+import { makeCtx, makeMockPi } from "../platform/mock-pi.ts";
 
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 

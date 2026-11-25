@@ -7,9 +7,9 @@
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
  * there when a row array or an MCP config notice of its last results went
- * uncompared, or when a new session reported a result whose fields no step
- * stated. The last results are those of the last `When` step: a command or a
- * new session.
+ * uncompared, or when a reload or a new session reported a result whose
+ * fields no step stated. The last results are those of the last `When` step: a
+ * command, a reload, or a new session.
  *
  * A scenario that needs a model starts a profile Pi of its own (D-CF1-15):
  * the real extension plus the scripted model and the registry probe, in the
@@ -44,7 +44,6 @@ import {
   World,
 } from "@cucumber/cucumber";
 
-import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
 import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-device-flow/extension.ts";
 import { openHookGate, stopHookScripts } from "../lib/hook-files.ts";
@@ -62,6 +61,7 @@ import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 import { REGISTRY_PROBE_EXTENSION } from "../lib/pi-registry-probe/snapshot.ts";
+import { listedCommands } from "../lib/pi-rpc.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 import { latestSessionFile, sessionsFolder } from "../lib/saved-sessions.ts";
@@ -71,7 +71,6 @@ import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts"
 
 import { currentRun } from "./pi-process.ts";
 
-import type { PiSessionLaunch, RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { HookGate } from "../lib/hook-files.ts";
@@ -79,8 +78,10 @@ import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-g
 import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
+import type { OneShotOutput } from "../lib/pi-one-shot.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest, RpcSandbox } from "../lib/pi-process.ts";
 import type { RegistrySnapshot } from "../lib/pi-registry-probe/snapshot.ts";
+import type { PiSessionLaunch, RpcProfileEnvironment } from "../lib/pi-rpc.ts";
 import type { PiTuiOptions } from "../lib/pi-tui.ts";
 import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
@@ -123,16 +124,24 @@ const SCRIPTED_MODEL_ARGUMENTS = ["--provider", "faux", "--model", "faux-1"];
 // keystroke.
 const SCRIPTED_TUI_READY_TEXT = "[Extensions]";
 
-// The profile Pi already compiled every extension into the shared jiti cache,
-// so a terminal Pi with the scripted model starts in seconds; a minute covers
-// a slow worker.
-const SCRIPTED_TUI_READY_MS = 60_000;
+/**
+ * How long a terminal Pi with the scripted model gets to become ready. The
+ * profile Pi already compiled every extension into the shared jiti cache, so
+ * it starts in seconds; a minute covers a slow worker.
+ */
+export const SCRIPTED_TUI_READY_MS = 60_000;
 
 /** The bytes of a scope's base config and installation record. */
 export interface ScopeBytes {
   readonly config: Buffer;
   readonly state: Buffer;
 }
+
+/**
+ * Every entry under a scope's root, in path order: a directory as its path and
+ * a trailing `/`, a file beside its bytes in base64, a link beside its target.
+ */
+export type ScopeFiles = readonly (readonly [string, string])[];
 
 /**
  * What a scenario's profile Pi loads and trusts (D-CF1-15). It loads
@@ -215,6 +224,12 @@ export interface OneShotPiLaunch {
   readonly sandbox: RpcSandbox;
   readonly git: RpcGitEnvironment;
   readonly environment: RpcProfileEnvironment;
+  /**
+   * The GitHub redirect, when the scenario's profile Pi runs without the
+   * GitHub base override, so the one-shot Pi keeps its requests on this
+   * machine too (D-BG-01); otherwise none.
+   */
+  readonly extensions: readonly string[];
 }
 
 // The restarts whose new session holds the entries of the stopped Pi's session.
@@ -246,7 +261,8 @@ export interface ModelTurn {
 
 export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
-  // What produced `results`: a command or a new session.
+  // What produced `results`: a command, or a session source, which is a new
+  // session or a reload.
   resultsSource: "command" | "session" | undefined = undefined;
   // The non-empty row arrays of `results` that no step has compared yet, as
   // `<kind> <field>`. The steps that state a result's fields hide them, so a
@@ -256,10 +272,11 @@ export class ScenarioWorld extends World {
   // by kind. Only `the command reports these results:` states their fields,
   // and it calls `markNoticesCompared()`.
   uncomparedNotices: readonly string[] = [];
-  // The results of the last new session whose fields no step has stated yet,
-  // by kind. A command is always followed by a field step, a session is not,
-  // so a session payload without rows would otherwise pass unseen. The steps
-  // that state the fields of every result call `markResultsCompared()`.
+  // The results of the last reload or new session whose fields no step has
+  // stated yet, by kind. A command is always followed by a field step, a
+  // session is not, so a session payload without rows would otherwise pass
+  // unseen. The steps that state the fields of every result call
+  // `markResultsCompared()`.
   uncomparedSessionResults: readonly string[] = [];
   // A TUI message may produce background notices; its assertion compares the complete set.
   uncomparedTuiNotices = false;
@@ -267,6 +284,10 @@ export class ScenarioWorld extends World {
   backgroundRequestWindow: RequestWindow | undefined = undefined;
   // The scope bytes the config steps remembered, by scope.
   readonly rememberedScopeBytes = new Map<string, ScopeBytes>();
+  // The installation record bytes the config steps remembered, by scope.
+  readonly rememberedRecordBytes = new Map<string, Buffer>();
+  // The entries of each scope tree the scope-state steps remembered, by scope.
+  readonly rememberedScopeFiles = new Map<string, ScopeFiles>();
   private readonly completionSets = new Map<string, readonly PluginCompletion[]>();
   private readonly uncomparedCompletionSets = new Set<string>();
   // Cucumber builds the world before any `Before()` hook, so the
@@ -277,6 +298,8 @@ export class ScenarioWorld extends World {
   // step reads only that command's traffic. The `BeforeStep` hook in
   // `support/https-git-host.ts` sets it.
   requestWindow: RequestWindow | undefined = undefined;
+  // What the last one-shot Pi in print mode left, which a print-mode `Then` reads.
+  printModeRun: OneShotOutput | undefined = undefined;
   // The npm registry this scenario started, which only a scenario that ships plugin packages needs.
   npmRegistry: NpmRegistry | undefined = undefined;
   // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
@@ -286,6 +309,8 @@ export class ScenarioWorld extends World {
   harnessLogWindow: ReadonlyMap<string, number> | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
+  private readonly marketplaceTags: Array<{ marketplace: string; tag: string; commit: string }> =
+    [];
   private readonly errorMessages = new Map<string, string>();
   private readonly releases: Array<() => Promise<void> | void> = [];
   // A Pi this scenario started with an environment of its own; while set it
@@ -415,17 +440,41 @@ export class ScenarioWorld extends World {
     this.errorMessages.set(token, message);
   }
 
-  // One `{<repository> <noun> <n>}` token per published revision, standing
-  // for `value` of that revision's commit.
+  /**
+   * Records that the marketplace `marketplace` tagged its commit `commit` as
+   * `tag`. A result projects a commit to one token only, so a second tag on a
+   * tagged commit, or a token that another token already names, is refused.
+   */
+  recordMarketplaceTag(marketplace: string, tag: string, commit: string): void {
+    const token = `{${marketplace} revision ${tag}}`;
+    const sharing = this.marketplaceTags.find((recorded) => recorded.commit === commit);
+    assert.ok(
+      sharing === undefined,
+      `${token} would stand for the commit of {${sharing?.marketplace} revision ${sharing?.tag}}`,
+    );
+    assert.ok(
+      !this.revisionTokens("revision", (sha) => sha).has(token),
+      `${token} already stands for another commit`,
+    );
+    this.marketplaceTags.push({ marketplace, tag, commit });
+  }
+
+  // One `{<repository> <noun> <n>}` token per published revision, and one
+  // `{<marketplace> <noun> <tag>}` token per marketplace tag, standing for
+  // `value` of that commit.
   private revisionTokens(noun: string, value: (sha: string) => string): Map<string, string> {
-    return new Map(
-      [...this.gitRepositories.values()].flatMap((repository) =>
+    return new Map([
+      ...[...this.gitRepositories.values()].flatMap((repository) =>
         repository.revisions.map((sha, index): [string, string] => [
           `{${repository.name} ${noun} ${index + 1}}`,
           value(sha),
         ]),
       ),
-    );
+      ...this.marketplaceTags.map(({ marketplace, tag, commit }): [string, string] => [
+        `{${marketplace} ${noun} ${tag}}`,
+        value(commit),
+      ]),
+    ]);
   }
 
   /**
@@ -609,8 +658,21 @@ export class ScenarioWorld extends World {
     return published;
   }
 
-  /** Records the git plugin repository `repository` under its name, replacing an earlier record. */
+  /**
+   * Records the git plugin repository `repository` under its name, replacing an
+   * earlier record. A revision token that a marketplace tag token already
+   * names is refused, as `recordMarketplaceTag` refuses the other order.
+   */
   recordGitRepository(repository: GitPluginRepository): void {
+    const tagged = this.marketplaceTags.find(
+      ({ marketplace, tag }) =>
+        marketplace === repository.name &&
+        repository.revisions.some((_sha, index) => tag === String(index + 1)),
+    );
+    assert.ok(
+      tagged === undefined,
+      `{${repository.name} revision ${tagged?.tag}} already stands for another commit`,
+    );
     this.gitRepositories.set(repository.name, repository);
   }
 
@@ -647,10 +709,10 @@ export class ScenarioWorld extends World {
     return repository;
   }
 
-  /** Returns the skills of the last new session, which a `When` step must have started. */
+  /** Returns the skills after the last new session or reload, which a `When` step must have run. */
   sessionSkills(): readonly OfferedSkill[] {
     if (this.skills === undefined) {
-      throw new Error("no new session has started in this scenario");
+      throw new Error("no new session or reload has run in this scenario");
     }
 
     return this.skills;
@@ -765,15 +827,23 @@ export class ScenarioWorld extends World {
 
   /**
    * Prepares `{home}/tmp` with its compile-cache link and returns what a
-   * one-shot Pi in the run's sandbox starts with: the run's sandbox, the
-   * run's git environment, and that `TMPDIR` (D-BG-09). A step that starts a
-   * one-shot Pi, such as one in json mode, reads it here, so no step module
-   * reaches the run's state.
+   * one-shot Pi in the run's sandbox starts with: the run's sandbox, the git
+   * environment and the extensions that a terminal session of this scenario
+   * gets, and that `TMPDIR` (D-BG-09). So a scenario whose profile Pi runs
+   * without the GitHub base override gives its one-shot Pi the GitHub
+   * redirect too, which keeps its requests on this machine (D-BG-01). A step
+   * that starts a one-shot Pi, such as one in json or print mode, reads it
+   * here, so no step module reaches the run's state.
    */
   async oneShotPiLaunch(): Promise<OneShotPiLaunch> {
     const { sandbox, piEnvironment } = currentRun();
     const temporary = await this.prepareTemporaryDirectory();
-    return { sandbox, git: piEnvironment, environment: { TMPDIR: temporary } };
+    return {
+      sandbox,
+      git: this.tuiEnvironment ?? piEnvironment,
+      environment: { TMPDIR: temporary },
+      extensions: this.tuiExtensions,
+    };
   }
 
   /**
@@ -966,6 +1036,11 @@ export class ScenarioWorld extends World {
     this.tuiSession = tui;
     await tui.waitUntilReady(model === "scripted" ? SCRIPTED_TUI_READY_MS : undefined);
     return tui;
+  }
+
+  /** Returns the contained TUI this scenario started, or nothing when none started. */
+  startedTuiSession(): PiTuiSession | undefined {
+    return this.tuiSession;
   }
 
   /** Returns the contained TUI this scenario started. */

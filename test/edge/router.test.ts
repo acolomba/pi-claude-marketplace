@@ -43,7 +43,7 @@ import {
   routeClaudePlugin,
   selectClaudePluginRoute,
   TOP_LEVEL_SUBCOMMANDS,
-  TOP_LEVEL_USAGE,
+  topLevelUsage,
   type MarketplaceVerb,
   type SubcommandHandlers,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
@@ -69,7 +69,7 @@ test("executes a selected list route without selecting its handler again", async
       return Promise.resolve();
     })
     .times(1);
-  const route = selectClaudePluginRoute("ls --scope project", handlers);
+  const route = selectClaudePluginRoute("ls --scope project", handlers, ctx);
 
   // act
   await routeClaudePlugin(route, handlers, ctx, run);
@@ -94,7 +94,32 @@ test("executes a selected list route without selecting its handler again", async
   verify(handlers);
 });
 
-const EXPECTED_TOP_LEVEL_USAGE =
+// RELOADCMD-D1: the usage of a host that takes later commands lists reload.
+const EXPECTED_SESSIONFUL_USAGE =
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|reload|marketplace|market|help> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
+  "  install <plugin>@<marketplace> [--scope user|project]\n" +
+  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
+  "  prune [--scope user|project] [--dry-run]\n" +
+  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  info <plugin>@<marketplace> [--scope user|project]\n" +
+  "  pending [--scope user|project]\n" +
+  "  apply [--scope user|project]\n" +
+  "  autoapply [on|off] [--scope user|project] [--local]\n" +
+  "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  import [--scope user|project]\n" +
+  "  browse\n" +
+  "  reload                                             activate pending plugin changes in the current session\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...   (alias: market)\n" +
+  "  help [marketplace]";
+
+// RELOADCMD-D1: the usage of a host that takes no later commands, the bytes of
+// the usage before the reload subcommand existed.
+const EXPECTED_ONE_SHOT_USAGE =
   "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
@@ -132,17 +157,24 @@ test("preserves ordered duplicate rejections around a handler emission on the sa
     return Promise.resolve();
   });
 
+  when(() => ctx.hasUI)
+    .thenReturn(false)
+    .times(1);
+
   // act
   await routeClaudePlugin("unknown", handlers, ctx, run);
   when(() => ctx.mode)
     .thenReturn("rpc")
     .times(3);
+  when(() => ctx.hasUI)
+    .thenReturn(true)
+    .times(2);
   await routeClaudePlugin("list", handlers, ctx, run);
   await routeClaudePlugin("unknown", handlers, ctx, run);
   await routeClaudePlugin("unknown", handlers, ctx, run);
 
   // assert
-  const expectedUsageEntry = {
+  const usageEntry = (usage: string) => ({
     customType: "claude-plugin",
     payload: {
       schemaVersion: 1,
@@ -151,11 +183,12 @@ test("preserves ordered duplicate rejections around a handler emission on the sa
       severity: "error",
       needsReload: false,
       message: 'Unknown subcommand: "unknown".',
-      usage: EXPECTED_TOP_LEVEL_USAGE,
+      usage,
     },
-  };
+  });
+  const expectedUsageEntry = usageEntry(EXPECTED_SESSIONFUL_USAGE);
   assert.deepStrictEqual(capture.entries, [
-    expectedUsageEntry,
+    usageEntry(EXPECTED_ONE_SHOT_USAGE),
     {
       customType: "claude-plugin",
       payload: {
@@ -175,12 +208,15 @@ test("preserves ordered duplicate rejections around a handler emission on the sa
   verify(handlers);
 });
 
-test("appends a complete unknown-command usage error in json", async () => {
+test("appends a complete unknown-command usage error in json, without reload (RELOADCMD-D1)", async () => {
   // arrange
   const capture = createJsonCapture();
   const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
   when(() => ctx.mode)
     .thenReturn("json")
+    .times(1);
+  when(() => ctx.hasUI)
+    .thenReturn(false)
     .times(1);
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
   const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
@@ -199,7 +235,7 @@ test("appends a complete unknown-command usage error in json", async () => {
         severity: "error",
         needsReload: false,
         message: 'Unknown subcommand: "unknownverb".',
-        usage: EXPECTED_TOP_LEVEL_USAGE,
+        usage: EXPECTED_ONE_SHOT_USAGE,
       },
     },
   ]);
@@ -218,8 +254,10 @@ test("selects marketplace help when the complete trimmed help topic matches", ()
     .thenReturn(help)
     .times(1);
 
+  const host = mock<ExtensionCommandContext>({ exactParams: true, name: "host" });
+
   // act
-  const route = selectClaudePluginRoute("help  marketplace  ", handlers);
+  const route = selectClaudePluginRoute("help  marketplace  ", handlers, host);
 
   // assert
   assert.deepStrictEqual(route, {
@@ -228,6 +266,7 @@ test("selects marketplace help when the complete trimmed help topic matches", ()
     args: "marketplace  ",
   });
   verify(handlers);
+  verify(host);
 });
 
 interface DispatchRow {
@@ -260,6 +299,7 @@ const TOP_LEVEL_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "disable", handler: "disable", commandId: "plugin disable" },
   { subcommand: "import", handler: "import", commandId: "plugin import" },
   { subcommand: "browse", handler: "browse", commandId: "plugin browse" },
+  { subcommand: "reload", handler: "reload", commandId: "plugin reload" },
   { subcommand: "help", handler: "help", commandId: "plugin help" },
 ];
 
@@ -350,7 +390,7 @@ for (const mode of ["json", "rpc"] as const) {
         notify(handlerCtx, handlerRun, { marketplaces: [] });
         return Promise.resolve();
       });
-      const selected = selectClaudePluginRoute(subcommand, handlers);
+      const selected = selectClaudePluginRoute(subcommand, handlers, ctx);
       const run = {
         ...seed,
         origin: {
@@ -459,7 +499,9 @@ test("spells every marketplace name except help in both help headers", () => {
   // act
   const headers = [
     MARKETPLACE_USAGE.split("\n")[0],
-    TOP_LEVEL_USAGE.split("\n").find((line) => line.startsWith("  marketplace ")),
+    topLevelUsage({ hasUI: true })
+      .split("\n")
+      .find((line) => line.startsWith("  marketplace ")),
   ];
 
   // assert
@@ -467,6 +509,22 @@ test("spells every marketplace name except help in both help headers", () => {
     `Usage: /claude:plugin marketplace <${spellings}> ...`,
     `  marketplace <${spellings}> ...   (alias: market)`,
   ]);
+});
+
+test("the usage of a host that takes later commands lists reload (RELOADCMD-D1)", () => {
+  // act
+  const usage = topLevelUsage({ hasUI: true });
+
+  // assert
+  assert.strictEqual(usage, EXPECTED_SESSIONFUL_USAGE);
+});
+
+test("the usage of a host that takes no later commands leaves reload out (RELOADCMD-D1)", () => {
+  // act
+  const usage = topLevelUsage({ hasUI: false });
+
+  // assert
+  assert.strictEqual(usage, EXPECTED_ONE_SHOT_USAGE);
 });
 
 for (const { verb, expectedUsage } of [
@@ -743,6 +801,9 @@ for (const { input, shape } of [
 test("names an unrecognized top-level token back to the operator with the top-level usage block (AP-3)", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  when(() => ctx.hasUI)
+    .thenReturn(true)
+    .times(1);
   const run = runWithNothingLoaded();
   const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
 
@@ -752,7 +813,7 @@ test("names an unrecognized top-level token back to the operator with the top-le
   // assert
   assert.deepStrictEqual(notifications, [
     {
-      message: `Unknown subcommand: "unknownverb".\n\n${EXPECTED_TOP_LEVEL_USAGE}`,
+      message: `Unknown subcommand: "unknownverb".\n\n${EXPECTED_SESSIONFUL_USAGE}`,
       severity: "error",
     },
   ]);
@@ -852,12 +913,14 @@ for (const entry of ["marketplace", "market"]) {
 }
 
 for (const mode of ["json", "rpc"] as const) {
-  for (const { args, message, usage, commandId } of [
+  for (const { args, message, usage, commandId, readsHost = false } of [
     {
       args: "unknown",
       commandId: "plugin",
       message: 'Unknown subcommand: "unknown".',
-      usage: EXPECTED_TOP_LEVEL_USAGE,
+      // RELOADCMD-D1: only the unknown-subcommand arm reads the host.
+      usage: mode === "rpc" ? EXPECTED_SESSIONFUL_USAGE : EXPECTED_ONE_SHOT_USAGE,
+      readsHost: true,
     },
     {
       args: "marketplace",
@@ -893,8 +956,14 @@ for (const mode of ["json", "rpc"] as const) {
     test(`appends router rejection for ${args} in ${mode}`, async () => {
       // arrange
       const { ctx, run: seed, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+      if (readsHost) {
+        when(() => ctx.hasUI)
+          .thenReturn(mode === "rpc")
+          .times(1);
+      }
+
       const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "handlers" });
-      const selected = selectClaudePluginRoute(args, handlers);
+      const selected = selectClaudePluginRoute(args, handlers, ctx);
       const run = {
         ...seed,
         origin: {

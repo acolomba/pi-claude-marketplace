@@ -8,38 +8,17 @@
  * a scenario compares a json result with an rpc result through the same steps.
  */
 
-import { spawn } from "node:child_process";
-import { once } from "node:events";
-import { fileURLToPath } from "node:url";
-
 import { Type } from "typebox";
 import { Compile } from "typebox/compile";
 
-import {
-  killProcessGroup,
-  piArguments,
-  resolveRpcSandbox,
-  rpcChildEnvironment,
-} from "../../test/e2e/_rpc.ts";
-
 import { claudePluginPayloads } from "./pi-commands.ts";
+import { runOneShotPi } from "./pi-one-shot.ts";
 
-import type { RpcGitEnvironment, RpcProfileEnvironment, RpcSandbox } from "../../test/e2e/_rpc.ts";
 import type { NotificationPayload } from "./pi-commands.ts";
+import type { OneShotLaunch } from "./pi-one-shot.ts";
 
-/** What the one-shot Pi starts with: the run's sandbox, git environment, and `TMPDIR`. */
-export interface JsonModeLaunch {
-  readonly sandbox: RpcSandbox;
-  readonly git: RpcGitEnvironment;
-  readonly environment: RpcProfileEnvironment;
-}
-
-// Json mode exits with no model before it runs the command, so the one-shot
-// Pi loads and selects the scripted model. The command never calls it.
-const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
-  new URL("./scripted-model/extension.ts", import.meta.url),
-);
-const SCRIPTED_MODEL_ARGUMENTS = ["--provider", "faux", "--model", "faux-1"];
+/** What the one-shot Pi starts with: the run's sandbox, git environment, extensions, and `TMPDIR`. */
+export type JsonModeLaunch = OneShotLaunch;
 
 // Starting Pi takes a few seconds and a command a fraction of that; the
 // deadline stays below the 30-second step timeout, so a hung Pi fails here,
@@ -86,50 +65,20 @@ export async function runJsonModeCommand(
   onRelease: (release: () => void) => void,
   timeoutMs = DEFAULT_JSON_MODE_MS,
 ): Promise<readonly NotificationPayload[]> {
-  const sandbox = await resolveRpcSandbox(launch.sandbox);
-  const child = spawn(
-    process.execPath,
-    [...piArguments("json", [SCRIPTED_MODEL_EXTENSION]), ...SCRIPTED_MODEL_ARGUMENTS, command],
-    {
-      cwd: sandbox.cwd,
-      detached: true,
-      env: rpcChildEnvironment(sandbox, launch.git, launch.environment),
-      stdio: ["ignore", "pipe", "pipe"],
-    },
+  const { exitCode, stdout, stderr } = await runOneShotPi(
+    launch,
+    "json",
+    command,
+    onRelease,
+    timeoutMs,
   );
-  // A second kill could reach an unrelated group that took the id.
-  let groupKilled = false;
-  const killGroup = (): void => {
-    if (!groupKilled) {
-      groupKilled = true;
-      killProcessGroup(child);
-    }
-  };
-
-  onRelease(killGroup);
-  const output = { stdout: "", stderr: "" };
-  child.stdout.setEncoding("utf8").on("data", (chunk: string) => (output.stdout += chunk));
-  child.stderr.setEncoding("utf8").on("data", (chunk: string) => (output.stderr += chunk));
-  let closed: unknown[];
-  try {
-    closed = await once(child, "close", { signal: AbortSignal.timeout(timeoutMs) });
-  } catch (error) {
-    throw new Error(
-      `${command} in json mode failed or did not exit within ${timeoutMs} ms:\n${output.stderr}`,
-      { cause: error },
-    );
-  } finally {
-    killGroup();
-  }
-
-  const [exitCode] = closed;
   if (exitCode !== 0) {
-    throw new Error(`${command} in json mode exited with ${String(exitCode)}:\n${output.stderr}`);
+    throw new Error(`${command} in json mode exited with ${String(exitCode)}:\n${stderr}`);
   }
 
-  const payloads = claudePluginPayloads(customEntries(output.stdout));
+  const payloads = claudePluginPayloads(customEntries(stdout));
   if (payloads.length === 0) {
-    throw new Error(`${command} in json mode emitted no claude-plugin payload:\n${output.stderr}`);
+    throw new Error(`${command} in json mode emitted no claude-plugin payload:\n${stderr}`);
   }
 
   return payloads;

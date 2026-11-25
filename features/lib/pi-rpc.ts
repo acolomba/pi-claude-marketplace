@@ -1,0 +1,372 @@
+// The reusable real-Pi RPC driver. It spawns the repository's own Pi CLI in
+// `--mode rpc` inside a disposable sandbox, always loads the real extension
+// with `--extension`, writes one JSONL step at a time, and collects the
+// responses, notifies, custom entries, dialogs and extension errors Pi prints
+// on stdout. In RPC mode the extension appends each `/claude:plugin` result as
+// a `claude-plugin` custom entry instead of calling `ctx.ui.notify`, and Pi
+// streams every entry appended after startup as an `entry_appended` record
+// (JOUT-01). Notifies still carry what other extensions print.
+//
+// The child environment is an allowlist built from scratch. A prompt that is
+// not an extension command falls through to Pi's model path, and inherited
+// provider credentials would let it reach a real provider over the network.
+// The cucumber run adds a typed git and trust environment, plus the background
+// update delay for a scenario's own Pi, and nothing else. A scenario's profile
+// Pi (D-CF1-15) also loads the scripted model and the companions after the
+// real extension, and gets a typed `TMPDIR` inside the sandbox home, so the
+// temporary files of Pi and its companions stay in the sandbox (HAR-05), and
+// pi-subagents' background-child marker `PI_SUBAGENT_CHILD` when its profile
+// sets it (D-BG-10). The shell's `TMPDIR` and marker are never inherited.
+// `--no-extensions` is never passed, because it also removes `builtin:mcp`.
+import { spawn } from "node:child_process";
+import { realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { resolvePiRuntime } from "./pi-runtime.ts";
+
+import type { ChildProcess, ChildProcessByStdio } from "node:child_process";
+import type { Readable, Writable } from "node:stream";
+
+const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
+const EXTENSION_ENTRY = path.join(REPO_ROOT, "extensions", "pi-claude-marketplace", "index.ts");
+
+/** The disposable locations one Pi child runs in. */
+export interface RpcSandbox {
+  readonly home: string;
+  readonly agentDir: string;
+  readonly cwd: string;
+}
+
+/**
+ * The trust and git settings the cucumber run adds to Pi's allowlist: the CA
+ * file of its loopback git host, and git config that skips the system file and
+ * reads a global file under the sandbox HOME (DRV-03, HOST-01). The run also
+ * points the GitHub base override at its git host, so GitHub sources clone
+ * from it (GHB-01, D-MF-01).
+ */
+export interface RpcGitEnvironment {
+  readonly NODE_EXTRA_CA_CERTS: string;
+  readonly GIT_CONFIG_NOSYSTEM: "1";
+  readonly GIT_CONFIG_GLOBAL: string;
+  /**
+   * The GitHub base override, copied only when set. A scenario Pi that
+   * reaches GitHub's real address through an in-process redirect starts
+   * without it, so GHB-02 does not turn Device Flow off (D-BG-01).
+   */
+  readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL?: string;
+  /**
+   * The maximum delay of the background update, set only for a scenario's own
+   * Pi (D-PL8-09). The run's shared Pi never sets it, so its background update
+   * keeps the ten-minute maximum and a new session cancels it.
+   */
+  readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
+}
+
+/**
+ * The variables a profile Pi adds to the allowlist: its temporary directory
+ * (HAR-05), the background-child marker when the profile sets it, and the
+ * id of its hook gate when it has one.
+ */
+export interface RpcProfileEnvironment {
+  readonly TMPDIR: string;
+  /**
+   * The marker pi-subagents' runner sets before any extension of a background
+   * child loads, so the profile Pi starts as such a child (D-BG-10).
+   */
+  readonly PI_SUBAGENT_CHILD?: "1";
+  /**
+   * The id of the hook gate that lets the lifecycle hook scripts of the
+   * cucumber harness run; every hook of the Pi inherits it (D-BG-12).
+   */
+  readonly PI_CM_HOOK_GATE?: string;
+}
+
+/**
+ * What a scenario's profile Pi adds to the run's Pi (D-CF1-15): the
+ * extensions it loads after the real one, in load order, and its temporary
+ * directory.
+ */
+export interface RpcProfile {
+  /** Absolute paths of the extensions loaded after the real one, in this order. */
+  readonly extensions: readonly string[];
+  /**
+   * Absolute paths of the extensions loaded before the real one, in this
+   * order, so Pi runs their handlers of an event first.
+   */
+  readonly leadingExtensions?: readonly string[];
+  readonly environment: RpcProfileEnvironment;
+  /** Starts Pi with `--no-mcp`, which turns its built-in MCP off for this run. */
+  readonly noMcp?: true;
+  /** Starts Pi with a saved session instead of `--no-session` (D-PG6-16). */
+  readonly session?: PiSessionLaunch;
+}
+
+/**
+ * How a Pi with a saved session starts (D-PG6-16): `saved` passes no session
+ * flag, so Pi saves a new session in its sessions folder; `continue` passes
+ * `--continue`, `open` passes `--session <file>`, which stands for
+ * `--resume` because `--resume` opens a picker, and `fork` passes
+ * `--fork <file>`.
+ */
+export type PiSessionLaunch =
+  | { readonly kind: "saved" }
+  | { readonly kind: "continue" }
+  | { readonly kind: "open"; readonly file: string }
+  | { readonly kind: "fork"; readonly file: string };
+
+/** Launch options of Pi beyond its extensions. */
+export interface PiArgumentOptions {
+  /** Adds `--no-mcp`, which turns Pi's built-in MCP off and keeps every other extension. */
+  readonly noMcp?: boolean;
+  /** Extensions loaded before the real one, in this order. */
+  readonly leadingExtensions?: readonly string[];
+  /** Replaces `--no-session` with the flags of a saved session (D-PG6-16). */
+  readonly session?: PiSessionLaunch;
+}
+
+/** One parsed stdout record, read only through narrowing. */
+export type RpcResponseRecord = Readonly<Record<string, unknown>>;
+
+function isRecord(value: unknown): value is RpcResponseRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function stringField(record: RpcResponseRecord, key: string): string | undefined {
+  const field = record[key];
+  return typeof field === "string" ? field : undefined;
+}
+
+function isInside(resolved: string, root: string): boolean {
+  return resolved === root || resolved.startsWith(`${root}${path.sep}`);
+}
+
+async function resolveLocation(location: string): Promise<string> {
+  try {
+    return await realpath(location);
+  } catch (error: unknown) {
+    throw new Error(`runRpcSession: sandbox location ${location} does not exist`, {
+      cause: error,
+    });
+  }
+}
+
+// The real HOME, agent dir and project must stay out of the child's reach.
+// Pi reads and writes project state under `<cwd>/.pi/`, so `cwd` is checked
+// too. Each location is compared by its realpath, so a symlink under the temp
+// directory that points elsewhere fails the check. The resolved paths are the
+// ones the child receives, so nothing can swap a location after the check.
+// Pi asks for project trust in every directory under the repository, and the
+// session cancels every dialog, so a location there is refused by name.
+export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox> {
+  const repoRoot = await realpath(REPO_ROOT);
+  const tmpRoot = await realpath(tmpdir());
+  const resolve = async (location: string): Promise<string> => {
+    const resolved = await resolveLocation(location);
+    if (isInside(resolved, repoRoot)) {
+      throw new Error(
+        `runRpcSession: sandbox location ${location} is inside the repository ${repoRoot}, ` +
+          "where Pi asks for project trust; point TMPDIR outside the repository",
+      );
+    }
+
+    if (!resolved.startsWith(`${tmpRoot}${path.sep}`)) {
+      throw new Error(`runRpcSession: sandbox location ${location} is outside ${tmpRoot}`);
+    }
+
+    return resolved;
+  };
+
+  return {
+    home: await resolve(sandbox.home),
+    agentDir: await resolve(sandbox.agentDir),
+    cwd: await resolve(sandbox.cwd),
+  };
+}
+
+/**
+ * Returns the allowlist environment of every Pi child, plus `git` and the
+ * profile's `TMPDIR`, background-child marker, and hook gate when given.
+ */
+export function rpcChildEnvironment(
+  sandbox: RpcSandbox,
+  git?: RpcGitEnvironment,
+  profileEnvironment?: RpcProfileEnvironment,
+): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {
+    HOME: sandbox.home,
+    PI_CODING_AGENT_DIR: sandbox.agentDir,
+    PI_OFFLINE: "1",
+    PATH: process.env.PATH ?? "",
+  };
+  if (git !== undefined) {
+    environment.NODE_EXTRA_CA_CERTS = git.NODE_EXTRA_CA_CERTS;
+    environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
+    environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
+    if (git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL !== undefined) {
+      environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+    }
+
+    if (git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS !== undefined) {
+      environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
+        git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
+    }
+  }
+
+  if (profileEnvironment !== undefined) {
+    environment.TMPDIR = profileEnvironment.TMPDIR;
+    if (profileEnvironment.PI_SUBAGENT_CHILD !== undefined) {
+      environment.PI_SUBAGENT_CHILD = profileEnvironment.PI_SUBAGENT_CHILD;
+    }
+
+    if (profileEnvironment.PI_CM_HOOK_GATE !== undefined) {
+      environment.PI_CM_HOOK_GATE = profileEnvironment.PI_CM_HOOK_GATE;
+    }
+  }
+
+  return environment;
+}
+
+function sessionFlags(session: PiSessionLaunch | undefined): string[] {
+  switch (session?.kind) {
+    case undefined:
+      return ["--no-session"];
+    case "saved":
+      return [];
+    case "continue":
+      return ["--continue"];
+    case "open":
+      return ["--session", session.file];
+    case "fork":
+      return ["--fork", session.file];
+  }
+}
+
+/**
+ * Returns the arguments that start the repository's Pi CLI in `mode` with
+ * `options.leadingExtensions`, the real extension, and `extraExtensions`, in
+ * that load order, and with `--no-mcp` when `options` asks for it. In `json`
+ * mode Pi prints each session event as one JSON line on stdout (D-BG-09). It
+ * never passes `--no-extensions`, which also removes `builtin:mcp`. Pi runs
+ * with `--no-session` unless `options.session` names a saved session.
+ */
+export function piArguments(
+  mode: "rpc" | "tui" | "json",
+  extraExtensions: readonly string[] = [],
+  options: PiArgumentOptions = {},
+): string[] {
+  const extensions = [...(options.leadingExtensions ?? []), EXTENSION_ENTRY, ...extraExtensions];
+  return [
+    resolvePiRuntime(REPO_ROOT).cliPath,
+    ...(mode === "tui" ? [] : ["--mode", mode]),
+    "--offline",
+    ...sessionFlags(options.session),
+    ...(options.noMcp === true ? ["--no-mcp"] : []),
+    ...extensions.flatMap((extension) => ["--extension", extension]),
+  ];
+}
+
+// Pi runs in its own process group, so one SIGKILL to the group also reaches
+// the children Pi starts in that group. Pi starts each stdio MCP server in a
+// group of its own and stops it on shutdown, so the group kill does not reach
+// those servers.
+export function killProcessGroup(child: ChildProcess): void {
+  if (child.pid === undefined) {
+    child.kill("SIGKILL");
+    return;
+  }
+
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    // The group has already exited.
+  }
+}
+
+function spawnPi(
+  sandbox: RpcSandbox,
+  extraExtensions: readonly string[],
+  git?: RpcGitEnvironment,
+  profileEnvironment?: RpcProfileEnvironment,
+  options: PiArgumentOptions = {},
+): ChildProcessByStdio<Writable, Readable, Readable> {
+  return spawn(process.execPath, piArguments("rpc", extraExtensions, options), {
+    cwd: sandbox.cwd,
+    // Its own process group, so the stops can kill Pi's children too. A dead
+    // parent closes stdin, and Pi exits on that.
+    detached: true,
+    env: rpcChildEnvironment(sandbox, git, profileEnvironment),
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+}
+
+/**
+ * Starts the repository's own Pi CLI in RPC mode in `sandbox` and returns the
+ * child, which stays up until its stdin closes. The child also gets `git` on
+ * top of the allowlist, and a profile Pi gets the extensions and `TMPDIR` of
+ * `profile`, `--no-mcp` when `profile.noMcp` is set, and the flags of
+ * `profile.session` in place of `--no-session`. The caller owns the
+ * JSONL exchange and the stop. Rejects as `runRpcSession` does for a sandbox
+ * location outside the temp directory or inside the repository.
+ */
+export async function startRpcPi(
+  sandbox: RpcSandbox,
+  git: RpcGitEnvironment,
+  profile?: RpcProfile,
+): Promise<ChildProcessByStdio<Writable, Readable, Readable>> {
+  return spawnPi(
+    await resolveRpcSandbox(sandbox),
+    profile?.extensions ?? [],
+    git,
+    profile?.environment,
+    {
+      noMcp: profile?.noMcp === true,
+      ...(profile?.leadingExtensions === undefined
+        ? {}
+        : { leadingExtensions: profile.leadingExtensions }),
+      ...(profile?.session === undefined ? {} : { session: profile.session }),
+    },
+  );
+}
+
+/** Returns `data.disposition` of a successful prompt response. */
+export function promptDisposition(response: RpcResponseRecord | undefined): string | undefined {
+  if (response?.success !== true || !isRecord(response.data)) {
+    return undefined;
+  }
+
+  return stringField(response.data, "disposition");
+}
+
+/** One `get_commands` entry: the command name, its `source`, and its `sourceInfo.path`. */
+export interface ListedCommand {
+  readonly name: string;
+  readonly source: string | undefined;
+  readonly sourcePath: string | undefined;
+}
+
+/** Returns every entry of a successful `get_commands` response, in Pi's order. */
+export function listedCommands(response: RpcResponseRecord | undefined): readonly ListedCommand[] {
+  if (response?.success !== true || !isRecord(response.data)) {
+    return [];
+  }
+
+  const commands: unknown = response.data.commands;
+  if (response.command !== "get_commands" || !Array.isArray(commands)) {
+    return [];
+  }
+
+  const entries: readonly unknown[] = commands;
+  return entries.filter(isRecord).flatMap((command) => {
+    const name = stringField(command, "name");
+    if (name === undefined) {
+      return [];
+    }
+
+    const sourcePath = isRecord(command.sourceInfo)
+      ? stringField(command.sourceInfo, "path")
+      : undefined;
+    return [{ name, source: stringField(command, "source"), sourcePath }];
+  });
+}

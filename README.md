@@ -35,7 +35,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 ## Prerequisites
 
-- [Pi Coding Agent](https://pi.dev) 1.5.0 or newer
+- [Pi Coding Agent](https://pi.dev) 1.5.1 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.87.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
   - Ambient direct MCP tools in unrestricted and exclusion-only background agents require pi-subagents 0.88.1 or newer.
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). It supports more MCP features than Pi's built-in MCP.
@@ -234,7 +234,7 @@ User-scope configs live in your home directory. They are personal and never shar
 
 ## Command reference
 
-This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources. If you edit a config by hand, run `/claude:plugin apply` before `/reload`.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, reload Pi. Then Pi discovers the changed resources. In Pi's terminal, run `/reload`. Over RPC, which has no `/reload`, run `/claude:plugin reload`. A one-shot run, such as `pi -p`, needs no reload, because the next run loads the change. If you edit a config by hand, run `/claude:plugin apply` before you reload.
 
 ### Marketplace
 
@@ -378,7 +378,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `claude-sonnet-5-5`. It keeps full `claude-` model IDs. An agent with `model: inherit` always gets `model: ""`, with or without `--map-model`. So it runs on the session's model, also in a workflow step. A `tools` entry `Agent` or `Task` lets an agent start any subagent, even if the entry names agent types, as in `Agent(helper)`. For more information, see [Customizing generated agents](docs/mcp-compatibility.md#customizing-generated-agents).
+> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the models that Claude Code 2.1.328 selects on the Anthropic API, for example `claude-sonnet-5-5`. It keeps full `claude-` model IDs. An agent with `model: inherit` always gets `model: ""`, with or without `--map-model`. So it runs on the session's model, also in a workflow step. A `tools` entry `Agent` or `Task` lets an agent start any subagent, even if the entry names agent types, as in `Agent(helper)`. For more information, see [Customizing generated agents](docs/mcp-compatibility.md#customizing-generated-agents).
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 
@@ -435,6 +435,12 @@ Reload Pi after changes. Neither `/reload` nor `/claude:plugin apply` prunes orp
 
 ```text
 /reload
+```
+
+Reload Pi with a command: `/claude:plugin reload`. In Pi's terminal, it does what `/reload` does. Over RPC, which has no `/reload`, it is how you reload. A one-shot run refuses it, because its next run loads the changes. While Pi works on a prompt, the command refuses and reloads nothing. Run it again when the prompt is done.
+
+```text
+/claude:plugin reload
 ```
 
 #### Remote plugins

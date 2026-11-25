@@ -1,7 +1,13 @@
 // test/integration/agents-adapter-grant-conformance.test.ts
 //
-// PG-MCP-02: compare a grant selector from the agents bridge with pi-subagents
-// 0.88.1's adapter resolver and pi-mcp-adapter 7.0.1's registered tool name.
+// Peer conformance (ITSCOPE-01) against pi-subagents' own grant resolver and
+// pi-mcp-adapter's own tool names. PG-MCP-02: compare a grant selector from
+// the agents bridge with pi-subagents 0.88.1's adapter resolver and
+// pi-mcp-adapter 7.0.1's registered tool name. The case pins a pi-subagents
+// capability gap (AGTLONGNAME-01): for a granted tool over 64 characters,
+// pi-subagents wants the uncut name, and the adapter registers the cut one.
+// `features/mcp-server/agent-grants.feature` shows only the exclude side of a
+// long name.
 
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";

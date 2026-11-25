@@ -74,7 +74,7 @@ Feature: Plugin import
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -112,7 +112,7 @@ Feature: Plugin import
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -263,7 +263,7 @@ Feature: Plugin import
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -345,7 +345,7 @@ Feature: Plugin import
       | fixtures | {home}/marketplaces/fixtures |
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the import leaves no installation record in the user scope
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:tool-skill | A skill of tool 2.0.0. |
@@ -396,7 +396,7 @@ Feature: Plugin import
       | fixtures | {home}/marketplaces/fixtures |
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the import leaves no installation record in the project scope
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -472,7 +472,7 @@ Feature: Plugin import
       | aaa@fixtures | 2.0.0   | true    |
       | app@fixtures | 1.0.0   | true    |
       | fff@fixtures | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:aaa-skill | A skill of aaa 2.0.0. |
