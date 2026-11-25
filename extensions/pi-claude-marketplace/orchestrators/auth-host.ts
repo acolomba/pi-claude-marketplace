@@ -48,7 +48,12 @@ import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_GIT, createCredentialOps } from "../platform/git-credential.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { DeviceFlowUnavailableError } from "../shared/errors.ts";
-import { GITHUB_HOST, gitHubOverrideHost, gitHubWireUrl } from "../shared/github-base-url.ts";
+import {
+  GITHUB_HOST,
+  gitHubAddressOf,
+  gitHubOverrideHost,
+  gitHubWireUrl,
+} from "../shared/github-base-url.ts";
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
@@ -100,10 +105,12 @@ export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
  * domain/source.ts), so it resolves to the override host when
  * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set and to `GITHUB_HOST`
  * otherwise, without a URL parse; `cloneUrl` is unread on that arm (GHB-02).
- * Every other kind parses the host of the URL actually sent, which INCLUDES the
- * port (e.g. `gitlab.example.com:8443`). A git-subdir url on
- * `https://github.com/` is sent to the base, so it binds the override host
- * (D-09); a url source never has that prefix, so it never reads the variable.
+ * A url or git-subdir address that `gitHubAddressOf` folds, any spelling of a
+ * GitHub repository such as `git@github.com:<owner>/<repo>.git`, binds the
+ * same host, because the base receives it too (D-09, D-SG-21, D-SG-23).
+ * Every other address parses the host of the URL actually sent, which
+ * INCLUDES the port (e.g. `gitlab.example.com:8443`), and never reads the
+ * variable unless it has the exact prefix `https://github.com/`.
  *
  * D-SG-17: an address the URL parser refuses, such as the scp form
  * `git@host:path`, binds the host between its user and its `:`, so the call
@@ -112,7 +119,7 @@ export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
  * no request consults.
  */
 export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git-subdir"): string {
-  if (kind === "github") {
+  if (kind === "github" || gitHubAddressOf(cloneUrl) !== undefined) {
     return gitHubOverrideHost() ?? GITHUB_HOST;
   }
 

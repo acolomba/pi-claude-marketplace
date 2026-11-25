@@ -140,6 +140,45 @@ describe("hostFromCloneUrl", () => {
     assert.strictEqual(host, "mirror.example:8443");
   });
 
+  for (const cloneUrl of [
+    "git@github.com:acme/tools",
+    "ssh://git@GitHub.com/acme/tools.git",
+    "https://www.github.com/acme/tools",
+  ]) {
+    test(`D-SG-23: binds the GitHub url address ${cloneUrl} to github.com`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, undefined);
+
+      // act
+      const host = hostFromCloneUrl(cloneUrl, "url");
+
+      // assert
+      assert.strictEqual(host, "github.com");
+    });
+
+    test(`D-SG-21: binds the GitHub url address ${cloneUrl} to the override host`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+
+      // act
+      const host = hostFromCloneUrl(cloneUrl, "url");
+
+      // assert
+      assert.strictEqual(host, "mirror.example:8443");
+    });
+  }
+
+  test("D-SG-21: binds a GitHub git-subdir scp address to the override host", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+
+    // act
+    const host = hostFromCloneUrl("git@ssh.github.com:/acme/tools.git", "git-subdir");
+
+    // assert
+    assert.strictEqual(host, "mirror.example:8443");
+  });
+
   test("a url source host ignores an invalid override", (t) => {
     // arrange
     setGitHubBaseUrl(t, "http://mirror.example");
