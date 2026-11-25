@@ -331,7 +331,7 @@ Plans:
   2. For an `owner/repo` marketplace source the user sees upstream's progress lines: SSH first only when the probe reports SSH configured, HTTPS first otherwise, a retry with the other transport on failure, and upstream's error when both fail; with `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` no probe runs and every GitHub clone uses HTTPS, and `CLAUDE_CODE_REMOTE` changes nothing; cucumber scenarios pin each path (SG-SSH-02, SG-SSH-03).
   3. A `github` plugin source on install, update, and dependency install follows the probe, fallback, and skip rules of the upstream surface discuss chose (Q7), with cucumber scenarios for each, and on Windows a plugin install retries an SSH failure over HTTPS as upstream does (SG-SSH-04, SG-SSH-05).
   4. A marketplace or plugin cloned over SSH is the same source as its HTTPS form: a later update, reinstall, or install never refuses it as a stale clone, and its `plugin-clones/<key>/` directory does not move (SG-SSH-06).
-**Plans**: 15 plans in 9 waves
+**Plans**: 18 plans in 11 waves
 
 Plans:
 **Wave 1**
@@ -340,32 +340,39 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-03-PLAN.md — The GitHub identity fold (`Ort`) in comparisons only, per-URL D-SG-21 SSH-form `insteadOf` pairs, and the scp-safe host reads (wave 2)
-- [ ] 04-04-PLAN.md — The `ssh -T` probe from the one spawn site, the marketplace transport plan and runner for `marketplace add`, PREFER_HTTPS and the base override, the stand-in refusals, and the Device Flow scenarios with a denied ssh (wave 2)
+- [ ] 04-04-PLAN.md — The `ssh -T` probe from the one spawn site, the `NETWORK_SEAM_NAMES` gate, the marketplace transport plan and runner's first attempt for `marketplace add`, PREFER_HTTPS and the base override, and the refusing test `ssh` in `scripts/isolated-pi-home.mjs` (wave 2)
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 04-05-PLAN.md — The plugin install transport: upstream's skip checks, `ssh -G`, the HTTPS-first retry, the git-subdir shorthand, and one context per install command (wave 3)
-- [ ] 04-07-PLAN.md — `marketplace add` notifications name the transport, the url-source GitHub note, and the add scenarios re-baselined (wave 3)
+- [ ] 04-05-PLAN.md — The marketplace add's retry and both-failed error, the ssh stand-in's refusals, the scenario variables with the PREFER_HTTPS and CLAUDE_CODE_REMOTE scenarios, the Device Flow scenarios with a denied ssh, and auth-e2e on the stand-in (wave 3)
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 04-06-PLAN.md — Release-tag reads of GitHub sources over SSH by default (D-SG-20) and the TAGS-02 consequence (wave 4)
-- [ ] 04-08-PLAN.md — Every refresh on an attempt list from the declared source: `marketplace update`, the PUP-2 sync, and plugin mirrors (wave 4)
-- [ ] 04-09-PLAN.md — The Windows SSH-first plugin path with the HTTPS retry, the `-G` check through git, and the WINDOWS ledger entry (wave 4)
+- [ ] 04-06-PLAN.md — The plugin install transport: upstream's skip checks, `ssh -G`, the HTTPS-first retry, the git-subdir shorthand, and one context per install command (wave 4)
+- [ ] 04-08-PLAN.md — `marketplace add` notifications name the transport, the url-source GitHub note, and the add scenarios re-baselined (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 04-10-PLAN.md — Transport contexts for `plugin update`, `reinstall`, dependency moves, `fetch`, and `info --fetch`; the clone-cache transport required; the `enable` record (wave 5)
-- [ ] 04-11-PLAN.md — Marketplace refresh notifications name the transport, and the refresh scenarios re-baselined (wave 5)
+- [ ] 04-07-PLAN.md — Release-tag reads of GitHub sources over SSH by default (D-SG-20), the HTTPS retry of a `github`-source dependency's failed SSH listing, and the TAGS-02 consequence for path-source dependencies (wave 5)
+- [ ] 04-09-PLAN.md — Every refresh on an attempt list from the declared source: `marketplace update`, the PUP-2 sync, and plugin mirrors (wave 5)
+- [ ] 04-10-PLAN.md — The Windows SSH-first plugin path with the HTTPS retry, the `-G` check through git, and the WINDOWS ledger entry (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 04-12-PLAN.md — Install notifications name each clone's transport, and the install scenarios re-baselined (wave 6)
+- [ ] 04-11-PLAN.md — Transport contexts for `plugin update`, `reinstall`, dependency moves, and the converge entry (wave 6)
+- [ ] 04-13-PLAN.md — Marketplace refresh notifications name the transport, and the refresh scenarios re-baselined (wave 6)
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 04-13-PLAN.md — Update, reinstall, fetch, and `info --fetch` notifications, with the PUP-2 note, and their scenarios re-baselined (wave 7)
+- [ ] 04-12-PLAN.md — Transport contexts for `fetch`, `info --fetch`, and `enable` (D-SG-19 as extended), the SSH-only no-context arm removed, and the clone-cache transport required (wave 7)
+- [ ] 04-14-PLAN.md — Install notifications name each clone's transport, and the install scenarios re-baselined (wave 7)
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 04-14-PLAN.md — One transport context per `apply` and `import` run, their notes, and their scenarios re-baselined (wave 8)
+- [ ] 04-15-PLAN.md — Update and reinstall notifications, with the PUP-2 note and dependency moves, and their scenarios re-baselined (wave 8)
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 04-15-PLAN.md — Records: NFR-5 amended in PROJECT.md and AGENTS.md, the D-SG-17..24 outcomes, the codebase maps, and the user docs (wave 9)
+- [ ] 04-16-PLAN.md — Fetch, `info --fetch`, and enable notifications, and their scenarios re-baselined (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 04-17-PLAN.md — One transport context per `apply` and `import` run, shared by their installs, enables, and moves, their notes, and their scenarios re-baselined (wave 10)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 04-18-PLAN.md — Records: NFR-5 amended in PROJECT.md and AGENTS.md, the D-SG-17..24 outcomes, the codebase maps, and the user docs (wave 11)
 
 ### Phase 5: Credential Surface
 
