@@ -12,8 +12,8 @@ Feature: Marketplace github source
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope   | status |
-      | tools | project | added  |
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source     |
       | tools | acme/tools |
@@ -31,8 +31,8 @@ Feature: Marketplace github source
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope   | status |
-      | tools | project | added  |
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source   |
       | tools | <source> |
@@ -75,8 +75,8 @@ Feature: Marketplace github source
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope   | status |
-      | tools | project | added  |
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source   |
       | tools | <source> |
@@ -118,8 +118,8 @@ Feature: Marketplace github source
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these marketplaces:
-      | name  | scope   | status |
-      | tools | project | added  |
+      | name  | scope   | status | clone note | clone url                         |
+      | tools | project | added  | via-https  | https://github.com/acme/tools.git |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                  |
       | tools | acme/tools@release@2026 |

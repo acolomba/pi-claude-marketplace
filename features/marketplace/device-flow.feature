@@ -30,8 +30,8 @@ Feature: Marketplace device flow
       | device-flow-prompt | info     | false        | https://github.com/login/device | WDJB-MJHT |
       | cascade            | info     | false        |                                 |           |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status |
-      | tools            | user              | added              |
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | user              | added              | ssh-not-configured     | https://github.com/acme/tools.git |
     Then no result of the command contains "stand-in-access-token"
     Then the git host receives these requests:
       | method | path                                              | status |
@@ -99,8 +99,8 @@ Feature: Marketplace device flow
       | device-flow-prompt | info     | false        | https://github.com/login/device | WDJB-MJHT |                              |
       | cascade            | error    | false        |                                 |           | Some operations have failed. |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                       | cause truncated |
-      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: https-auth, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           |
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                               | cause truncated | marketplace clone note | marketplace clone url             | marketplace clone retries     |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: https-auth, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           | ssh-not-configured     | https://github.com/acme/tools.git | git@github.com:acme/tools.git |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
@@ -280,8 +280,8 @@ Feature: Marketplace device flow
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                       | cause truncated |
-      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: https-auth, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           |
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                               | cause truncated | marketplace clone note | marketplace clone url             | marketplace clone retries     |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: https-auth, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           | ssh-not-configured     | https://github.com/acme/tools.git | git@github.com:acme/tools.git |
     Then no result of the command contains "expired-token"
     Then the git host receives these requests:
       | method | path                                              | status |
@@ -316,8 +316,8 @@ Feature: Marketplace device flow
       | device-flow-prompt | info     | false        | https://github.com/login/device | WDJB-MJHT |
       | cascade            | info     | false        |                                 |           |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status |
-      | tools            | user              | added              |
+      | marketplace name | marketplace scope | marketplace status | marketplace clone note | marketplace clone url             |
+      | tools            | user              | added              | ssh-not-configured     | https://github.com/acme/tools.git |
     Then no result of the command contains "expired-token"
     Then no result of the command contains "stand-in-access-token"
     Then the git host receives these requests:
