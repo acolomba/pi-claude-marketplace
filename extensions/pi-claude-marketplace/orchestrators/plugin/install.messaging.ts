@@ -9,6 +9,7 @@ import {
 } from "../../shared/errors.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import {
+  type CloneTransportNote,
   type ContentReason,
   type PluginDisabledMessage,
   type PluginFailedMessage,
@@ -32,6 +33,7 @@ import type { PluginShapeErrorShape } from "../../shared/errors.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
 /**
@@ -185,15 +187,43 @@ function keepsRuntimeCause(err: unknown, gitReason: ContentReason | undefined): 
   );
 }
 
+/**
+ * D-SG-22: `row` with the clone note `notes` keeps for `subject`, or `row`
+ * unchanged when its subject cloned nothing over GitHub. Every install row
+ * reads its note this way, keyed by `<plugin>@<marketplace>`, so a row never
+ * shows another plugin's clone.
+ */
+export function withCloneNote<R extends { readonly clone?: CloneTransportNote }>(
+  row: R,
+  notes: GitHubCloneNotes | undefined,
+  subject: string,
+): R {
+  const clone = notes?.noteFor(subject);
+  return clone === undefined ? row : { ...row, clone };
+}
+
+/**
+ * The row of a failed install. D-SG-22: `clone` is the note of the clone the
+ * install made before it failed, so the row names each attempt beside the
+ * failure; absent when the install cloned nothing over GitHub.
+ */
 export function composeInstallFailureMessage(args: {
-  err: unknown;
-  plugin: string;
-  scope: Scope;
-  version: string | undefined;
-  rolledBackPartial: boolean;
-  rollbackPartials: readonly RollbackPartial[];
-  entityErrorRow: EntityErrorRow | undefined;
-}): InstallMsg {
+  readonly err: unknown;
+  readonly plugin: string;
+  readonly scope: Scope;
+  readonly version: string | undefined;
+  readonly rolledBackPartial: boolean;
+  readonly rollbackPartials: readonly RollbackPartial[];
+  readonly entityErrorRow: EntityErrorRow | undefined;
+  readonly clone?: CloneTransportNote | undefined;
+}): PluginFailedMessage | PluginUnavailableMessage | PluginPartiallyAvailableMessage {
+  const row = composeFailureRow(args);
+  return args.clone === undefined ? row : { ...row, clone: args.clone };
+}
+
+function composeFailureRow(
+  args: Parameters<typeof composeInstallFailureMessage>[0],
+): ReturnType<typeof composeInstallFailureMessage> {
   const { err, plugin, scope, version, rolledBackPartial, rollbackPartials, entityErrorRow } = args;
   const cause = installDisplayCause(err);
   const isPathContainment = err instanceof PathContainmentError;
@@ -320,10 +350,13 @@ export function composePromotedRow(args: {
    * stamps `false`: nothing moved.
    */
   readonly needsReload: boolean;
+  /** D-SG-22: the note of the clone the re-materialization made, if it made one. */
+  readonly clone?: CloneTransportNote | undefined;
 }): PluginInstalledMessage {
   return {
     status: "installed",
     name: args.plugin,
+    ...(args.clone !== undefined && { clone: args.clone }),
     version: args.version,
     scope: args.scope,
     dependencies: [],

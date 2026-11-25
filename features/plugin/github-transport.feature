@@ -2,6 +2,7 @@ Feature: Plugin github transport
 
   Installing a plugin whose source is a github owner/repo picks ssh or https the way Claude Code's shell install does: https first only when no ssh setting of the user and no probe answer keeps the clone on ssh, and ssh only otherwise (D-SG-18).
   An ssh stand-in first on Pi's path answers the probe and serves the git host's repositories over ssh, and a CONNECT proxy tunnels git's github.com connections to the git host.
+  The install's result names the transport of each github clone on the row of the plugin that cloned, as its clone note and clone url, with the url of each retry (D-SG-22).
 
   Background:
     Given the git repository "ghp" holds these plugins:
@@ -22,8 +23,8 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
@@ -40,8 +41,8 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
@@ -62,8 +63,8 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghp.git' |
@@ -86,8 +87,8 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghp.git' |
@@ -103,8 +104,8 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
@@ -122,8 +123,8 @@ Feature: Plugin github transport
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  |
+      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
@@ -142,8 +143,8 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives no launch
     Then the git host receives these requests:
       | method | path                                            | status |
@@ -161,8 +162,8 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the user's ssh receives no launch
     Then the git host receives these requests:
       | method | path                                            | status |
@@ -182,8 +183,8 @@ Feature: Plugin github transport
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                                                                                                                                                                     | cause truncated |
-      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  | git clone --depth failed: repository-not-found, exit code 128\nThe retry over SSH failed too: git clone --depth failed: ssh-auth, exit code 128\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again., git clone --depth failed: ssh-auth, exit code 128 | false           |
+      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                                                                                                                                                                     | cause truncated | clone note         | clone retries               | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  | git clone --depth failed: repository-not-found, exit code 128\nThe retry over SSH failed too: git clone --depth failed: ssh-auth, exit code 128\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again., git clone --depth failed: ssh-auth, exit code 128 | false           | ssh-not-configured | git@github.com:acme/ghp.git | https://github.com/acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
@@ -212,9 +213,9 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version |
-      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 1.0.0   |
-      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version | clone note         | clone url                       |
+      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 1.0.0   | ssh-not-configured | https://github.com/acme/ghd.git |
+      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
@@ -248,9 +249,9 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                |
-      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} |
-      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  |
+      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                | clone note | clone url                   |
+      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} | via-ssh    | git@github.com:acme/ghd.git |
+      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
@@ -341,9 +342,9 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                |
-      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} |
-      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  |
+      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                | clone note         | clone url                       |
+      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} | ssh-not-configured | https://github.com/acme/ghd.git |
+      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
@@ -387,9 +388,9 @@ Feature: Plugin github transport
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                |
-      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} |
-      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  |
+      | marketplace name | marketplace scope | id       | name     | status    | reasons | scope   | version                | clone note | clone url                       |
+      | gits             | project           | ghd@gits | ghd@gits | installed |         | project | 2.0.0-{ghd revision 2} | via-https  | https://github.com/acme/ghd.git |
+      | gits             | project           | ghp@gits | ghp      | installed |         | project | 1.0.0                  | via-https  | https://github.com/acme/ghp.git |
     Then the user's ssh receives no launch
     Then the git host receives these requests:
       | method | path                                            | status |

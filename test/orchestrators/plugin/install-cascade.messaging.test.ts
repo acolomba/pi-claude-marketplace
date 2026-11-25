@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   CASCADE_CONTEXT,
   cascadeFailureCause,
@@ -1857,5 +1858,116 @@ describe("cascadeFailureCause", () => {
     assert.ok(thrown instanceof DependencyCascadeError);
     assert.strictEqual(thrown.key, "formatter@tools");
     assert.strictEqual(causeChainTrailer(thrown), causeChainTrailer(error));
+  });
+});
+
+describe("D-SG-22: clone notes on the cascade's rows", () => {
+  test("each installed row names its own clone, and a skipped member names none", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record(ROOT_KEY, { note: "via-ssh", url: "git@github.com:acme/helper.git" });
+    notes.record("formatter@tools", {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/formatter.git",
+    });
+    notes.record("linter@tools", { note: "via-https", url: "https://github.com/acme/linter.git" });
+    notes.record("aux@tools", { note: "via-ssh", url: "git@github.com:acme/aux.git" });
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [member(), member({ key: "linter@tools", version: "1.0.0" })],
+      alreadyInstalled: [{ key: "aux@tools", version: "3.0.0" }],
+      probe: PROBE_BOTH_LOADED,
+      notes,
+    });
+
+    // act
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "info",
+      message: [
+        "● official [user]",
+        "  ⊘ aux@tools v3.0.0 (skipped) {already installed}",
+        "  ● formatter@tools v2.1.0 (installed)",
+        "    SSH not configured, cloning via HTTPS: https://github.com/acme/formatter.git",
+        "  ● helper v1.0.0 (installed)",
+        "    Cloning via SSH: git@github.com:acme/helper.git",
+        "  ● linter@tools v1.0.0 (installed)",
+        "    Cloning via HTTPS: https://github.com/acme/linter.git",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    });
+  });
+
+  test("a disabled requesting plugin's row stays without a clone field", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record(ROOT_KEY, { note: "via-ssh", url: "git@github.com:acme/helper.git" });
+    const disabled: InstallMsg = {
+      status: "disabled",
+      name: "helper",
+      version: "1.0.0",
+      severity: "info",
+      needsReload: true,
+    };
+
+    // act
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: disabled,
+      installed: [],
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+      notes,
+    });
+
+    // assert
+    assert.deepStrictEqual(rows, [disabled]);
+  });
+
+  test("a dependency whose clone failed names its attempts under its own failed row", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record("formatter@tools", {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/formatter.git",
+      retries: ["git@github.com:acme/formatter.git"],
+    });
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new Error("clone failed"),
+      rollbackPartials: [],
+    };
+
+    // act
+    const rows = composeCascadeFailureMessage({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootName: "helper",
+      subject,
+      notes,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      rows.map((row) => ({ name: row.name, clone: "clone" in row ? row.clone : undefined })),
+      [
+        {
+          name: "formatter@tools",
+          clone: {
+            note: "ssh-not-configured",
+            url: "https://github.com/acme/formatter.git",
+            retries: ["git@github.com:acme/formatter.git"],
+          },
+        },
+        { name: "helper", clone: undefined },
+      ],
+    );
   });
 });

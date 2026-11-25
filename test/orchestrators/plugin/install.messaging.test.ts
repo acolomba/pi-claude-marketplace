@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   INSTALL_CONTEXT,
   classifyEntityShapeError,
@@ -10,6 +11,7 @@ import {
   formatOrchestratedCause,
   narrowNotInstallableReasons,
   PROMOTED_ROW_REASONS,
+  withCloneNote,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
   appendLeakToError,
@@ -504,6 +506,89 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
+  test("D-SG-22: names both attempts of a clone that failed over both GitHub transports under the failed row", () => {
+    // arrange
+    const failure = new GitHubTransportsFailedError("plugin", [
+      {
+        transport: "https",
+        url: "https://github.com/acme/ghp.git",
+        error: new GitCommandError(
+          { kind: "repository-not-found" },
+          { operation: "clone", exitCode: 128 },
+        ),
+      },
+      {
+        transport: "ssh",
+        url: "git@github.com:acme/ghp.git",
+        error: new GitCommandError(
+          { kind: "ssh-auth", detail: "publickey" },
+          { operation: "clone", exitCode: 128 },
+        ),
+      },
+    ]);
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "ghp",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/acme/ghp.git",
+        retries: ["git@github.com:acme/ghp.git"],
+      },
+    });
+
+    // act
+    const [resolved] = resolveRows(
+      [{ name: "gits", scope: "project", plugins: [message] }],
+      runWithNothingLoaded().softDeps,
+      INSTALL_CONTEXT.rowPolicies,
+    );
+    const lines = composePluginLines(resolved!.plugins[0]!, "project").slice(0, 3);
+
+    // assert
+    assert.deepStrictEqual(lines, [
+      "  ⊘ ghp (failed) {authentication required}",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+      "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghp.git",
+    ]);
+  });
+
+  test("D-SG-22: puts the clone note on the unavailable row of a cloned plugin", () => {
+    // arrange
+    const entityErrorRow: EntityErrorRow = {
+      kind: "entity-error",
+      name: "ghp",
+      status: "unavailable",
+      reasons: ["unsupported hooks"],
+    };
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: new Error("not installable"),
+      plugin: "ghp",
+      scope: "project",
+      version: "1.0.0",
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow,
+      clone: { note: "via-ssh", url: "git@github.com:acme/ghp.git" },
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "unavailable",
+      name: "ghp",
+      reasons: ["unsupported hooks"],
+      version: "1.0.0",
+      severity: "error",
+      clone: { note: "via-ssh", url: "git@github.com:acme/ghp.git" },
+    });
+  });
+
   test("INR-02: keeps the cause of an authentication failure whose cleanup leaked", () => {
     // arrange
     const failure = appendLeakToError(
@@ -895,6 +980,72 @@ describe("composePromotedRow", () => {
       "● linter v3.0.0 (installed) {already installed, dependency promoted}",
     );
   });
+
+  test("D-SG-22: carries the note of the clone a re-materialized promotion made", () => {
+    // arrange
+    const promotion = {
+      plugin: "linter",
+      version: "3.0.0",
+      scope: "user",
+      needsReload: true,
+      clone: { note: "via-https", url: "https://github.com/acme/linter.git" },
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
+
+    // assert
+    assert.deepStrictEqual(row.clone, {
+      note: "via-https",
+      url: "https://github.com/acme/linter.git",
+    });
+  });
+});
+
+describe("withCloneNote", () => {
+  test("D-SG-22: gives a row the note its own subject's clone left, not another subject's", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record("ghd@gits", { note: "via-https", url: "https://github.com/acme/ghd.git" });
+    notes.record("ghp@gits", { note: "via-ssh", url: "git@github.com:acme/ghp.git" });
+    const row = composePromotedRow({
+      plugin: "ghp",
+      version: "1.0.0",
+      scope: "project",
+      needsReload: false,
+    });
+
+    // act
+    const noted = withCloneNote(row, notes, "ghp@gits");
+
+    // assert
+    assert.deepStrictEqual(noted, {
+      ...row,
+      clone: { note: "via-ssh", url: "git@github.com:acme/ghp.git" },
+    });
+  });
+
+  for (const [title, notes] of [
+    ["no collector", undefined],
+    ["a collector with no note for the subject", createGitHubCloneNotes()],
+  ] as const) {
+    test(`D-SG-22: leaves a row with ${title} without a clone field`, () => {
+      // arrange
+      const row = composePromotedRow({
+        plugin: "ghp",
+        version: "1.0.0",
+        scope: "project",
+        needsReload: false,
+      });
+
+      // act
+      const noted = withCloneNote(row, notes, "ghp@gits");
+
+      // assert
+      assert.strictEqual(noted, row);
+      assert.strictEqual("clone" in noted, false);
+    });
+  }
 });
 
 describe("formatOrchestratedCause", () => {

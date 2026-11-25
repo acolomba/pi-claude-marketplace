@@ -14165,7 +14165,7 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ private (failed) {authentication required}",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ private (failed) {authentication required}\n    Cloning via HTTPS: https://github.com/org/private.git",
           severity: "error",
         },
       ]);

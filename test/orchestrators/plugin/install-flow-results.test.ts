@@ -6,6 +6,7 @@ import { describe, test, type TestContext } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   cascadeStagingDiagnostics,
   collectPostCommitWarnings,
@@ -15,6 +16,7 @@ import {
   failedRowOutcome,
   handleCaughtInstallFailure,
   landedMoves,
+  marketplaceBlockClone,
   movedMember,
   movedRows,
   promoteDependencyRecord,
@@ -1195,5 +1197,147 @@ describe("caught failures", () => {
     // assert
     assert.strictEqual(outcome.status, "failed");
     assert.strictEqual(outcome.rollbackPartials, undefined);
+  });
+});
+
+describe("D-SG-22: clone notes on the install's rows", () => {
+  const SSH_NOTE = { note: "via-ssh", url: "git@github.com:acme/app.git" } as const;
+  const ADD_NOTE = { note: "via-https", url: "https://github.com/acme/mp.git" } as const;
+
+  function notesWith(entries: Record<string, typeof SSH_NOTE | typeof ADD_NOTE>) {
+    const notes = createGitHubCloneNotes();
+    for (const [subject, note] of Object.entries(entries)) {
+      notes.record(subject, note);
+    }
+
+    return notes;
+  }
+
+  test("names the clone of a failed install under its failed row and the add under its block", () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const notes = notesWith({ "app@mp": SSH_NOTE, mp: ADD_NOTE });
+
+    // act
+    handleCaughtInstallFailure({
+      err: new Error("stopped"),
+      ctx,
+      run,
+      marketplace: "mp",
+      scope: "project",
+      plugin: "app",
+      rootKey: "app@mp",
+      capture: { rollbackPartials: [], version: undefined },
+      cascadeFailure: { mcpConfigNotices: [] },
+      orchestrated: false,
+      notes,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications[0]?.message.split("\n").slice(0, 6), [
+      "A plugin operation has failed.",
+      "",
+      "● mp [project]",
+      "  Cloning via HTTPS: https://github.com/acme/mp.git",
+      "  ⊘ app (failed)",
+      "    Cloning via SSH: git@github.com:acme/app.git",
+    ]);
+  });
+
+  test("names the failing dependency's clone under its own row, not the requesting plugin's", () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const notes = notesWith({ "dep@mp": SSH_NOTE });
+
+    // act
+    handleCaughtInstallFailure({
+      err: new Error("dependency stopped"),
+      ctx,
+      run,
+      marketplace: "mp",
+      scope: "project",
+      plugin: "app",
+      rootKey: "app@mp",
+      capture: { rollbackPartials: [], version: undefined },
+      cascadeFailure: {
+        mcpConfigNotices: [],
+        subject: {
+          kind: "member",
+          key: "dep@mp",
+          error: new Error("dependency stopped"),
+          rollbackPartials: [],
+        },
+      },
+      orchestrated: false,
+      notes,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications[0]?.message.split("\n").slice(0, 6), [
+      "Some plugin operations have failed.",
+      "",
+      "● mp [project]",
+      "  ⊘ app (failed) {dependency failed}",
+      "  ⊘ dep@mp (failed)",
+      "    Cloning via SSH: git@github.com:acme/app.git",
+    ]);
+  });
+
+  test("names the clone a re-materialized promotion made", () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    promotedRowOutcome({
+      ctx,
+      run,
+      marketplace: "mp",
+      scope: "project",
+      plugin: "app",
+      promotion: {
+        version: "1.2.3",
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        materialized: [],
+        mcpConfigNotices: [],
+      },
+      orchestrated: false,
+      notes: notesWith({ "app@mp": SSH_NOTE }),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications[0]?.message.split("\n").slice(0, 3), [
+      "● mp [project]",
+      "  ● app v1.2.3 (installed) {already installed, dependency promoted}",
+      "    Cloning via SSH: git@github.com:acme/app.git",
+    ]);
+  });
+
+  for (const [title, notes] of [
+    ["no collector", undefined],
+    ["a plugin's note only", notesWith({ "app@mp": SSH_NOTE })],
+  ] as const) {
+    test(`gives a marketplace block no clone member with ${title}`, () => {
+      // arrange
+      const marketplace = "mp";
+
+      // act
+      const member = marketplaceBlockClone(notes, marketplace);
+
+      // assert
+      assert.deepStrictEqual(member, {});
+    });
+  }
+
+  test("gives a marketplace block the note its target-scope add kept under its name", () => {
+    // arrange
+    const notes = notesWith({ mp: ADD_NOTE });
+
+    // act
+    const member = marketplaceBlockClone(notes, "mp");
+
+    // assert
+    assert.deepStrictEqual(member, { clone: ADD_NOTE });
   });
 });
