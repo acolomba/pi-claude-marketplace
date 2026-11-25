@@ -485,6 +485,34 @@ test("adds a path source without ever reaching the git port it was handed (NFR-5
   verifyBoundary();
 });
 
+test("D-SG-17: reads the typed source in the command-line form, which refuses an ssh:// URL", async (t) => {
+  // arrange
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "ssh-url");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
+    value: cwd,
+    reads: 1,
+  });
+  const git = createGitPort(sourceTree);
+  const addHandler = makeAddHandler(createAddDeps(git.gitOps));
+
+  // act
+  await addHandler("ssh://gitlab.example.com/team/alpha.git", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n" +
+        "⊘ ssh://gitlab.example.com/team/alpha.git [user] (failed) {unsupported source}",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+  assert.strictEqual(gitProcessRuns(), 0);
+  verifyBoundary();
+});
+
 test("collapses the duplicated usage block to one sentence when no source is supplied and adds nothing", async (t) => {
   // arrange
   const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "no-source");

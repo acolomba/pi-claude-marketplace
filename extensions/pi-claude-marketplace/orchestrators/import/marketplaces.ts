@@ -36,10 +36,15 @@ function unmappableMarketplaceDiagnostic(scope: Scope, marketplace: string): Imp
  * sources support `ref` but NOT `sha` per the upstream docs. The `file`
  * shape (remote marketplace.json URL) and any unrecognized discriminator
  * stay unmappable (return undefined).
+ *
+ * D-SG-17: upstream's `git` marketplace source (`{ source: "git", url, ref }`)
+ * maps as `url` does, so an `ssh://` or scp address that settings declare
+ * reaches the add as a config string the git address validator accepts.
  */
 function nestedMarketplaceSource(src: Record<string, unknown>): string | undefined {
   switch (src.source) {
-    case "url": {
+    case "url":
+    case "git": {
       if (typeof src.url !== "string") {
         return undefined;
       }

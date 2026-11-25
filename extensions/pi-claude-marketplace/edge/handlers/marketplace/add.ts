@@ -50,6 +50,9 @@ export function makeAddHandler(
       gitOps: deps.gitOps,
       installMissingDependencies: deps.installMissingDependencies,
       ...(opened.local && { local: true }),
+      // D-SG-17: the typed source reads in the command-line form, which
+      // refuses the URL-scheme ssh forms as Claude Code's add does.
+      commandLine: true,
     });
   };
 }

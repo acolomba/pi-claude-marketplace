@@ -295,6 +295,15 @@ export interface AddMarketplaceOptions {
    * as `invalid manifest` and changes nothing.
    */
   readonly replaceRecorded?: string;
+  /**
+   * D-SG-17 [Address forms]: the source was typed on the `marketplace add`
+   * command line, whose parser refuses the URL-scheme ssh forms and every
+   * other non-http(s) scheme as Claude Code's does. Only the edge handler of
+   * `marketplace add` sets it; `apply`, `import`, `bootstrap`, and the
+   * install-time add record a config or manifest string and accept every form
+   * the git address validator accepts.
+   */
+  readonly commandLine?: true;
 }
 
 /**
@@ -771,15 +780,50 @@ class CapitalLetterCommitRefError extends UnsupportedSourceError {
   }
 }
 
+/** Claude Code's refusal of a source its `marketplace add` command line cannot read (`g4r`). */
+const INVALID_SOURCE_FORMAT =
+  "Invalid marketplace source format. Try: owner/repo, https://..., or ./path";
+
+/** A URL whose `scheme://` prefix names its scheme. */
+const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/**
+ * D-SG-17 [Address forms]: whether the command line refuses `rawSource`
+ * before it parses: a `scheme://` URL whose scheme is not `http` or `https`,
+ * as `ssh://`, `git+ssh://`, `ssh+git://`, `git://`, and `file://` are.
+ * Claude Code's add parser reads only `http://` and `https://` URLs, the scp
+ * form, paths, and `owner/repo`, case-sensitively, and refuses the rest.
+ */
+function isCommandLineRefusal(rawSource: string): boolean {
+  return (
+    SCHEME_URL.test(rawSource) &&
+    !rawSource.startsWith("http://") &&
+    !rawSource.startsWith("https://")
+  );
+}
+
 /**
  * S5a / S5b / S5c (MA-10): parse the raw source and refuse every kind or ref
  * `marketplace add` cannot record, before any lock, disk, or git access. The
  * refusal is an `UnsupportedSourceError`, classified as `unsupported source`
  * (D-48-C A3).
+ *
+ * D-SG-17: `form` `"command-line"` reads a source the user typed on the
+ * `marketplace add` command line, which refuses the URL-scheme ssh forms with
+ * Claude Code's text before the parser reads them. Without it, the source is
+ * a recorded config or manifest string, and every form the git address
+ * validator accepts parses.
  */
 export function parseAddableSource(
   rawSource: string,
+  form?: "command-line",
 ): GitHubSource | UrlSource | PathSource | HostedManifestSource {
+  if (form === "command-line" && isCommandLineRefusal(rawSource)) {
+    throw new UnsupportedSourceError(
+      `Cannot add marketplace from "${rawSource}": ${INVALID_SOURCE_FORMAT}`,
+    );
+  }
+
   const source = parsePluginSource(rawSource);
 
   // S5a: the parser produced an unknown kind with a reason, surfaced verbatim
@@ -1074,6 +1118,11 @@ async function replaceMarketplaceInState(
   return setAside === undefined ? added : { ...added, setAside };
 }
 
+/** D-SG-17: the parser form an add reads its source in, from where the source came from. */
+function addSourceForm(opts: AddMarketplaceOptions): "command-line" | undefined {
+  return opts.commandLine === true ? "command-line" : undefined;
+}
+
 /**
  * The source-kind precondition plus the in-guard add. Extracted so the
  * entrypoint try/catch (ATTR-07) wraps BOTH the synchronous source-kind refusal
@@ -1091,7 +1140,7 @@ async function runAddInGuard<U>(args: {
   recordedSource: RecordedSourceStep<U> | undefined;
 }): Promise<U | AddedMarketplace> {
   const { opts, locations, recordedSource, removalOps } = args;
-  const source = parseAddableSource(opts.rawSource);
+  const source = parseAddableSource(opts.rawSource, addSourceForm(opts));
 
   // WB-01: target-path selection happens ONCE before the lock so
   // the orchestrator NEVER falls back to the base config on ENOENT.
@@ -1400,14 +1449,14 @@ function showsAddCause(unwrapped: unknown): boolean {
  */
 function hostErrorFrame(
   err: unknown,
-  rawSource: string,
+  opts: AddMarketplaceOptions,
   reason: ContentReason,
 ): string | undefined {
   if (reason === "unsupported source") {
     return undefined;
   }
 
-  const remoteUrl = remoteUrlOf(parseAddableSource(rawSource));
+  const remoteUrl = remoteUrlOf(parseAddableSource(opts.rawSource, addSourceForm(opts)));
   const frame =
     remoteUrl === undefined ? undefined : hostHttpFailureFrame(unwrapAddError(err), remoteUrl);
   return reason === "network error" ? frame : undefined;
@@ -1524,7 +1573,7 @@ function handleAddFailure(
         opts.scope,
         reason,
         wrapped,
-        hostErrorFrame(err, opts.rawSource, reason),
+        hostErrorFrame(err, opts, reason),
       ),
     ];
     const advisories = removalAdvisories(err);

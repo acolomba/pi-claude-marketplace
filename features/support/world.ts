@@ -176,10 +176,11 @@ export interface PiProfile {
    * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and a terminal session the
    * scenario starts afterwards gets the same environment and loads the same
    * `extraExtensions` (D-BG-01). `usePiWithProfile()` refuses it when
-   * `extraExtensions` lacks the GitHub redirect, because such a Pi would reach
-   * GitHub's real address with nothing to keep its requests on this machine.
-   * It also refuses it with `leadingExtensions`, which the terminal session
-   * cannot load ahead of the real extension.
+   * `extraExtensions` lacks the GitHub redirect, or when `httpsProxy` names no
+   * CONNECT proxy, because such a Pi or its system git would reach GitHub's
+   * real address with nothing to keep its requests on this machine (03-SECURITY
+   * F-5). It also refuses it with `leadingExtensions`, which the terminal
+   * session cannot load ahead of the real extension.
    */
   readonly withoutGitHubBaseOverride?: true;
   /**
@@ -865,6 +866,14 @@ export class ScenarioWorld extends World {
     }
 
     if (profile.withoutGitHubBaseOverride === true) {
+      // 03-SECURITY F-5: without the CONNECT proxy, the system git of a Pi
+      // that has no base override would reach the real github.com.
+      if (profile.httpsProxy === undefined) {
+        throw new Error(
+          "a profile Pi without the GitHub base override needs the harness CONNECT proxy as its https_proxy",
+        );
+      }
+
       this.keepTerminalSessionLocal(profile);
     } else if (profile.httpsProxy !== undefined) {
       throw new Error("only a profile Pi without the GitHub base override takes a proxy");
