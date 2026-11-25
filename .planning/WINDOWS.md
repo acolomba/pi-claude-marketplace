@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 27
+open_count: 29
 waived_count: 52
 fixed_count: 48
-total_count: 127
-last_updated: 2026-11-25T20:05:15.637Z
+total_count: 129
+last_updated: 2026-11-25T21:29:31.467Z
 ---
 
 # Broken Windows Ledger
@@ -142,6 +142,8 @@ last_updated: 2026-11-25T20:05:15.637Z
 | 125 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts |  | [system-git] a plugin mirror held open by another process (EBUSY/EPERM on rename) fails the plugin's row as permission denied and is retried by the next command; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T10:40:23.053Z |  |
 | 126 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/github-transport.ts |  | [system-git] The 'SSH configured for GitHub, using SSH for <subject>' debug line keys on the via-ssh note, so it now prints for an scp GitHub url add that ran no probe; key it on the probe (04-04 note) | open |  | 2026-11-25T20:05:15.462Z |  |
 | 127 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts |  | [system-git] A bootstrap add that fails after its clone shows no clone note, because notifyAddFailure has no collector; marketplace add of the same source shows it (D-SG-22) | open |  | 2026-11-25T20:05:15.637Z |  |
+| 128 | 4 | unrun-verify | extensions/pi-claude-marketplace/domain/github-plugin-transport.ts |  | [system-git] the Windows SSH-first github plugin install, the ssh -G check run through Git for Windows' sh (git ls-remote with Pi's wrapped GIT_SSH_COMMAND plus ' -G >&2'), and the HTTPS-then-SSH retry after a publickey or host-key failure are proven by fake-platform unit rows only; the manual Windows check at the pull request covers them (SG-SSH-05) | open |  | 2026-11-25T21:29:31.350Z |  |
+| 129 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts |  | [system-git] a url record whose URL now parses as a hosted catalog (pre-D-PL5-04 .json record) still refreshes from its checkout's recorded origin; OQ-5 parity holds for every other source | open |  | 2026-11-25T21:29:31.467Z |  |
 
 ````json
 [
@@ -1737,6 +1739,32 @@ last_updated: 2026-11-25T20:05:15.637Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-25T20:05:15.637Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 128,
+    "kind": "unrun-verify",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/domain/github-plugin-transport.ts",
+    "line": null,
+    "description": "[system-git] the Windows SSH-first github plugin install, the ssh -G check run through Git for Windows' sh (git ls-remote with Pi's wrapped GIT_SSH_COMMAND plus ' -G >&2'), and the HTTPS-then-SSH retry after a publickey or host-key failure are proven by fake-platform unit rows only; the manual Windows check at the pull request covers them (SG-SSH-05)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-25T21:29:31.350Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 129,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts",
+    "line": null,
+    "description": "[system-git] a url record whose URL now parses as a hosted catalog (pre-D-PL5-04 .json record) still refreshes from its checkout's recorded origin; OQ-5 parity holds for every other source",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-25T21:29:31.467Z",
     "resolved_at": null,
     "milestone": null
   }
