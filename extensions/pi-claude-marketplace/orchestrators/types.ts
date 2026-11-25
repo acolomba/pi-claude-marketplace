@@ -565,7 +565,8 @@ export interface PluginUpdateUnchangedOutcome extends PluginUpdateBase {
  * it). The projection flips ONLY this arm to the `partially-upgradable` token; the
  * discriminant is a dedicated field, NOT the reason string, so the degrade
  * reason can carry the list-consistent kinds instead of `no longer
- * installable`. Structural declines (`--partial` cannot help) leave it unset.
+ * installable`. A decline that `--partial` cannot help, an `unavailable`
+ * verdict, leaves it unset.
  */
 export interface PluginUpdateSkippedOutcome extends PluginUpdateBase {
   readonly partition: "skipped";

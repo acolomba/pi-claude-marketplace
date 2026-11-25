@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A plugin with no component that Pi supports, such as an LSP-only plugin, is now `unavailable`, and `--partial` cannot install it. (#339)
+
 - `/claude:plugin reload` now reloads Pi, also over RPC, where Pi has no `/reload`, and plugin `SessionStart` hooks now behave more like Claude Code. (#332)
 
   - Reload hints and refusals now name the command your Pi offers, and a one-shot run such as `pi -p` shows none.

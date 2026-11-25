@@ -5092,11 +5092,11 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
 test("D-04-07: promotes a partially installed dependency the imported settings name with the record's own consent", async (t) => {
   // arrange
   // The first import adds the marketplace through `base`; a standalone
-  // `--partial` install of `sample` then records `dep`, whose unsupported kind
-  // makes it partially available, as a partially installed dependency. The
-  // second import names all three. Import carries no `--partial` of its own,
-  // so the promotion consents on the record's recorded availability and the
-  // name in the settings.
+  // `--partial` install of `sample` then records `dep`, whose theme beside an
+  // empty `skills` folder makes it partially available, as a partially
+  // installed dependency. The second import names all three. Import carries
+  // no `--partial` of its own, so the promotion consents on the record's
+  // recorded availability and the name in the settings.
   const { cwd, project } = await createHermeticScopes(t, "promotes-partial-dependency");
   // Two imports and one standalone install, one emission each.
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
@@ -5131,6 +5131,7 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
     path.join(marketplaceRoot, "plugins", "dep", ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: "dep", version: "1.0.0", experimental: { themes: "./themes" } }),
   );
+  await mkdir(path.join(marketplaceRoot, "plugins", "dep", "skills"));
   const settingsPath = path.join(cwd, ".claude", "settings.json");
   const expectedSecondResult: ClaudeImportExecutionResult = {
     ...emptyImportResult(),

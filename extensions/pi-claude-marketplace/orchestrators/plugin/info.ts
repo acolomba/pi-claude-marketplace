@@ -1839,7 +1839,8 @@ function applyRecordRowShape(
  *
  * The five `false` keys fall into two groups.
  *
- * `unavailable` is the structural exclusion. Nothing will install at all, so
+ * `unavailable` is the exclusion of a plugin that cannot install: a structural
+ * defect, or no supported component (D-NSC-01). Nothing will install at all, so
  * the claim would describe an install that cannot happen, and that row's brace
  * already carries the blocker.
  *
@@ -2379,8 +2380,9 @@ function asDeclaredList(raw: unknown): readonly unknown[] {
  *
  * D-64-02 / RSTATE-05: the per-kind unsupported markers for the `partially-available`
  * arm derive from the typed `unsupported[]` component-kind list via the shared
- * render helper; the structural `unavailable` arm's reasons stay on the `notes`
- * path via `narrowResolverNotes`.
+ * render helper; the `unavailable` arm's reasons stay on the `notes` path via
+ * `narrowResolverNotes`, which gives the kinds' own tokens when every note
+ * names a kind (D-NSC-01).
  */
 function buildNonInstallableRowFields(
   reader: PluginInfoReader,

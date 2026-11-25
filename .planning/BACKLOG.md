@@ -4607,7 +4607,7 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-10).
 
 ## MCPB-01: `.mcpb` and `.dxt` MCP bundles
 
-Added 2026-11-01 (component-features Phase 6, D-CF6-01). Claude Code unpacks an `.mcpb` or `.dxt` bundle that `mcpServers` names and runs its server. pi-mcp-adapter has no bundle runner, so such a plugin is `(partially-available) {unsupported mcp}`, and `info` does not name the bundle. The original trigger was a bundle runner in pi-mcp-adapter.
+Added 2026-11-01 (component-features Phase 6, D-CF6-01). Claude Code unpacks an `.mcpb` or `.dxt` bundle that `mcpServers` names and runs its server. pi-mcp-adapter has no bundle runner, so such a plugin is `(partially-available) {unsupported mcp}` when it has another supported component, and `(unavailable) {unsupported mcp}` when it has no supported component, for example when the bundle is its only component (D-NSC-01). `info` does not name the bundle. The original trigger was a bundle runner in pi-mcp-adapter.
 
 **Out of date 2026-11-15** (parity-gaps Phase 11, 11-06). Claude Code has no bundle runner either. It unpacks the `.mcpb` or `.dxt` bundle into `mcpb/` under the plugins root and reads a normal server config from it (Claude Code plugins reference, "MCP bundle path", fetched 2026-11-15; `docs/research/parity-gaps/mcp.md` N17). So what blocks bundles is this project's own work: an unpack step and a translation of the bundle manifest, the bundle's `user_config` included. Trigger: a decision to do that work. It does not wait for pi-mcp-adapter. Until then D-CF6-01 stays the decision that this extension never reads a bundle.
 

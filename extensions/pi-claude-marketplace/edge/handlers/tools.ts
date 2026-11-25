@@ -406,7 +406,7 @@ async function loadToolPluginPayload(
     // PL-1: narrow only when the caller narrowed, and carry each tool bucket's
     // fine-grained members with it. `available` is the tool's coarse name for
     // `available` PLUS the cold git-source `remote` bucket (RSTA-01 /
-    // D-80-05), and `unavailable` for structural `unavailable` PLUS
+    // D-80-05), and `unavailable` for `unavailable` PLUS
     // `partially-available` (USTAT-02 / D-64-01) -- the same folds
     // `projectRowStatus` performs on the way back. Sending an all-true bag
     // instead of nothing would make `filtersPassive` false and strand both

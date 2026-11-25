@@ -930,9 +930,9 @@ test("OUT-02: on a `(partially-available)` row the author-declared token appends
       manifest: {
         name: "mp1",
         plugins: [
-          // `lspServers` + an on-disk dir resolves `partially-available`, so the
-          // row already carries a degrade token before the entry's declaration
-          // is considered.
+          // `lspServers` beside an empty `skills` folder resolves
+          // `partially-available`, so the row already carries a degrade token
+          // before the entry's declaration is considered.
           {
             name: "zeta",
             source: "./zeta",
@@ -942,7 +942,7 @@ test("OUT-02: on a `(partially-available)` row the author-declared token appends
           },
         ],
       },
-      installablePluginDirs: ["zeta"],
+      installablePluginDirs: ["zeta/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -1311,7 +1311,7 @@ test("list flags binaries on candidate and upgrade rows of an official marketpla
         ],
       },
       installed: { older: { version: "1.0.0" } },
-      installablePluginDirs: ["fresh", "older"],
+      installablePluginDirs: ["fresh/skills", "older/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -1341,9 +1341,9 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `partially-available` 
       manifest: {
         name: "mp1",
         plugins: [
-          // unsup: declares lspServers with an on-disk dir -> resolveStrict
-          // yields `partially-available` (a partially-installable candidate,
-          // not installed).
+          // unsup: declares lspServers beside an empty `skills` folder ->
+          // resolveStrict yields `partially-available` (a partially-installable
+          // candidate, not installed).
           { name: "unsup", source: "./unsup", version: "1.0.0", lspServers: { ls: {} } },
           // clean: on-disk dir, no unsupported kinds -> `available`. (Named to
           // avoid colliding with the `unavailable` substring in assertions.)
@@ -1352,7 +1352,7 @@ test("LIST-01 / D-67-01: a not-installed plugin resolving `partially-available` 
           { name: "gone", source: "./gone", version: "3.0.0" },
         ],
       },
-      installablePluginDirs: ["unsup", "clean"],
+      installablePluginDirs: ["unsup/skills", "clean"],
     });
 
     // --partial: the partially-available row appears, rendered with the
@@ -1543,7 +1543,7 @@ test("LIST-01 / D-67-01 (A1): a partially-upgradable plugin shows under --instal
         plugins: [{ name: "fup", source: "./fup", version: "1.0.1", lspServers: { ls: {} } }],
       },
       installed: { fup: { version: "1.0.0" } },
-      installablePluginDirs: ["fup"],
+      installablePluginDirs: ["fup/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -1592,7 +1592,7 @@ test("FSTAT-02 / FSTAT-04: same-name partially-installed + partially-upgradable 
         fi: { version: "1.0.0", unsupported: ["lspServers"] },
         fu: { version: "1.0.0" },
       },
-      installablePluginDirs: ["fi", "fu"],
+      installablePluginDirs: ["fi", "fu/skills"],
     });
 
     // Project scope: a CLONE (same marketplaceRoot + manifestPath) with the
@@ -1703,7 +1703,7 @@ test("USTAT-01 / SNM-11: two same-name not-installed partially-available rows ex
           { name: "dup", source: "./dup", version: "1.0.0", lspServers: { ls: {} } },
         ],
       },
-      installablePluginDirs: ["dup"],
+      installablePluginDirs: ["dup/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -1741,7 +1741,7 @@ test("LIST-01 / D-67-01: passive (no filter flag) shows every bucket and the not
         ],
       },
       installed: { inst: { version: "1.0.0" } },
-      installablePluginDirs: ["inst", "avail", "unsup"],
+      installablePluginDirs: ["inst", "avail", "unsup/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -2815,7 +2815,7 @@ test("FSTAT-04 / D-66-02: clean record + candidate resolving `partially-availabl
         plugins: [{ name: "plug", source: "./plug", version: "1.0.1", lspServers: { ls: {} } }],
       },
       installed: { plug: { version: "1.0.0" } },
-      installablePluginDirs: ["plug"],
+      installablePluginDirs: ["plug/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -3215,7 +3215,7 @@ test("D-CF5-20: plugin declaring hooks field with no hooks/hooks.json on disk bu
         name: "mp1",
         plugins: [{ name: "hooks-plugin", source: "./hooks-plugin", hooks: ["hooks.json"] }],
       },
-      installablePluginDirs: ["hooks-plugin"],
+      installablePluginDirs: ["hooks-plugin/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -3249,7 +3249,7 @@ test("plugin declaring lspServers field renders as ⊖ (unsupported) with {lsp} 
         name: "mp1",
         plugins: [{ name: "lsp-plugin", source: "./lsp-plugin", lspServers: { "my-ls": {} } }],
       },
-      installablePluginDirs: ["lsp-plugin"],
+      installablePluginDirs: ["lsp-plugin/skills"],
     });
 
     const { ctx, run, notifications, ui } = makeCtx();
@@ -3364,7 +3364,7 @@ test("plugin dir with .lsp.json file renders as ⊖ (unsupported) via file conve
         name: "mp1",
         plugins: [{ name: "lsp-conv", source: "./lsp-conv" }],
       },
-      installablePluginDirs: ["lsp-conv"],
+      installablePluginDirs: ["lsp-conv/skills"],
     });
 
     // Write .lsp.json inside the plugin source dir so resolver detects it.

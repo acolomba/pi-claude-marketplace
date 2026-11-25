@@ -3,9 +3,9 @@ gsd_state_version: "1.0"
 milestone: integration-rescope
 status: Awaiting next milestone
 stopped_at: Phase 08 complete — all phases complete
-last_updated: "2026-11-23T15:58:47.743Z"
-last_activity: 2026-11-23
-last_activity_desc: Milestone integration-rescope completed and archived
+last_updated: "2026-11-25T16:33:16.867Z"
+last_activity: 2026-11-25
+last_activity_desc: "Completed quick task 261125-i5j"
 state_head: 4df8c22948e869a61d0d7eec5706d5f49eec7f5d
 progress:
   total_phases: 9
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: Milestone integration-rescope complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-23 - Completed quick batch 261123-qrt: `/claude:plugin reload` (261123-qru) and the RPC reload migration (261123-qrv)
+Last activity: 2026-11-25 - Completed quick task 261125-i5j: Resolve plugins with no supported component as unavailable
 
 
 ### integration-rescope closeout: `override_closeout`
@@ -508,6 +508,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261123-jdc | HOOKLATESS-01: run SessionStart for plugins that autoapply adds in headless modes | 2026-11-23 | 4df8c22 | passed | [261123-jdc-hooklatess-01-late-sessionstart-for-plug](./quick/261123-jdc-hooklatess-01-late-sessionstart-for-plug/) |
 | 261123-qru | Add /claude:plugin reload and word reload hints for the host that shows them | 2026-11-23 | 5ec2fdf | passed | .planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni |
 | 261123-qrv | Reload pi over RPC with /claude:plugin reload instead of starting a new session | 2026-11-23 | 6e06697 | passed | .planning/quick/261123-qrv-rpc-tests-reload-instead-of-starting-a-new-session-planning |
+| 261125-i5j | Resolve plugins with no supported component as unavailable (D-NSC-01) | 2026-11-25 | 33d6318 | complete | [261125-i5j-resolve-plugins-with-no-supported-compon](./quick/261125-i5j-resolve-plugins-with-no-supported-compon/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 

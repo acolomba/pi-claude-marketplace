@@ -91,7 +91,7 @@ test("appends installs-disabled to a partially available row", async (testContex
   // arrange
   const composeCandidateListRow = await loadComposeCandidateListRow();
   const environment = await candidateEnvironment(testContext);
-  await mkdir(path.join(environment.marketplaceRoot, "alpha"));
+  await mkdir(path.join(environment.marketplaceRoot, "alpha", "skills"), { recursive: true });
   const entry: ManifestPluginEntry = {
     name: "alpha",
     source: "./alpha",
@@ -126,7 +126,7 @@ test("keeps a user-enabled partial row free of the author default", async (testC
   // arrange
   const composeCandidateListRow = await loadComposeCandidateListRow();
   const environment = await candidateEnvironment(testContext);
-  await mkdir(path.join(environment.marketplaceRoot, "alpha"));
+  await mkdir(path.join(environment.marketplaceRoot, "alpha", "skills"), { recursive: true });
   const entry: ManifestPluginEntry = {
     name: "alpha",
     source: "./alpha",
@@ -232,6 +232,7 @@ test("VER-02: a partially available path row shows the version its plugin.json d
     name: "alpha",
     version: "2.0.0",
   });
+  await mkdir(path.join(environment.marketplaceRoot, "alpha", "skills"));
   const entry: ManifestPluginEntry = {
     name: "alpha",
     source: "./alpha",
@@ -491,7 +492,7 @@ test("flags binaries as unsupported for an official marketplace name", async (te
   // arrange
   const composeCandidateListRow = await loadComposeCandidateListRow();
   const environment = await candidateEnvironment(testContext);
-  await mkdir(path.join(environment.marketplaceRoot, "alpha"));
+  await mkdir(path.join(environment.marketplaceRoot, "alpha", "skills"), { recursive: true });
   const entry: ManifestPluginEntry = {
     name: "alpha",
     source: "./alpha",

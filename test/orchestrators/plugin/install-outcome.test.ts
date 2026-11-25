@@ -1698,6 +1698,7 @@ test("flags binaries as unsupported when the marketplace is an official one", as
     },
     pluginJson: { binaries: { tool: "https://example.com/tool" } },
   });
+  await mkdir(path.join(seeded.pluginRoot, "skills"));
   const locations = locationsFor("project", environment.cwd);
 
   // act
@@ -1729,10 +1730,12 @@ test("--partial admits the partially-available arm the default gate refuses", as
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-partial-");
   const seeded = await seedPlugin(environment.cwd, {
-    // D-64-06: declaring experimental kinds drives `resolveStrict` to the
-    // `partially-available` arm without any structural defect.
+    // D-64-06: declaring experimental kinds beside the supported `skills`
+    // folder drives `resolveStrict` to the `partially-available` arm without
+    // any structural defect.
     pluginJson: { experimental: { themes: "./themes", monitors: "./monitors.json" } },
   });
+  await mkdir(path.join(seeded.pluginRoot, "skills"));
   const locations = locationsFor("project", environment.cwd);
   const options = {
     ctx: notificationContext(),
@@ -2473,6 +2476,7 @@ test("MREC-01: a bundle reference records the bundle flag beside no recorded ser
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-mcp-bundle-");
   const seeded = await seedPlugin(environment.cwd, { pluginJson: { mcpServers: "server.mcpb" } });
+  await mkdir(path.join(seeded.pluginRoot, "skills"));
   const locations = locationsFor("project", environment.cwd);
 
   // act
@@ -2526,13 +2530,22 @@ async function installGatedOn(
   t: TestContext,
   servers: Record<string, unknown>,
   consentView: ActiveMcpImplementation,
-  extra: { readonly partial?: true; readonly run: NotificationRun },
+  extra: {
+    readonly partial?: true;
+    readonly run: NotificationRun;
+    /** Ship an empty `skills` folder, a supported kind beside the servers. */
+    readonly skillsFolder?: boolean;
+  },
 ): Promise<{
   readonly state: ExtensionState;
   readonly outcome: Promise<Awaited<ReturnType<typeof runInstallLedger>>>;
 }> {
   const environment = await createHermeticEnvironment(t, "install-outcome-consent-");
   const seeded = await seedPlugin(environment.cwd, { mcpServers: servers });
+  if (extra.skillsFolder === true) {
+    await mkdir(path.join(seeded.pluginRoot, "skills"));
+  }
+
   const locations = locationsFor("project", environment.cwd);
   const outcome = runInstallLedger(seeded.state, locations, {
     ctx: notificationContext(),
@@ -2549,15 +2562,23 @@ async function installGatedOn(
   return { state: seeded.state, outcome };
 }
 
-for (const { label, servers, consentView } of [
-  { label: "an sse server", servers: SSE_SERVERS, consentView: "builtin" },
-  { label: "a bare-elicitation server", servers: ELICITATION_SERVERS, consentView: "adapter" },
-  { label: "a ws server", servers: WS_SERVERS, consentView: "none" },
+for (const { label, servers, consentView, skillsFolder } of [
+  { label: "an sse server", servers: SSE_SERVERS, consentView: "builtin", skillsFolder: false },
+  {
+    label: "a bare-elicitation server",
+    servers: ELICITATION_SERVERS,
+    consentView: "adapter",
+    skillsFolder: false,
+  },
+  // No MCP implementation runs a ws server, so only the skills folder keeps
+  // the plugin partially available.
+  { label: "a ws server", servers: WS_SERVERS, consentView: "none", skillsFolder: true },
 ] as const) {
   test(`MREC-06 / D-P3-11: the ${consentView} view asks for --partial for ${label} and records nothing`, async (t) => {
     // arrange
     const { state, outcome } = await installGatedOn(t, servers, consentView, {
       run: runUnder(consentView),
+      skillsFolder,
     });
 
     // act & assert

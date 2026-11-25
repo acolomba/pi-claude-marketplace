@@ -1287,6 +1287,7 @@ test("D-12 / WCONV-01: a clean record whose candidate would drop components is d
   const fixture = await createFixture(t, "declined");
   const state = await stageDemo(fixture, "1.1.0");
   await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
+  await mkdir(path.join(marketplaceRootOf(fixture, "tools"), "demo", "skills"));
 
   // act
   const plan = await plannedMoves({
@@ -1431,9 +1432,15 @@ test("D-12: a record already installed partial moves to a partial candidate", as
   // arrange
   const fixture = await createFixture(t, "partial-to-partial");
   const state = await stageDemo(fixture, "1.1.0", {
-    compatibility: { installable: false, notes: [], supported: [], unsupported: ["outputStyles"] },
+    compatibility: {
+      installable: false,
+      notes: [],
+      supported: ["skills"],
+      unsupported: ["outputStyles"],
+    },
   });
   await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
+  await mkdir(path.join(marketplaceRootOf(fixture, "tools"), "demo", "skills"));
 
   // act
   const plan = await plannedMoves({
@@ -1456,6 +1463,7 @@ test("D-12: a partial candidate a dependent's range does not admit is held, not 
   const fixture = await createFixture(t, "held-and-partial");
   const state = await stageTools(fixture, APP_HOLDS_LIB);
   await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "lib"));
+  await mkdir(path.join(marketplaceRootOf(fixture, "tools"), "lib", "skills"));
 
   // act
   const plan = await plannedMoves({
@@ -1579,10 +1587,16 @@ test("D-12 / D-P3-13: a record partial for a component Pi cannot load moves with
   const fixture = await createFixture(t, "partial-builtin");
   const state = await stageDemo(fixture, "1.1.0", {
     compatibilityBasis: "neutral",
-    compatibility: { installable: false, notes: [], supported: [], unsupported: ["outputStyles"] },
+    compatibility: {
+      installable: false,
+      notes: [],
+      supported: ["skills"],
+      unsupported: ["outputStyles"],
+    },
     mcpServerConfigs: [],
   });
   await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
+  await mkdir(path.join(marketplaceRootOf(fixture, "tools"), "demo", "skills"));
 
   // act
   const plan = await plannedMoves({

@@ -29,7 +29,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 - Servidores MCP. Usa el MCP integrado de Pi o, para más funciones de MCP, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
 
-Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
+Los complementos que contienen componentes compatibles y no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
 El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Las configuraciones de estado deseado en `[~/].pi/agent/claude-plugins[.local].json` hacen que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estas configuraciones entre máquinas o miembros del equipo.
 
@@ -144,6 +144,8 @@ También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y
 ### Complementos parcialmente disponibles
 
 Algunos complementos contienen componentes no compatibles: un hook que no se puede mapear, un servidor LSP, un tema, un servidor MCP que la implementación de MCP que ejecuta Pi no puede ejecutar (pi-mcp-adapter o el MCP integrado de Pi) o un paquete MCP. Para instalar o actualizar estos complementos parcialmente, pasa la opción `--partial`. Esta extensión instala los componentes compatibles e ignora los incompatibles.
+
+Un complemento sin ningún componente compatible no está disponible. La opción `--partial` no puede instalarlo.
 
 Lista los complementos parcialmente disponibles.
 

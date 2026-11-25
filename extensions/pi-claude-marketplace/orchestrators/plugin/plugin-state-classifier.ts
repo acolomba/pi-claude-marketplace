@@ -138,12 +138,12 @@ export function candidateFor(
  * back to `installed` if the candidate is supported, or re-apply the partial
  * install if still `partially-available`), so it must be offerable under
  * `update --partial`. A degraded record
- * with NO newer candidate -- or one whose candidate resolves structural
+ * with NO newer candidate -- or one whose candidate resolves
  * `unavailable` (nothing installable to move to) -- stays plain `partially-installed`.
  *
  * Only a CLEAN record reaches the `partially-upgradable`/`upgradable` split: a
  * candidate that resolves `partially-available` would NEWLY degrade the plugin
- * (`partially-upgradable`); any other candidate (clean, structural-`unavailable`, or
+ * (`partially-upgradable`); any other candidate (clean, `unavailable`, or
  * an un-probeable `undefined`) stays plain `upgradable`.
  */
 export function classifyInstalledRecord(
@@ -191,7 +191,7 @@ export function classifyInstalledRecord(
     }
 
     // CR-01 degrade: `resolved === undefined` (probe failure), `installable`,
-    // and structural `unavailable` candidates all stay plain `upgradable`.
+    // and `unavailable` candidates all stay plain `upgradable`.
     return "upgradable";
   }
 
@@ -200,7 +200,7 @@ export function classifyInstalledRecord(
 
 /**
  * Classify a not-installed manifest entry's resolution. D-64-01: `installable`
- * is the only `available` arm; both `partially-available` and structural `unavailable`
+ * is the only `available` arm; both `partially-available` and `unavailable`
  * are distinct here (the render collapse to a single `(unavailable)` token is a
  * caller concern, not a classification one). The exhaustive `switch`
  * deliberately has no runtime default: under `noImplicitReturns`, a future

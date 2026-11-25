@@ -29,7 +29,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 - MCP servers. Uses Pi's built-in MCP or, for more MCP features, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
 
-Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
+Plugins that contain both supported and unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
 
 The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. Desired-state configs in `[~/].pi/agent/claude-plugins[.local].json` make plugin installations automatic and repeatable. You can share these configs across machines or team members.
 
@@ -144,6 +144,8 @@ You can also install the same plugin in both the user and project scopes. Then t
 ### Partially available plugins
 
 Some plugins contain unsupported components: an unmappable hook, an LSP server, a theme, an MCP server that the MCP implementation Pi runs cannot run (pi-mcp-adapter or Pi's built-in MCP), or an MCP bundle. To install or update these plugins partially, pass the `--partial` option. This extension installs the supported components and ignores the unsupported ones.
+
+A plugin with no supported component is unavailable. The `--partial` option cannot install it.
 
 List partially available plugins.
 

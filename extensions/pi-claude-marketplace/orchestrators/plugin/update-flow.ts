@@ -811,8 +811,9 @@ async function updateSinglePluginWith(
     // degrades in place -- supported components materialize, unsupported kinds
     // skip -- and renders `(partially-installed) {dropped kinds}` instead of
     // declining with `(skipped) {no longer installable}`. `requirePartialInstallable`
-    // still BLOCKS an `unavailable`/structural candidate (FORCE-05), so the
-    // automatic partial path can never materialize a structurally-broken plugin.
+    // still BLOCKS an `unavailable` candidate (FORCE-05), so the automatic
+    // partial path never materializes a plugin with a structural defect or
+    // with no supported component (D-NSC-01).
     // The manual `update` path (`updatePlugins` -> `runThreePhaseUpdate`
     // directly) is unaffected; it sets `partial` from the user's `--partial` flag.
     // D-P3-13: so a switch of MCP implementation never holds an autoupdate.
