@@ -29,9 +29,31 @@ Feature: Plugin without git
 
     Examples:
       | plugin source kind | plugin | repository | path         |
-      | github             | ghp    | ghp        |              |
       | url                | urlp   | urlp       |              |
       | git-subdir         | subp   | mono       | plugins/subp |
+
+  Scenario: Installing a plugin from a github source with no git fails as git missing, sends no request, and names the clone it tried
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given pi runs without git on its path
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons     | scope   | leaks | rollback partial | cause chain                              | cause truncated | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | git missing | project |       |                  | Git is required to install marketplaces. | false           | via-https  | https://github.com/acme/ghp.git |
+    Then the installation record of the project scope holds no plugins
+    Then the project scope holds no git clones
+    Then the git host receives no request
 
   Scenario: Installing a plugin of a local marketplace with no git installs it
     Given the marketplace "fixtures" is published as a dir source

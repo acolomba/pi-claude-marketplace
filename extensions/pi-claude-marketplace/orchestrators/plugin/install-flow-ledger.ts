@@ -47,6 +47,7 @@ import {
   failedRowOutcome,
   handleCaughtInstallFailure,
   landedMoves,
+  marketplaceBlockClone,
   movedMember,
   movedRows,
   promoteDependencyRecord,
@@ -56,6 +57,7 @@ import {
   writeReEnabledCascadeMemberConfigEntries,
 } from "./install-flow-results.ts";
 import { installedPluginOutcome, previewInstall } from "./install-outcome.ts";
+import { withCloneNote } from "./install.messaging.ts";
 import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   loadTargetLayers,
@@ -71,7 +73,11 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
+import type {
+  ContentReason,
+  McpConfigNotice,
+  PluginFailedMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
@@ -683,6 +689,8 @@ async function installPluginWithTransaction(
   // subject and the DFEN-05 precedence subject are all the same key by
   // construction, so they read one binding rather than three literals.
   const rootKey = `${plugin}@${marketplace}`;
+  // D-SG-22: the clone notes of this command, which each row reads by its key.
+  const notes = opts.transportContext?.notes;
   const adds = trackInstallAdds(transaction, opts.marketplaceAdd, carried);
 
   let outcome: InstallTransactionOutcome;
@@ -1142,6 +1150,7 @@ async function installPluginWithTransaction(
       cascadeFailure,
       orchestrated,
       ...(moved !== undefined && { moved }),
+      notes,
     });
     return withMcpConfigNotices(ctx, run, orchestrated, failed, cascadeFailure.mcpConfigNotices);
   }
@@ -1269,6 +1278,7 @@ async function installPluginWithTransaction(
         plugin,
         promotion: outcome.promotion,
         orchestrated,
+        notes,
       });
       notices = [...priorNotices, ...outcome.promotion.mcpConfigNotices];
       break;
@@ -1293,14 +1303,19 @@ async function installPluginWithTransaction(
             {
               name: marketplace,
               scope,
+              ...marketplaceBlockClone(notes, marketplace),
               plugins: [
-                {
-                  status: "failed",
-                  severity: "error" as const,
-                  name: plugin,
-                  reasons: [] as const,
-                  cause: outcome.cause,
-                },
+                withCloneNote<PluginFailedMessage>(
+                  {
+                    status: "failed",
+                    severity: "error",
+                    name: plugin,
+                    reasons: [],
+                    cause: outcome.cause,
+                  },
+                  notes,
+                  rootKey,
+                ),
                 ...movedRows(moved),
               ],
             },
@@ -1360,9 +1375,11 @@ async function installPluginWithTransaction(
             {
               name: marketplace,
               scope,
+              ...marketplaceBlockClone(notes, marketplace),
               plugins: composeCascadeMemberRows({
                 scope,
                 rootKey,
+                notes,
                 rootRow: landedDisabled
                   ? disableCascade.composeDisabledRow({
                       plugin: installCtx.plugin,

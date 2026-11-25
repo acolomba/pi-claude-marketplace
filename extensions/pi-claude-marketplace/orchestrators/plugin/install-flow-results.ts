@@ -56,9 +56,14 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
+import type {
+  CloneTransportNote,
+  ContentReason,
+  McpConfigNotice,
+} from "../../shared/notification-types.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 import type { InstallPluginOutcome, MovedDependency, UpdateDependencyRow } from "../types.ts";
 import type { CascadeFailureSubject, CascadeInstalledRow } from "./install-cascade.messaging.ts";
 import type { CascadeMemberOutcome, CascadeSkippedMember } from "./install-cascade.ts";
@@ -557,6 +562,8 @@ export function promotedRowOutcome(args: {
   readonly plugin: string;
   readonly promotion: PromotionOutcome;
   readonly orchestrated: boolean;
+  /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
+  readonly notes?: GitHubCloneNotes | undefined;
 }): InstallPluginOutcome {
   const { ctx, run, marketplace, scope, plugin, promotion, orchestrated } = args;
   const enabled = promotion.materialized.length > 0;
@@ -578,8 +585,15 @@ export function promotedRowOutcome(args: {
         {
           name: marketplace,
           scope,
+          ...marketplaceBlockClone(args.notes, marketplace),
           plugins: [
-            composePromotedRow({ plugin, version: promotion.version, scope, needsReload: enabled }),
+            composePromotedRow({
+              plugin,
+              version: promotion.version,
+              scope,
+              needsReload: enabled,
+              clone: args.notes?.noteFor(`${plugin}@${marketplace}`),
+            }),
           ],
         },
       ],
@@ -615,6 +629,8 @@ function handleInstallThrow(args: {
   readonly capture: InstallFailureCapture;
   readonly orchestrated: boolean;
   readonly moved?: readonly MovedDependency[];
+  readonly rootKey: string;
+  readonly notes: GitHubCloneNotes | undefined;
 }): InstallPluginOutcome {
   const { err, ctx, run, marketplace, scope, plugin, capture, orchestrated } = args;
   const rolledBackPartial = capture.rollbackPartials.length > 0;
@@ -627,6 +643,7 @@ function handleInstallThrow(args: {
     rolledBackPartial,
     rollbackPartials: capture.rollbackPartials,
     entityErrorRow,
+    clone: args.notes?.noteFor(args.rootKey),
   });
 
   if (orchestrated) {
@@ -648,6 +665,7 @@ function handleInstallThrow(args: {
       {
         name: marketplace,
         scope,
+        ...marketplaceBlockClone(args.notes, marketplace),
         plugins: [failureMessage, ...movedRows(args.moved)],
       },
     ],
@@ -694,8 +712,13 @@ export function handleCaughtInstallFailure(args: {
   readonly orchestrated: boolean;
   /** UPD-DEP-D1: the moves that landed before the failure. */
   readonly moved?: readonly MovedDependency[];
+  /**
+   * D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`, so the
+   * failed row names each attempt of the clone that failed.
+   */
+  readonly notes?: GitHubCloneNotes | undefined;
 }): InstallPluginOutcome {
-  const { err, capture, cascadeFailure, ...target } = args;
+  const { err, capture, cascadeFailure, notes, ...target } = args;
   if (
     capture.rollbackPartials.length === 0 &&
     cascadeFailure.mcpConfigNotices.length === 0 &&
@@ -706,8 +729,8 @@ export function handleCaughtInstallFailure(args: {
 
   const subject = cascadeFailure.subject;
   return subject !== undefined
-    ? handleCascadeThrow({ ...target, subject })
-    : handleInstallThrow({ ...target, err, capture });
+    ? handleCascadeThrow({ ...target, subject, notes })
+    : handleInstallThrow({ ...target, err, capture, notes });
 }
 
 /**
@@ -731,8 +754,9 @@ function handleCascadeThrow(args: {
   readonly subject: CascadeFailureSubject;
   readonly orchestrated: boolean;
   readonly moved?: readonly MovedDependency[];
+  readonly notes: GitHubCloneNotes | undefined;
 }): InstallPluginOutcome {
-  const { ctx, run, marketplace, scope, plugin, rootKey, subject, orchestrated } = args;
+  const { ctx, run, marketplace, scope, plugin, rootKey, subject, orchestrated, notes } = args;
   // Derived from the SUBJECT rather than from the caught value. The subject is
   // recorded only at a throw site that throws exactly this Error, so the two
   // agree by construction -- and reading it here means the outcome's typed
@@ -758,8 +782,16 @@ function handleCascadeThrow(args: {
       {
         name: marketplace,
         scope,
+        ...marketplaceBlockClone(notes, marketplace),
         plugins: [
-          ...composeCascadeFailureMessage({ scope, rootKey, rootName: plugin, subject, moved }),
+          ...composeCascadeFailureMessage({
+            scope,
+            rootKey,
+            rootName: plugin,
+            subject,
+            moved,
+            notes,
+          }),
           ...moved,
         ],
       },
@@ -781,6 +813,21 @@ function memberPartials(
   return subject.kind === "member" && subject.rollbackPartials.length > 0
     ? { rollbackPartials: subject.rollbackPartials }
     : {};
+}
+
+/**
+ * D-SG-22 / D-MF-04: the `clone` member of an install's marketplace block,
+ * present when this install added that marketplace to the target scope and
+ * the add cloned it over GitHub. The target-scope add keeps its note under
+ * the marketplace's name, which no `<plugin>@<marketplace>` subject equals
+ * (`resolveTargetScopeMarketplace`).
+ */
+export function marketplaceBlockClone(
+  notes: GitHubCloneNotes | undefined,
+  marketplace: string,
+): { readonly clone?: CloneTransportNote } {
+  const clone = notes?.noteFor(marketplace);
+  return clone === undefined ? {} : { clone };
 }
 
 /** UPD-DEP-D1: the rows of the dependencies an install moved into range. */

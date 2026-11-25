@@ -19,7 +19,7 @@ import {
   redactedRollbackPartials,
 } from "../../shared/redact-absolute-paths.ts";
 
-import { INSTALL_CONTEXT } from "./install.messaging.ts";
+import { INSTALL_CONTEXT, withCloneNote } from "./install.messaging.ts";
 
 import type { DependencyClosureResult } from "../../domain/dependency-closure.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
@@ -35,6 +35,7 @@ import type {
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 import type { UpdateDependencyRow } from "../types.ts";
 import type {
   CascadeConstraintFailure,
@@ -294,6 +295,11 @@ export function composeCascadeMemberRow(
  * SEV-01: a materialized member with a declared-but-unloaded companion is a
  * silent degradation exactly as it is for the plugin the user named, so its row
  * stamps the same `companionSeverity` verdict rather than a flat info.
+ *
+ * D-SG-22: the requesting plugin's row and each materialized member's row
+ * carry the note `notes` keeps for its own key, so each names the transport of
+ * the clone it made. A disabled row has no note field, and a skipped member
+ * cloned nothing.
  */
 export function composeCascadeMemberRows(args: {
   readonly scope: Scope;
@@ -304,14 +310,20 @@ export function composeCascadeMemberRows(args: {
   readonly probe: SoftDepStatus;
   /** UPD-DEP-D1: the rows of the dependencies moved into range first. */
   readonly moved?: readonly UpdateDependencyRow[];
+  /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
+  readonly notes?: GitHubCloneNotes | undefined;
 }): readonly CascadeMsg[] {
-  const rows: CascadeMsg[] = [args.rootRow, ...(args.moved ?? [])];
+  const rootRow =
+    args.rootRow.status === "disabled"
+      ? args.rootRow
+      : withCloneNote(args.rootRow, args.notes, args.rootKey);
+  const rows: CascadeMsg[] = [rootRow, ...(args.moved ?? [])];
   for (const member of args.installed) {
     if (member.key === args.rootKey) {
       continue;
     }
 
-    rows.push(composeCascadeMemberRow(member, args.probe));
+    rows.push(withCloneNote(composeCascadeMemberRow(member, args.probe), args.notes, member.key));
   }
 
   // UPD-DEP-D1: a dependency moved into range reports its move, not a skip.
@@ -688,6 +700,9 @@ function rootRowName(subject: CascadeFailureSubject, rootName: string): string {
  *
  * `moved` holds the moved rows the caller appends beside these rows; the key
  * each one names gets no second, `{dependency failed}` row (D-PL3-15).
+ *
+ * D-SG-22: the failing subject's row carries the note `notes` keeps for its
+ * key, so a clone that failed names each attempt it made beside the cause.
  */
 export function composeCascadeFailureMessage(args: {
   readonly scope: Scope;
@@ -695,24 +710,30 @@ export function composeCascadeFailureMessage(args: {
   readonly rootName: string;
   readonly subject: CascadeFailureSubject;
   readonly moved?: readonly { readonly name: string }[];
+  /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
+  readonly notes?: GitHubCloneNotes | undefined;
 }): readonly CascadeMsg[] {
   const facts = failureFacts(args.subject, args.rootKey);
   const redactedCause = new Error(redactAbsolutePaths(facts.cause.message), {
     cause: redactCauseChain(facts.cause.cause),
   });
   const isRoot = facts.key === args.rootKey;
-  const failed: PluginFailedMessage = {
-    status: "failed",
-    name: isRoot ? rootRowName(args.subject, args.rootName) : facts.key,
-    reasons: facts.reasons,
-    ...(facts.version !== undefined && { version: facts.version }),
-    ...(facts.rollbackPartials !== undefined && {
-      rollbackPartial: redactedRollbackPartials(facts.rollbackPartials),
-    }),
-    cause: redactedCause,
-    severity: "error",
-    needsReload: false,
-  };
+  const failed = withCloneNote<PluginFailedMessage>(
+    {
+      status: "failed",
+      name: isRoot ? rootRowName(args.subject, args.rootName) : facts.key,
+      reasons: facts.reasons,
+      ...(facts.version !== undefined && { version: facts.version }),
+      ...(facts.rollbackPartials !== undefined && {
+        rollbackPartial: redactedRollbackPartials(facts.rollbackPartials),
+      }),
+      cause: redactedCause,
+      severity: "error",
+      needsReload: false,
+    },
+    args.notes,
+    facts.key,
+  );
   const members = composeUnmaterializedRows(unmaterializedOf(args.subject), [
     facts.key,
     args.rootKey,

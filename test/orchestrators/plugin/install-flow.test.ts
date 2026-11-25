@@ -194,6 +194,115 @@ test("D-SG-18: an install given a transport context clones under it and makes no
   });
 });
 
+/**
+ * Installs `app@mp` from a url source whose mirror step records a note for its
+ * subject, as the clone runner does, and then `finish`es the step; returns the
+ * notification text. A `warm` step reuses the mirror, so it records none.
+ */
+async function installNotingClone(
+  owner: InstallTestOwner,
+  finish: "clone" | "fail" | "warm",
+): Promise<string | undefined> {
+  const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {});
+  const repository = await offerGitPlugin(marketplaceRoot, "app");
+  const inner = seamWith(
+    createGitOps({
+      fixtureSourceDir: repository,
+      head: INSTALL_HOST_HEAD,
+      localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+      remoteRefs: { "refs/remotes/origin/main": INSTALL_HOST_HEAD },
+    }).gitOps,
+  );
+  const installPlugin = createInstallPlugin(
+    owner.transaction,
+    owner.hooksRouting,
+    owner.completionCache,
+    {},
+    inertTransportContext,
+  );
+  const { ctx, run, notifications } = makeCtx();
+  await installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "app",
+    cloneCacheSeam: {
+      ...inner,
+      materializeOrRefreshPluginMirror: (args) => {
+        if (finish !== "warm") {
+          args.transport?.notes.record(args.transport.subject, {
+            note: "ssh-not-configured",
+            url: "https://github.com/acme/app.git",
+            ...(finish === "fail" && { retries: ["git@github.com:acme/app.git"] }),
+          });
+        }
+
+        return finish === "fail"
+          ? Promise.reject(new Error("clone failed over both transports"))
+          : inner.materializeOrRefreshPluginMirror(args);
+      },
+    },
+  });
+  return notifications[0]?.message;
+}
+
+test("D-SG-22: an install names the transport of its clone under the plugin's row", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const finish = "clone";
+
+    // act
+    const message = await installNotingClone(owner, finish);
+
+    // assert
+    assert.deepStrictEqual(message?.split("\n"), [
+      "● mp [project]",
+      "  ● app v1.0.0 (installed)",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/app.git",
+      "",
+      "/reload to pick up changes",
+    ]);
+  });
+});
+
+test("D-SG-22: an install that cloned nothing shows no clone line", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const finish = "warm";
+
+    // act
+    const message = await installNotingClone(owner, finish);
+
+    // assert
+    assert.deepStrictEqual(message?.split("\n"), [
+      "● mp [project]",
+      "  ● app v1.0.0 (installed)",
+      "",
+      "/reload to pick up changes",
+    ]);
+  });
+});
+
+test("D-SG-22: a failed install names each attempt of its clone under the failed row", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const finish = "fail";
+
+    // act
+    const message = await installNotingClone(owner, finish);
+
+    // assert
+    assert.deepStrictEqual(message?.split("\n").slice(2, 6), [
+      "● mp [project]",
+      "  ⊘ app (failed)",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/app.git",
+      "    HTTPS clone failed, retrying with SSH: git@github.com:acme/app.git",
+    ]);
+  });
+});
+
 for (const given of [undefined, inertTransportContext()]) {
   test(`D-SG-18: a missing-dependency install clones under ${given === undefined ? "a new" : "the given"} transport context`, async () => {
     await withHermeticHome(async (owner) => {

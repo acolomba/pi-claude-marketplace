@@ -70,8 +70,8 @@ Feature: Plugin ssh source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-ssh    | git@github.com:acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -94,8 +94,8 @@ Feature: Plugin ssh source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-ssh    | git@github.com:acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |

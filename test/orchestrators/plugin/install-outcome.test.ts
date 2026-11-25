@@ -1476,6 +1476,39 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
   assert.deepStrictEqual(await loadState(userLocations.extensionRoot), userStateBefore);
 });
 
+test("D-SG-22 / D-MF-04: the target-scope add keeps its clone note under the marketplace's name in the command's collector", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-note-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const projectTree = await seedPlugin(path.join(environment.cwd, "project-tree"));
+  const projectRecord = projectTree.state.marketplaces.marketplace;
+  assert.ok(projectRecord !== undefined, "the fixture records the marketplace it seeds");
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "marketplace");
+  const transportContext = defaultPluginTransportContext({ CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" });
+  const note = { note: "via-https", url: "https://github.com/acme/marketplace.git" } as const;
+
+  // act
+  await runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    transportContext,
+    marketplaceAdd: marketplaceAddSeam((args) => {
+      args.cloneNotes?.record(args.source.raw, note);
+      args.state.marketplaces.marketplace = { ...projectRecord, plugins: {} };
+      return Promise.resolve({ name: "marketplace", cloneDir });
+    }),
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      marketplace: transportContext.notes.noteFor("marketplace"),
+      source: transportContext.notes.noteFor("./marketplace"),
+    },
+    { marketplace: note, source: undefined },
+  );
+});
+
 test("CMP-3 / LAYER-07: an add that records another marketplace name fails before any phase and keeps the clone listed", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-name-");

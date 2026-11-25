@@ -209,7 +209,7 @@ import type {
   StagingWarning,
 } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginTransportContext } from "../github-transport.ts";
+import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome } from "../types.ts";
 
 /** Controls how install orchestration surfaces notifications. */
@@ -604,6 +604,7 @@ export type TargetScopeAddOptions = Pick<
   | "authMemo"
   | "marketplaceAdd"
   | "addedMarketplaces"
+  | "transportContext"
 >;
 
 /**
@@ -631,6 +632,21 @@ async function recordAsInstallFailure(
 }
 
 /**
+ * D-SG-22 / D-MF-04: `notes` as a target-scope add records into it: the add's
+ * clone note is kept under the marketplace's name, which no
+ * `<plugin>@<marketplace>` subject equals, so the install's block for that
+ * marketplace can name the clone (`marketplaceBlockClone`).
+ */
+function underMarketplaceName(notes: GitHubCloneNotes, marketplace: string): GitHubCloneNotes {
+  return {
+    record: (_subject, note) => {
+      notes.record(marketplace, note);
+    },
+    noteFor: notes.noteFor,
+  };
+}
+
+/**
  * LAYER-07 / D-MF-04 / CMP-3: the target scope records no `marketplace`, and
  * the user scope does. The install adds the marketplace to the target scope
  * from the user record's raw source, through the code `marketplace add
@@ -652,6 +668,7 @@ async function addTargetScopeMarketplace(
   record: typeof addMarketplaceToState,
 ): Promise<MarketplaceRecord> {
   const rawSource = (sourceRecord.source as ParsedSource).raw;
+  const notes = opts.transportContext?.notes;
   const added = await recordAsInstallFailure(record, {
     state,
     locations,
@@ -663,6 +680,7 @@ async function addTargetScopeMarketplace(
     credentialOps: opts.credentialOps,
     deviceFlowHttp: opts.deviceFlowHttp,
     authMemo: opts.authMemo,
+    ...(notes !== undefined && { cloneNotes: underMarketplaceName(notes, marketplace) }),
   });
   opts.addedMarketplaces?.push({ marketplace: added.name, rawSource, cloneDir: added.cloneDir });
   const targetRecord = ownValue(state.marketplaces, marketplace);
