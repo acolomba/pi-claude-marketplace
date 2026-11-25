@@ -87,6 +87,8 @@ import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 import type { ScriptStep } from "../lib/scripted-model/script.ts";
+import type { SshGitHost } from "../lib/ssh-git-host/host.ts";
+import type { SshLaunchRecord } from "../lib/ssh-git-host/launch.ts";
 
 // Starting Pi takes most of a second and a command a tenth of that; the
 // margin covers a loaded CI runner.
@@ -321,6 +323,8 @@ export class ScenarioWorld extends World {
   npmRegistry: NpmRegistry | undefined = undefined;
   // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
   npmRequestWindow: number | undefined = undefined;
+  // The ssh stand-in's launch count when the last `When` step started; `support/ssh-git-host.ts` sets it.
+  sshLaunchWindow: number | undefined = undefined;
   // The line count of each log in the profile Pi's harness directory when the
   // last `When` step started; `support/github-device-flow.ts` sets it.
   harnessLogWindow: ReadonlyMap<string, number> | undefined = undefined;
@@ -403,6 +407,11 @@ export class ScenarioWorld extends World {
   /** The run's https git host, which the `Before()` hook has reset for this scenario. */
   get gitHost(): HttpsGitHost {
     return currentRun().gitHost;
+  }
+
+  /** The run's ssh stand-in, first on every Pi's PATH, which the `Before()` hook has reset. */
+  get sshHost(): SshGitHost {
+    return currentRun().sshHost;
   }
 
   /** Where the marketplace steps publish marketplaces of every source kind. */
@@ -591,6 +600,16 @@ export class ScenarioWorld extends World {
     }
 
     return this.gitHost.requestsSince(window);
+  }
+
+  /** Returns the launches of the ssh stand-in since the last `When` step started. */
+  async sshLaunchesOfLastCommand(): Promise<SshLaunchRecord[]> {
+    const window = this.sshLaunchWindow;
+    if (window === undefined) {
+      throw new Error("no command has run in this scenario");
+    }
+
+    return this.sshHost.launchesSince(window);
   }
 
   /**

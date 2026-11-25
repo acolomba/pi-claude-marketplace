@@ -104,13 +104,27 @@ export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
  * port (e.g. `gitlab.example.com:8443`). A git-subdir url on
  * `https://github.com/` is sent to the base, so it binds the override host
  * (D-09); a url source never has that prefix, so it never reads the variable.
+ *
+ * D-SG-17: an address the URL parser refuses, such as the scp form
+ * `git@host:path`, binds the host between its user and its `:`, so the call
+ * never throws. An SSH request never uses a bundle (`platform/git.ts` gives
+ * the bundle to https requests only), so this host only names a bundle that
+ * no request consults.
  */
 export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git-subdir"): string {
   if (kind === "github") {
     return gitHubOverrideHost() ?? GITHUB_HOST;
   }
 
-  return new URL(gitHubWireUrl(cloneUrl)).host;
+  const wireUrl = gitHubWireUrl(cloneUrl);
+  return URL.canParse(wireUrl) ? new URL(wireUrl).host : scpHost(wireUrl);
+}
+
+/** The host of an scp address: a bracketed IPv6 literal, or the text up to the first `:`. */
+function scpHost(address: string): string {
+  const afterUser = address.slice(address.indexOf("@") + 1);
+  const end = afterUser.startsWith("[") ? afterUser.indexOf("]") + 1 : afterUser.indexOf(":");
+  return end <= 0 ? afterUser : afterUser.slice(0, end);
 }
 
 /**

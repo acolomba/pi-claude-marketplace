@@ -21,6 +21,8 @@
 // This parser is the syntactic gate; downstream containment checks are the
 // semantic gate.
 
+import { gitUrlRefusal, isScpGitAddress } from "./git-url.ts";
+
 export interface PathSource {
   readonly kind: "path";
   readonly raw: string; // SP-7: verbatim user input, never mutated
@@ -498,6 +500,12 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
     return parseUrlSource(raw);
   }
 
+  // D-SG-17: an scp address clones as written, so even a `git@github.com:`
+  // address stays a `url` source; only the `owner/repo` spelling is `github`.
+  if (isScpGitAddress(raw)) {
+    return gatedGitUrlSource(raw);
+  }
+
   if (raw.startsWith("git@") || raw.includes("://")) {
     return { kind: "unknown", raw, reason: unsupportedUrlReason(raw) };
   }
@@ -714,6 +722,18 @@ function parseUrlSource(raw: string): UrlSource | UnknownSource {
   }
 
   return ref === undefined ? { kind: "url", raw, url: base } : { kind: "url", raw, url: base, ref };
+}
+
+/**
+ * D-SG-17: a git address string becomes a `url` source when Claude Code's
+ * validator accepts its wire form, the text git receives once the `#<ref>`
+ * and trailing slashes are off, and is unknown with the validator's message
+ * otherwise. The `#<ref>` splits off first, so a ref never meets the
+ * validator's ban on `#` in an ssh URL (OQ-6).
+ */
+function gatedGitUrlSource(raw: string): UrlSource | UnknownSource {
+  const refusal = gitUrlRefusal(stripSlashAndFragment(raw).base);
+  return refusal === undefined ? parseUrlSource(raw) : { kind: "unknown", raw, reason: refusal };
 }
 
 /**

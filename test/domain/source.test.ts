@@ -583,15 +583,88 @@ const PARSE_CASES: readonly ParseCase[] = [
   },
 ];
 
-const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
+/**
+ * D-SG-17: an scp address `user@host:path` is a url source that clones as
+ * written. Its identity strips the `#<ref>`, trailing slashes, and one `.git`,
+ * as an https url's does, and `raw` keeps the verbatim input for the wire. A
+ * `git@github.com:` address stays a url source: only an `owner/repo` spelling
+ * is the github kind.
+ */
+const SCP_PARSE_CASES: readonly ParseCase[] = [
   {
-    name: "rejects a Git scp-form source",
+    name: "parses an scp address as a url source",
+    raw: "git@127.0.0.1:acme/tools.git",
+    source: { kind: "url", raw: "git@127.0.0.1:acme/tools.git", url: "git@127.0.0.1:acme/tools" },
+  },
+  {
+    name: "parses the # reference of an scp address",
+    raw: "git@127.0.0.1:acme/tools.git#main",
+    source: {
+      kind: "url",
+      raw: "git@127.0.0.1:acme/tools.git#main",
+      url: "git@127.0.0.1:acme/tools",
+      ref: "main",
+    },
+  },
+  {
+    name: "keeps a github.com scp address a url source",
     raw: "git@github.com:o/r.git",
+    source: { kind: "url", raw: "git@github.com:o/r.git", url: "git@github.com:o/r" },
+  },
+  {
+    name: "parses an scp address of any user",
+    raw: "alice@gitlab.example:group/tools/",
+    source: {
+      kind: "url",
+      raw: "alice@gitlab.example:group/tools/",
+      url: "alice@gitlab.example:group/tools",
+    },
+  },
+  {
+    name: "refuses an scp address whose reference starts with -",
+    raw: "git@127.0.0.1:acme/tools.git#-x",
     source: {
       kind: "unknown",
-      raw: "git@github.com:o/r.git",
+      raw: "git@127.0.0.1:acme/tools.git#-x",
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "refuses an scp address that holds ://",
+    raw: "git@127.0.0.1:acme/tools://x",
+    source: {
+      kind: "unknown",
+      raw: "git@127.0.0.1:acme/tools://x",
       reason:
-        "git@github.com:o/r.git is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
+        'Invalid git URL: an address written as user@host:path can\'t contain "://", because git then reads the text before "://" as a protocol name, as in https://. Remove the "://".',
+    },
+  },
+  {
+    name: "parses an scp identity url and its scp raw in the object form",
+    raw: { source: "url", url: "git@h.example:o/r", raw: "git@h.example:o/r.git" },
+    source: { kind: "url", raw: "git@h.example:o/r.git", url: "git@h.example:o/r" },
+  },
+  {
+    name: "refuses an scp raw naming another repository than the url in the object form",
+    raw: { source: "url", url: "git@h.example:o/r", raw: "git@h.example:o/other.git" },
+    source: {
+      kind: "unknown",
+      raw: '{"source":"url","url":"git@h.example:o/r","raw":"git@h.example:o/other.git"}',
+      reason:
+        "url source raw git@h.example:o/other.git does not name the same repository as url git@h.example:o/r",
+    },
+  },
+];
+
+const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
+  {
+    name: "rejects a git@ address that is no scp address",
+    raw: "git@host.example",
+    source: {
+      kind: "unknown",
+      raw: "git@host.example",
+      reason:
+        "git@host.example is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
     },
   },
   {
@@ -1114,23 +1187,18 @@ const URL_OBJECT_GATE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "rejects a git@host: scp-form identity url in the object form",
-    raw: { source: "url", url: "git@evil.example:o/r.git" },
-    source: {
-      kind: "unknown",
-      raw: "git@evil.example:o/r.git",
-      reason:
-        "git@evil.example:o/r.git is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
-    },
+    name: "accepts an scp identity url in the object form",
+    raw: { source: "url", url: "git@h.example:o/r.git" },
+    source: { kind: "url", raw: "git@h.example:o/r.git", url: "git@h.example:o/r" },
   },
   {
-    name: "rejects a git@host: scp-form raw url in the object form",
+    name: "rejects an scp raw url on another host than the identity url in the object form",
     raw: { source: "url", raw: "git@evil.example:o/r.git", url: "https://gitlab.com/o/r" },
     source: {
       kind: "unknown",
-      raw: "git@evil.example:o/r.git",
+      raw: '{"source":"url","raw":"git@evil.example:o/r.git","url":"https://gitlab.com/o/r"}',
       reason:
-        "git@evil.example:o/r.git is not supported; git@host: scp-form URLs are rejected -- only https:// URLs and local paths are accepted",
+        "url source raw git@evil.example:o/r.git does not name the same repository as url https://gitlab.com/o/r",
     },
   },
   {
@@ -1530,6 +1598,7 @@ describe("parsePluginSource", () => {
     ...URL_RELOAD_IDENTITY_CASES,
     ...URL_OBJECT_GATE_CASES,
     ...GITHUB_HOST_FOLD_CASES,
+    ...SCP_PARSE_CASES,
     ...UNKNOWN_PARSE_CASES,
     ...INVALID_INPUT_CASES,
   ]) {
