@@ -33,6 +33,7 @@ import {
   type Reason,
   type ReconcileAbortedSurface,
   type ReconcilePendingEmptyMessage,
+  type ReloadStartedSurface,
   type RetainedWorkflowStaging,
   type Severity,
   type StatusToken,
@@ -437,6 +438,10 @@ void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies HookS
 void ({ kind: "hook-notice", text: "hi", label: "UserPromptSubmit" } satisfies HookNoticeSurface);
 // @ts-expect-error D-14: a hook notice is not a load surface
 void ({ kind: "hook-notice", text: "UserPromptSubmit says: hi" } satisfies LoadSurface);
+// RELOADCMD-D1: the reload outcome carries no field beyond its kind.
+void ({ kind: "reload-started" } satisfies ReloadStartedSurface);
+// @ts-expect-error RELOADCMD-D1: the reload outcome reports no counts
+void ({ kind: "reload-started", plugins: 1 } satisfies ReloadStartedSurface);
 void ({
   kind: "stop-override-cap",
   pluginId: "official:guard",

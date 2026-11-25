@@ -195,3 +195,38 @@ Feature: MCP server project scope
       | plugin status                  | installed                                                 |
       | plugin version                 | 1.0.0                                                     |
       | severity                       | info                                                      |
+
+  @adapter-only
+  Scenario: Plugin info shows a user-scope server that the project's record replaces as overridden by project scope, under pi-mcp-adapter (ASTAT-01)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the project holds a pi settings file
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has reported the mcp servers of the plugin "demo@fixtures" of the project scope
+    When the user runs "/claude:plugin info demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind                           | plugin-info                                                          |
+      | marketplace details autoupdate | false                                                                |
+      | marketplace name               | fixtures                                                             |
+      | marketplace scope              | user                                                                 |
+      | needs reload                   | false                                                                |
+      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"overridden by project scope"}] |
+      | plugin components resolved     | true                                                                 |
+      | plugin components skills       | demo-skill                                                           |
+      | plugin id                      | demo@fixtures                                                        |
+      | plugin name                    | demo                                                                 |
+      | plugin reasons                 |                                                                      |
+      | plugin requires                | [{"companion":"mcp","missing":false}]                                |
+      | plugin scope                   | user                                                                 |
+      | plugin status                  | installed                                                            |
+      | plugin version                 | 1.0.0                                                                |
+      | severity                       | info                                                                 |

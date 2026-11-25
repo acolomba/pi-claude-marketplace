@@ -140,6 +140,7 @@ function makeCtx(cwd: string): { ctx: NotificationContext; notifications: Notify
   const notifications: NotifyRecord[] = [];
   const ctx = {
     mode: "tui",
+    hasUI: true,
     cwd,
     ui: {
       notify(message: string, severity?: string): void {
@@ -6547,6 +6548,7 @@ for (const mode of ["json", "rpc"]) {
       } as const;
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },

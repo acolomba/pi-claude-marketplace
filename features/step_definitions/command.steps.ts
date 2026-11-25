@@ -1,9 +1,12 @@
 /**
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
- * check the JSON results of the last `When` step, a command or a new session.
+ * check the JSON results of the last `When` step: a command, a new session, or
+ * a reload.
  * A command can also run in a one-shot Pi in json mode, whose results the
- * same steps read, or in Pi in a real terminal, whose notice a step reads
- * from the terminal's current screen (D-BG-09).
+ * same steps read, in a one-shot Pi in print mode, whose exit code and output
+ * two steps read, or in Pi in a real terminal, whose notice a step reads from
+ * the terminal's current screen (D-BG-09). A command can also run while the
+ * tool of a prompt that a profile Pi runs is working (RELOADCMD-D1).
  *
  * A `Given` command is setup and must succeed, unless its text says it
  * failed, warned, or did not fail.
@@ -27,6 +30,8 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 import { namesLike, recordTable } from "../lib/field-rows.ts";
 import { runCommandPayloads } from "../lib/pi-commands.ts";
 import { runJsonModeCommand } from "../lib/pi-json-mode.ts";
+import { runOneShotPi } from "../lib/pi-one-shot.ts";
+import { promptDisposition } from "../lib/pi-rpc.ts";
 import {
   envelopeFields,
   marketplaceRowRecords,
@@ -42,6 +47,11 @@ import type { ScenarioWorld } from "../support/world.ts";
 // A command against the loopback git host finishes in about a second; the
 // deadline stays below the 30-second step timeout.
 const TERMINAL_COMMAND_MS = 20_000;
+
+// Starting Pi takes a few seconds and a command a fraction of that; the
+// deadline stays below the 30-second step timeout, so a hung Pi fails with
+// its stderr, and not as a bare step timeout.
+const PRINT_MODE_MS = 25_000;
 
 // Pi redraws within milliseconds of a keystroke or a notice.
 const TERMINAL_QUIET_MS = 1_000;
@@ -143,6 +153,25 @@ When(
   },
 );
 
+// D-BG-1101: the same command in a one-shot Pi in print mode. Pi gives the
+// extension a notify that does nothing there, so the user sees only an error
+// the command throws, which Pi prints on stderr, and Pi exits 0 either way: a
+// documented Pi limitation (JDOC-02).
+When(
+  "the user runs {string} in pi's print mode",
+  async function (this: ScenarioWorld, command: string) {
+    this.printModeRun = await runOneShotPi(
+      await this.oneShotPiLaunch(),
+      "print",
+      expandTokens(command, this.tokens),
+      (release) => {
+        this.onRelease(release);
+      },
+      PRINT_MODE_MS,
+    );
+  },
+);
+
 // Pi shows no sign that an extension command is running, so the step waits
 // for the terminal to stay quiet after the command; the terminal result step
 // waits for the notice itself before it reads it.
@@ -152,6 +181,79 @@ When(
     const tui = await this.startTuiSession();
     tui.sendLine(expandTokens(command, this.tokens));
     await tui.waitForQuiet(TERMINAL_QUIET_MS, TERMINAL_COMMAND_MS);
+  },
+);
+
+// A scripted turn starts its tool within a second, and the tool's `sleep 3`
+// keeps the run active past the command. The deadline stays below the
+// 30-second step timeout, so a run that never starts its tool or never
+// settles fails here.
+const COMMAND_DURING_RUN_MS = 20_000;
+
+// RELOADCMD-D1: Pi runs an extension command at once, even while a run is
+// active, so the command meets the running prompt. The step starts the prompt
+// on the profile Pi, waits for its tool to start, runs the command and keeps
+// its results, then waits for the run to settle, so every step of the model
+// script is used.
+When(
+  "the user runs {string} while the tool of the prompt {string} runs",
+  async function (this: ScenarioWorld, command: string, prompt: string): Promise<void> {
+    this.profileHarness();
+    const deadline = Date.now() + COMMAND_DURING_RUN_MS;
+    const from = this.pi.recordCount();
+    const { response } = await this.pi.request({
+      type: "prompt",
+      message: expandTokens(prompt, this.tokens),
+    });
+    assert.strictEqual(promptDisposition(response), "started", JSON.stringify(response));
+    await this.pi.waitForRecord(
+      from,
+      (record) => record.type === "tool_execution_start",
+      deadline - Date.now(),
+    );
+    this.recordResults(
+      await runCommandPayloads(this.pi, expandTokens(command, this.tokens)),
+      "command",
+    );
+    const settled = await this.pi.waitForRecord(
+      from,
+      (record) => record.type === "agent_settled",
+      deadline - Date.now(),
+    );
+    assert.strictEqual(settled.aborted, false, JSON.stringify(settled));
+  },
+);
+
+// Everything a one-shot Pi in print mode left: its exit code and both of its
+// streams, with the run tokens projected.
+function printModeOutput(world: ScenarioWorld): {
+  exitCode: number | null;
+  stdout: string;
+  stderr: string;
+} {
+  const run = world.printModeRun;
+  if (run === undefined) {
+    assert.fail("no command ran in pi's print mode in this scenario");
+  }
+
+  return {
+    exitCode: run.exitCode,
+    stdout: projectTokens("text", run.stdout, world.tokens),
+    stderr: projectTokens("text", run.stderr, world.tokens),
+  };
+}
+
+Then(
+  "pi's print mode exits with code {int} and prints this error:",
+  function (this: ScenarioWorld, exitCode: number, text: string) {
+    assert.deepStrictEqual(printModeOutput(this), { exitCode, stdout: "", stderr: `${text}\n` });
+  },
+);
+
+Then(
+  "pi's print mode exits with code {int} and prints nothing",
+  function (this: ScenarioWorld, exitCode: number) {
+    assert.deepStrictEqual(printModeOutput(this), { exitCode, stdout: "", stderr: "" });
   },
 );
 
@@ -193,8 +295,8 @@ Then("the result lists no marketplaces", function (this: ScenarioWorld) {
 // deduplicated, or sorted: two identical results are two rows. A field one
 // result lacks is an empty cell. A multi-result command with no cascade, such
 // as `info <name>` over two scopes when one manifest is broken, has no row
-// arrays, so this table alone compares it whole. A new session's results have
-// a step of their own.
+// arrays, so this table alone compares it whole. The results of a new session
+// or a reload have a step of their own.
 Then("the command reports these results:", function (this: ScenarioWorld, table: DataTable) {
   const [stated = []] = table.raw();
   assert.deepStrictEqual(resultsTable(stated, this.resultsOf("command"), this.tokens), table.raw());
@@ -207,6 +309,13 @@ Then("the command result contains no absolute sandbox path", function (this: Sce
   for (const root of [this.tokens.home, this.tokens.projectDir, this.tokens.agentDir]) {
     assert.strictEqual(rendered.includes(root), false, `command result contains ${root}`);
   }
+});
+
+// AUTH-09: a secret, such as a token, appears in no field of any result of
+// the command, the fields no table states included.
+Then("no result of the command contains {string}", function (this: ScenarioWorld, secret: string) {
+  const rendered = JSON.stringify(this.resultsOf("command"));
+  assert.strictEqual(rendered.includes(secret), false, `a command result contains ${secret}`);
 });
 
 // The notice of the command the terminal ran, read from the current screen

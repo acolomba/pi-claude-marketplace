@@ -3,9 +3,13 @@ Feature: MCP server configuration
   A plugin's MCP server receives its configuration as Claude Code gives it, through either MCP
   implementation: pi-mcp-adapter, through its mcp tool and its own OAuth entry (D-CF6-05, D-08-04),
   and Pi's built-in MCP, through the servers the extension registers and Pi's tool search (BLT-02,
-  AVAR-02, MENV-01, MENV-02). A stdio stub server and a loopback HTTP server stand in for real
-  servers, a scripted model for a real model, a local marketplace for a published one, and a
-  registry probe for the configuration Pi holds.
+  AVAR-02, MENV-01, MENV-02). An install refuses a stdio server whose argument starts with a home
+  path unless --partial leaves it out (AVAR-03), writes a remote server without its tool permission
+  rules and warns that they are not enforced (ANAME-07), and withholds a credential that Claude Code
+  never sends to a remote server (AVAR-05). Install, update, reinstall, and enable report an unset
+  variable and a withheld credential after their result rows (AVAR-04). A stdio stub server and a
+  loopback HTTP server stand in for real servers, a scripted model for a real model, a local
+  marketplace for a published one, and a registry probe for the configuration Pi holds.
 
   @mcp
   Scenario: A server that declares no timeout is written to mcp-adapter.json with the idle window of Claude Code, 30 minutes for stdio and 5 minutes for a remote server (PG-MCP-01, D-PG1-11)
@@ -441,6 +445,8 @@ Feature: MCP server configuration
       | ${CLAUDE_PLUGIN_DATA}              | {agent dir}/pi-claude-marketplace/data/fixtures/demo:echo:ping |
       | ${CLAUDE_PLUGIN_ROOT}              | {home}/marketplaces/fixtures/plugins/demo:echo:ping            |
       | ${PI_CM_STUB_TAG:-install-default} | install-default:echo:ping                                      |
+      | ${CLAUDE_PROJECT_DIR}              | {project dir}:echo:ping                                        |
+      | !echo pwned                        | !echo pwned:echo:ping                                          |
 
   @builtin-only
   Scenario Outline: A server's env value reaches it as Claude Code expands it, with nothing Pi reinterprets (BLT-02)
@@ -482,6 +488,7 @@ Feature: MCP server configuration
       | ${PI_CM_STUB_TAG:-install-default} | install-default:echo:ping                                      |
       | cost $5 and $HOME                  | cost $5 and $HOME:echo:ping                                    |
       | !echo pwned                        | !echo pwned:echo:ping                                          |
+      | ${CLAUDE_PROJECT_DIR}              | {project dir}:echo:ping                                        |
 
   @adapter-only
   Scenario: A variable reference in env reaches the server with the value Pi starts with
@@ -666,3 +673,292 @@ Feature: MCP server configuration
       | 3    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given.                                                          |
       | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"ping"}                                                                                          |
       | 3    | tool result | mcp__plugin_demo_stub__echo returned: {home}/marketplaces/fixtures/plugins/demo,{agent dir}/pi-claude-marketplace/data/fixtures/demo:echo:ping |
+
+  @mcp
+  Scenario: A normal install of a plugin whose stdio server argument starts with a home path refuses with the --partial hint and writes nothing (AVAR-03)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"home": {"command": "pi-features-absent-mcp-server", "args": ["~/bin/server.js"]}, "local": {"command": "pi-features-absent-mcp-server", "args": ["server.js"]}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                        |
+      | cascade | error    | false        | A plugin operation has failed. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons         | hint            |
+      | fixtures         | project           | demo@fixtures | demo | partially-available | unsupported mcp | partial-install |
+    Then the files of the project scope are unchanged
+
+  @mcp
+  Scenario: An install with --partial leaves out the stdio server whose argument starts with a home path (AVAR-03)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"home": {"command": "pi-features-absent-mcp-server", "args": ["~/bin/server.js"]}, "local": {"command": "pi-features-absent-mcp-server", "args": ["server.js"]}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project --partial"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons         | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported mcp | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_local_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "server.js"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An install of a remote server with tool permission rules writes it without them and warns that they are not enforced (ANAME-07)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"type": "http", "url": "https://127.0.0.1:9/mcp", "tools": [{"name": "rule-tool-a7", "permission_policy": "always_deny"}], "toolPermissions": {"rule-tool-b7": "blocked"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                                                  |
+      | cascade            | info     | true         |                                                                                                                                                                          |
+      | mcp-config-notices | warning  | false        | [{"kind":"tool-rules-unenforced","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","fields":["tools[].permission_policy","toolPermissions"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "url": "https://127.0.0.1:9/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A project install writes the plugin and project directories, escapes a leading !, and keeps the user's variables as references, warning about the unset one (AVAR-02, AVAR-04)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "${CLAUDE_PLUGIN_ROOT}/bin/server", "args": ["--project", "${CLAUDE_PROJECT_DIR}", "--site", "${PI_CM_AVAR_SITE}", "--level", "${PI_CM_AVAR_LEVEL:-info}", "--token", "${PI_CM_AVAR_TOKEN}"], "env": {"MODE": "!fast"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given pi runs with the scripted model, the mcp implementation, and the environment variable "PI_CM_AVAR_TOKEN" set to "avar-sentinel-04-02"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                              |
+      | cascade            | info     | true         |                                                                                                                                      |
+      | mcp-config-notices | warning  | false        | [{"kind":"variables-missing","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","names":["PI_CM_AVAR_SITE"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "{home}/marketplaces/fixtures/plugins/demo/bin/server",
+            "args": [
+              "--project",
+              "{project dir}",
+              "--site",
+              "${PI_CM_AVAR_SITE}",
+              "--level",
+              "${PI_CM_AVAR_LEVEL:-info}",
+              "--token",
+              "${PI_CM_AVAR_TOKEN}"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo",
+              "MODE": "!!fast"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A remote server's headers never hold a set credential that Claude Code keeps from remote servers, and the install says so (AVAR-05)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"type": "http", "url": "https://127.0.0.1:9/mcp", "headers": {"Authorization": "Bearer ${ANTHROPIC_API_KEY}", "X-Fallback": "${ANTHROPIC_API_KEY:-unused}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given pi runs with the scripted model, the mcp implementation, and the environment variable "ANTHROPIC_API_KEY" set to "avar-sentinel-04-03"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                  |
+      | cascade            | info     | true         |                                                                                                                                          |
+      | mcp-config-notices | warning  | false        | [{"kind":"credentials-blanked","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","names":["ANTHROPIC_API_KEY"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "url": "https://127.0.0.1:9/mcp",
+            "headers": {
+              "Authorization": "Bearer ",
+              "X-Fallback": ""
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: An update reports the unset variable and the withheld credential after its rows (AVAR-04)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"local": {"command": "pi-features-absent-mcp-server", "args": ["--site", "${PI_CM_AVAR_SITE}"]}, "api": {"type": "http", "url": "https://127.0.0.1:9/mcp", "headers": {"Authorization": "Bearer ${ANTHROPIC_API_KEY}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given pi runs with the scripted model, the mcp implementation, and the environment variable "ANTHROPIC_API_KEY" set to "avar-sentinel-04-09"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                    |
+      | cascade            | info     | true         |                                                                                                                                            |
+      | mcp-config-notices | warning  | false        | [{"kind":"variables-missing","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_local_","names":["PI_CM_AVAR_SITE"]}] |
+      | mcp-config-notices | warning  | false        | [{"kind":"credentials-blanked","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_api_","names":["ANTHROPIC_API_KEY"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+
+  @mcp
+  Scenario: A reinstall reports the unset variable and the withheld credential after its rows (AVAR-04)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"local": {"command": "pi-features-absent-mcp-server", "args": ["--site", "${PI_CM_AVAR_SITE}"]}, "api": {"type": "http", "url": "https://127.0.0.1:9/mcp", "headers": {"Authorization": "Bearer ${ANTHROPIC_API_KEY}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given pi runs with the scripted model, the mcp implementation, and the environment variable "ANTHROPIC_API_KEY" set to "avar-sentinel-04-09"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                    |
+      | cascade            | info     | true         |                                                                                                                                            |
+      | mcp-config-notices | warning  | false        | [{"kind":"variables-missing","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_local_","names":["PI_CM_AVAR_SITE"]}] |
+      | mcp-config-notices | warning  | false        | [{"kind":"credentials-blanked","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_api_","names":["ANTHROPIC_API_KEY"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
+
+  @mcp
+  Scenario: Enabling a disabled plugin reports the unset variable and the withheld credential after its rows (AVAR-04)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"local": {"command": "pi-features-absent-mcp-server", "args": ["--site", "${PI_CM_AVAR_SITE}"]}, "api": {"type": "http", "url": "https://127.0.0.1:9/mcp", "headers": {"Authorization": "Bearer ${ANTHROPIC_API_KEY}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given pi runs with the scripted model, the mcp implementation, and the environment variable "ANTHROPIC_API_KEY" set to "avar-sentinel-04-09"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which did not fail
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                    |
+      | cascade            | info     | true         |                                                                                                                                            |
+      | mcp-config-notices | warning  | false        | [{"kind":"variables-missing","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_local_","names":["PI_CM_AVAR_SITE"]}] |
+      | mcp-config-notices | warning  | false        | [{"kind":"credentials-blanked","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_api_","names":["ANTHROPIC_API_KEY"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |

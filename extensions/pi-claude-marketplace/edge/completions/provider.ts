@@ -7,8 +7,10 @@
 // Branches in priority order:
 //
 //   1. TC-1 -- tokens.length === 0 -> top-level keywords
-//      (install / uninstall / update / reinstall / list / ls / marketplace /
-//       bootstrap / import).
+//      (install / uninstall / update / reinstall / reload / list / ls /
+//       marketplace / bootstrap / import). Pi asks for argument completions
+//      only in its terminal, which takes later commands, so `reload` is
+//      always offered (RELOADCMD-D1).
 //   2. TC-4 -- prevToken === "--scope" -> user / project.
 //   2b. TC-3 -- current.startsWith("-") -> flag names (--scope
 //      always; --installed / --available / --unavailable when head ===
@@ -101,13 +103,15 @@ function catalogVerbForPositionals(positionals: readonly string[]): CatalogVerb 
 
 /**
  * Verbs that accept no flag at all, not even the global `--scope`. `bootstrap`,
- * `browse` and `marketplace help` reject every argument; `help` takes one
- * topic name and rejects every flag. Suggesting `--scope` for
- * any of them would offer a token its handler answers with a usage error.
+ * `browse`, `reload` (RELOADCMD-D1), and `marketplace help` reject every
+ * argument; `help` takes one topic name and rejects every flag. Suggesting
+ * `--scope` for any of them would offer a token its handler answers with a
+ * usage error.
  */
 const NO_FLAG_VERBS: ReadonlySet<CatalogVerb> = new Set([
   "bootstrap",
   "browse",
+  "reload",
   "help",
   "marketplace help",
 ]);
@@ -295,6 +299,7 @@ function pluginRefBranchConfig(
   }
 }
 
+/** The completions for `prefix`. */
 export async function getArgumentCompletions(
   prefix: string,
   resolver: LocationsResolver,

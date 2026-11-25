@@ -17,13 +17,16 @@
  * writes the agents of every plugin, plant an agents index entry that claims
  * a file there, move a plugin's recorded plugin root outside its
  * marketplace, leave a plugin's recorded options unreadable, and set the scope
- * a marketplace's record names, as a hand edit of the installation record can. Others rewrite the whole installation record
+ * a marketplace's record names, as a hand edit of the installation record can.
+ * One also writes a file as a plugin does at run time, creating the data
+ * directory that a dependency install does not create. Others rewrite the whole installation record
  * as an earlier release wrote it, or with a schema version newer than this
  * release reads, as an upgrade or a downgrade leaves it (D-BG-13); the one
  * for release 0.4.3 also deletes the scope's configs, which that release did
  * not write. The other steps
- * only read; one of them lists the files of that `agents/` directory, and one
- * checks that the user scope holds no record of project installs.
+ * only read; one of them lists the files of that `agents/` directory, one
+ * checks that the user scope holds no record of project installs, and one
+ * checks that the scope holds no plugin data.
  *
  * A missing installation record fails the step; it never reads as no plugins.
  * A scope that has a marketplace added always has one.
@@ -248,6 +251,17 @@ Given(
       `${directory} does not exist, so the install did not create it`,
     );
     assert.ok((await stat(directory)).isDirectory(), `${directory} is not a directory`);
+    await writeUserFile(this, directory, name, text);
+  },
+);
+
+// A plugin creates its data directory when it first writes there, as Claude
+// Code does; only the root plugin of an install gets one eagerly (AS-6).
+Given(
+  "the plugin {string} has written the file {string} with the text {string} to its data directory in the {word} scope",
+  async function (this: ScenarioWorld, id: string, name: string, text: string, scope: string) {
+    const directory = pluginDataDirectory(this, scope, id);
+    await mkdir(directory, { recursive: true });
     await writeUserFile(this, directory, name, text);
   },
 );
@@ -638,4 +652,11 @@ Then(
 
 Then("the {word} scope holds no git clones", async function (this: ScenarioWorld, scope: string) {
   assert.deepStrictEqual(await readGitClones(extensionRoot(this, scope), this.gitHost.gitHome), []);
+});
+
+// The data directory of every plugin lives under `data`; an absent one holds none.
+Then("the {word} scope holds no plugin data", async function (this: ScenarioWorld, scope: string) {
+  const directory = path.join(extensionRoot(this, scope), "data");
+  const entries = existsSync(directory) ? await readdir(directory) : [];
+  assert.deepStrictEqual(entries, []);
 });

@@ -53,7 +53,7 @@ function emitOnce(
   },
 ): NotifyArguments {
   const uiNotify = t.mock.fn<(...args: NotifyArguments) => void>();
-  const ctx: NotificationContext = { mode: "tui", ui: { notify: uiNotify } };
+  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: uiNotify } };
   notify(ctx, fixture.run, fixture.message);
   assert.equal(
     uiNotify.mock.calls.length,

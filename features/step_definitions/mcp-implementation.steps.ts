@@ -1,6 +1,7 @@
 /**
  * @fileoverview Steps about the MCP implementation a profile Pi runs: the
- * profile Pi that runs the profile's implementation, the built-in stand-in
+ * profile Pi that runs the profile's implementation, also with one
+ * environment variable set when it starts, the built-in stand-in
  * that serves a stub server to Pi's built-in MCP, the wait for the first
  * listing of a stub's tools, the allowance of a project's plugin servers,
  * turning Pi's built-in MCP off in the user's
@@ -12,7 +13,7 @@
  * an implementation. A restart stops the scenario's profile Pi and starts
  * another, which the world checks against the implementation its launch
  * implies (DUAL-02). The new Pi's first session becomes the last session
- * results, as a new session does, so the session steps read its skills and
+ * results, as a reload or a new session does, so the session steps read its skills and
  * results.
  */
 
@@ -23,6 +24,11 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 import { nameStandInServer } from "../lib/builtin-mcp-stand-in/servers.ts";
 import { allowProjectServersForUser } from "../lib/mcp-configuration.ts";
 import { mcpImplementationLaunch, waitForStubListing } from "../lib/mcp-implementation.ts";
+import {
+  PI_LAUNCH_ENVIRONMENT_EXTENSION,
+  readAppliedLaunchEnvironments,
+  writeLaunchEnvironment,
+} from "../lib/pi-launch-environment.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
@@ -50,6 +56,26 @@ Given(
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
     await this.usePiWithProfile(mcpImplementationLaunch(this.mcpProfile));
+  },
+);
+
+// A profile Pi's environment is fixed when it starts, so a command that reads
+// a variable, such as an install that withholds a credential (AVAR-05), runs
+// in a Pi started with it. The variable is never set in this worker. The
+// launch file lies in the sandbox home, which the next scenario's `Before()`
+// empties, so no release removes it.
+Given(
+  "pi runs with the scripted model, the mcp implementation, and the environment variable {string} set to {string}",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld, variable: string, value: string) {
+    const variables = { [variable]: value };
+    const launch = mcpImplementationLaunch(this.mcpProfile);
+    await writeLaunchEnvironment(this.tokens.home, variables);
+    await this.usePiWithProfile({
+      ...launch,
+      extraExtensions: [...launch.extraExtensions, PI_LAUNCH_ENVIRONMENT_EXTENSION],
+    });
+    assert.deepStrictEqual(await readAppliedLaunchEnvironments(this.profileHarness()), [variables]);
   },
 );
 

@@ -75,10 +75,6 @@ void ("normalizeSeconds" satisfies Public<"normalizeSeconds">);
 void ("parsedConfigCache" satisfies Public<"parsedConfigCache">);
 // @ts-expect-error the barrel keeps parsedConfigEntries internal
 void ("parsedConfigEntries" satisfies Public<"parsedConfigEntries">);
-// @ts-expect-error the barrel keeps pendingSessionStartContext internal
-void ("pendingSessionStartContext" satisfies Public<"pendingSessionStartContext">);
-// @ts-expect-error the barrel keeps pendingSessionStartContextEntries internal
-void ("pendingSessionStartContextEntries" satisfies Public<"pendingSessionStartContextEntries">);
 // @ts-expect-error the barrel keeps readEntriesOrSkip internal
 void ("readEntriesOrSkip" satisfies Public<"readEntriesOrSkip">);
 // @ts-expect-error the barrel keeps readSymlinkTargetSafe internal

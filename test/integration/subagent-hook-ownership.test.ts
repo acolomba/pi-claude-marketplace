@@ -1,16 +1,16 @@
 // test/integration/subagent-hook-ownership.test.ts
 //
-// Process ownership of async hooks across a main Pi session and pi-subagents
-// background children (D-PG3-09). Each session is a real Pi process in RPC
-// mode with the real extension, the scripted model, and a plugin installed
-// through `/claude:plugin`, whose waiting script hooks stand in for slow
-// async rewake hooks. A child load never reaps the main session's PID table
-// or a sibling child's journal, and a child persists its hooks only in its
-// own journal, so the parent's and a sibling's waiting hooks run on, and
-// their records keep their bytes, through every stage of another child. A
-// main load stops the hooks of a child whose Pi died, when the hook process
-// positively carries the dispatch marker that the dead owner's journal
-// names, and leaves a live sibling's journal alone.
+// One multi-process case (ITSCOPE-01) of the process ownership of async hooks
+// (D-PG3-09). A main Pi, a pi-subagents background child, and a live sibling
+// child each run as a real Pi process in RPC mode with the real extension,
+// the scripted model, and a plugin installed through `/claude:plugin`, whose
+// waiting script hooks stand in for slow async rewake hooks. When the child's
+// Pi dies, the next main load stops the child's waiting hook, because the
+// hook process carries the dispatch marker that the dead child's journal
+// names, and it leaves the live sibling's hook and journal alone. No scenario
+// kills a child's Pi while a sibling runs. A child that loads and stops while
+// other hooks wait is in "Loading and stopping a child leaves parent and
+// sibling hooks running" (`features/plugin/subagent-child.feature`).
 //
 // Every stage waits at most `STAGE_TIMEOUT_MS` and each case at most
 // `CASE_TIMEOUT_MS`. Each case's release stops every Pi it started and kills
@@ -49,12 +49,10 @@ const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
   new URL("../../features/lib/scripted-model/extension.ts", import.meta.url),
 );
 
-// One waiting hook per session: the parent's prompt, the sibling's bash
-// call, and the child's read each start one, and none matches another's
-// event, because a child runs no UserPromptSubmit hook (D-PG3-08).
+// One waiting hook per child: the sibling's bash call and the child's read
+// each start one, and neither matches the other's tool.
 const WAITING_HOOKS = [
   ["name", "event", "matcher", "form", "async rewake", "waits"],
-  ["parent-wait", "UserPromptSubmit", "*", "script", "true", "true"],
   ["sibling-wait", "PreToolUse", "Bash", "script", "true", "true"],
   ["child-wait", "PreToolUse", "Read", "script", "true", "true"],
 ] as const;
@@ -68,8 +66,6 @@ const CHILD_TURN: readonly ScriptStep[] = [
   { tool: "read", arguments: { path: "notes.txt" } },
   { reply: "Child done." },
 ];
-
-const STAGES = ["load", "hook start", "hook end", "new session", "stop"] as const;
 
 // The Pis of every case compile the same extensions, so they share one jiti
 // cache, which the first Pi fills.
@@ -173,63 +169,6 @@ async function observeUntil(
 
   assert.deepStrictEqual(observed, expected);
 }
-
-test(
-  "a child's load, hook, new session, and stop leave the parent's and a sibling's waiting hooks running with their records",
-  { timeout: CASE_TIMEOUT_MS },
-  async (t) => {
-    // arrange
-    const session = await installedSession(t, [
-      { reply: "Parent done." },
-      ...SIBLING_TURN,
-      ...CHILD_TURN,
-    ]);
-    const parent = await session.start("main");
-    const parentHook = await session.promptPastWaitingHook(
-      parent,
-      "wait in the parent",
-      "parent-wait",
-    );
-    const sibling = await session.start("child");
-    const siblingHook = await session.promptPastWaitingHook(
-      sibling,
-      "run the sibling",
-      "sibling-wait",
-    );
-    assert.deepStrictEqual(await session.observe([parentHook]), [kept(parentHook)]);
-    assert.notStrictEqual(siblingHook.journal, parentHook.journal);
-
-    // act
-    const { stages } = await session.runChildStages(
-      [parentHook, siblingHook],
-      "read the notes",
-      "child-wait",
-    );
-    const ends = [await session.release("parent-wait"), await session.release("sibling-wait")];
-
-    // assert
-    assert.deepStrictEqual(
-      stages,
-      STAGES.map((stage) => ({ stage, hooks: [kept(parentHook), kept(siblingHook)] })),
-    );
-    assert.deepStrictEqual(ends, [
-      { hook: "parent-wait", pid: parentHook.pid, phase: "end", code: 0 },
-      { hook: "sibling-wait", pid: siblingHook.pid, phase: "end", code: 0 },
-    ]);
-    await observeUntil(
-      session,
-      [parentHook, siblingHook],
-      [
-        { hook: "parent-wait", running: false, record: "changed" },
-        { hook: "sibling-wait", running: false, record: "removed" },
-      ],
-    );
-    assert.deepStrictEqual(JSON.parse(await readFile(parentHook.journal, "utf8")), {
-      version: 1,
-      entries: [],
-    });
-  },
-);
 
 test(
   "a main load stops the waiting hook of a child whose Pi died and keeps a live sibling's",

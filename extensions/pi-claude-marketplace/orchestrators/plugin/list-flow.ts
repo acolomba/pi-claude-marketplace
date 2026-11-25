@@ -542,8 +542,8 @@ const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
  * both hide the row and let the user-side enumeration re-emit the plugin as a
  * duplicate `(available)`. FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived
  * `partially-installed` / `partially-upgradable` rows are recorded-installed
- * inventory and join for the same reason. Regressions:
- * test/integration/fold-adoption.test.ts and the "CR-01 / G-21-01
+ * inventory and join for the same reason. Regressions: the CMC-21 / D-13-17
+ * fold scenarios of features/plugin/list.feature and the "CR-01 / G-21-01
  * fold-carryover" case in test/orchestrators/plugin/list-flow.test.ts.
  */
 async function computeOrphanFold(

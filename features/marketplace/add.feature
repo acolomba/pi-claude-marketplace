@@ -164,19 +164,19 @@ Feature: Marketplace add
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
-  Scenario: A marketplace added with --local to a scope with no base config stays out of it in a new session
+  Scenario: A marketplace added with --local to a scope with no base config stays out of it after a reload
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
-  Scenario Outline: An added marketplace is still listed in a new session
+  Scenario Outline: An added marketplace is still listed after a reload
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace list"
     Then the result has these fields:
       | kind                | cascade          |

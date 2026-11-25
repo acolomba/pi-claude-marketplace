@@ -4,7 +4,7 @@ Feature: Slash command listing
   session, built from prompt templates. A registry probe in Pi stands in for
   the user's view of the command list, and a local marketplace for a published one.
 
-  Scenario: A new session offers a bridged command as a prompt command with its description
+  Scenario: A reload offers a bridged command as a prompt command with its description
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -16,7 +16,7 @@ Feature: Slash command listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command     | description              |
@@ -36,7 +36,7 @@ Feature: Slash command listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command      | description                                                                 |
@@ -57,7 +57,7 @@ Feature: Slash command listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command      | description          |
@@ -86,7 +86,7 @@ Feature: Slash command listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project", which warned
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command      | description                                                         |
@@ -107,7 +107,7 @@ Feature: Slash command listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command         | description         |
@@ -128,7 +128,7 @@ Feature: Slash command listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command    | description        |
@@ -149,6 +149,6 @@ Feature: Slash command listing
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers no slash commands from prompt templates

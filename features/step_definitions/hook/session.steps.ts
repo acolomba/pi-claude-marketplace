@@ -40,8 +40,12 @@
  * continue, open, and fork restarts start it with `--continue`, or with
  * `--session` or `--fork` on the newest file of that folder, which is the
  * session the stopped Pi was in. Each records the turn as the restart after
- * a crash does. The fork setup `Given` performs the fork restart and records
- * no turn.
+ * a crash does. The fork setup `Given` performs the fork restart, the
+ * continue setup `Given` the continue restart, and the first-prompt fork
+ * setup `Given` the in-session fork at the first prompt; each records no
+ * turn. The new-session setup `Given` performs the new-session restart, and
+ * the resume setup `Given` switches Pi to the saved session whose file holds
+ * a prompt; neither records a turn.
  */
 
 import assert from "node:assert/strict";
@@ -56,10 +60,14 @@ import { HOOK_RUNS_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts"
 import { startSession } from "../../lib/pi-commands.ts";
 import { promptDisposition } from "../../lib/pi-rpc.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
-import { latestSessionFile, sessionsFolder } from "../../lib/saved-sessions.ts";
+import {
+  latestSessionFile,
+  sessionFileWithPrompt,
+  sessionsFolder,
+} from "../../lib/saved-sessions.ts";
 import { modelCallsOf, readModelCalls } from "../../lib/scripted-model/script.ts";
 import { isRunning, readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
-import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
+import { PROFILE_PI_START_TIMEOUT_MS, SCRIPTED_TUI_READY_MS } from "../../support/world.ts";
 
 import type { HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
@@ -81,6 +89,12 @@ const DIALOG_METHODS: ReadonlySet<string> = new Set(["select", "confirm", "input
 // the compile cache, so its first SessionStart run lands within seconds; the
 // margin covers a slow worker.
 const TERMINAL_STARTUP_RUN_TIMEOUT_MS = 30_000;
+
+// The scripted terminal start waits for the TUI, then for its startup run.
+// The step's timeout lies above the sum of those waits, so a slow start fails
+// with the message of the wait that ran out.
+const SCRIPTED_TERMINAL_START_TIMEOUT_MS =
+  SCRIPTED_TUI_READY_MS + TERMINAL_STARTUP_RUN_TIMEOUT_MS + 10_000;
 
 // How often the terminal Given reads the hook log while it waits for the
 // startup run; a short interval keeps the wait close to the run itself.
@@ -148,44 +162,55 @@ async function recordSessionAction(
 
 // Runs `action` on the terminal Pi and keeps the hook log lines it added as
 // the last turn. The terminal Pi prints no RPC record, so the turn has none.
+// `action` gets the log lengths the turn began at.
 async function recordTerminalAction(
   world: ScenarioWorld,
   prompt: string,
-  action: () => Promise<void>,
+  action: (lengths: ReadonlyMap<string, number>) => Promise<void>,
 ): Promise<void> {
   const harness = world.profileHarness();
   const lengths = await readLogLengths(harness);
-  await action();
+  await action(lengths);
   const logs = await readLogLinesSince(harness, lengths);
   world.recordTurn({ prompt, disposition: "interactive", records: [], logs });
 }
 
-// The hook runs the log holds so far, in the order they were appended.
-async function readHookRuns(harness: string): Promise<readonly HookRun[]> {
-  const lines = await readLogLinesSince(harness, new Map());
+// The hook runs the log gained since `lengths` was read, in the order they
+// were appended.
+async function readHookRuns(
+  harness: string,
+  lengths: ReadonlyMap<string, number>,
+): Promise<readonly HookRun[]> {
+  const lines = await readLogLinesSince(harness, lengths);
   return (lines.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
 }
 
-// Waits until the log holds a run that `isRun` accepts, by reading it again
-// every `HOOK_LOG_POLL_MS`, never for a fixed time alone, and fails with
-// `missing` after `timeoutMs`.
+// Waits until the log gained, since `lengths` was read, a run that `isRun`
+// accepts, by reading it again every `HOOK_LOG_POLL_MS`, never for a fixed
+// time alone, and fails with `missing` after `timeoutMs`.
 async function waitForRun(
   harness: string,
+  lengths: ReadonlyMap<string, number>,
   isRun: (run: HookRun) => boolean,
   timeoutMs: number,
   missing: string,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!(await readHookRuns(harness)).some(isRun)) {
+  while (!(await readHookRuns(harness, lengths)).some(isRun)) {
     assert.ok(Date.now() < deadline, missing);
     await new Promise((resolve) => setTimeout(resolve, HOOK_LOG_POLL_MS));
   }
 }
 
-// Waits until the log holds a SessionStart run with the source `startup`.
-async function waitForStartupRun(harness: string): Promise<void> {
+// Waits until the log gained, since `lengths` was read, a SessionStart run
+// with the source `startup`.
+async function waitForStartupRun(
+  harness: string,
+  lengths: ReadonlyMap<string, number>,
+): Promise<void> {
   await waitForRun(
     harness,
+    lengths,
     (run) => run.event === "SessionStart" && run.stdin.source === "startup",
     TERMINAL_STARTUP_RUN_TIMEOUT_MS,
     "the terminal pi ran no SessionStart startup hook",
@@ -352,8 +377,9 @@ Given(
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
     const harness = this.profileHarness();
+    const lengths = await readLogLengths(harness);
     await this.startTuiSession();
-    await waitForStartupRun(harness);
+    await waitForStartupRun(harness, lengths);
   },
 );
 // A waiting hook that the terminal Pi's start ran logs its start right after
@@ -398,6 +424,77 @@ Given(
   },
 );
 
+// Pi forks a session at a user message the caller names, so the step asks
+// Pi for the messages it can fork at and picks the first.
+async function forkAtFirstPrompt(world: ScenarioWorld): Promise<void> {
+  const listed = await world.pi.request({ type: "get_fork_messages" });
+  assert.strictEqual(listed.response.success, true, JSON.stringify(listed.response));
+  const { messages } = listed.response.data as {
+    readonly messages: ReadonlyArray<{ readonly entryId: string; readonly text: string }>;
+  };
+  const [first] = messages;
+  if (first === undefined) {
+    assert.fail("the session holds no prompt to fork at");
+  }
+
+  const forked = await world.pi.request({ type: "fork", entryId: first.entryId });
+  assert.deepStrictEqual(forked.response.data, { text: first.text, cancelled: false });
+}
+
+Given("the user has forked the session at its first prompt", async function (this: ScenarioWorld) {
+  await forkAtFirstPrompt(this);
+});
+
+// `--continue` opens the newest file of the sessions folder, so the step
+// reads that file before the restart and checks that Pi is in it after.
+Given(
+  "the user has started pi again and continued the last session",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const continued = await latestSessionFile(sessionsFolder(this.tokens));
+    await this.restartPi("continue-session");
+    assert.strictEqual(await currentSessionFile(this), continued);
+  },
+);
+
+// `new-session` starts the profile Pi again in a new saved session, so the
+// step checks that Pi is in a file of the sessions folder that it did not
+// leave.
+Given(
+  "the user has started pi again in a new session",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const left = await currentSessionFile(this);
+    await this.restartPi("new-session");
+    const started = await currentSessionFile(this);
+    assert.deepStrictEqual(
+      {
+        folder: started === undefined ? undefined : path.dirname(started),
+        stayedInLeftFile: started === left,
+      },
+      { folder: sessionsFolder(this.tokens), stayedInLeftFile: false },
+    );
+  },
+);
+
+// RPC `switch_session` answers after the left session's shutdown handlers
+// and the resumed session's start handlers ran, the hooks among them.
+Given(
+  "the user has resumed the session of the prompt {string}",
+  async function (this: ScenarioWorld, prompt: string) {
+    const sessionPath = await sessionFileWithPrompt(
+      sessionsFolder(this.tokens),
+      expandTokens(prompt, this.tokens),
+    );
+    const { response } = await this.pi.request({ type: "switch_session", sessionPath });
+    assert.deepStrictEqual(
+      { success: response.success, data: response.data },
+      { success: true, data: { cancelled: false } },
+    );
+    assert.strictEqual(await currentSessionFile(this), sessionPath);
+  },
+);
+
 Given(
   "pi's process has died, leaving its hook processes running",
   async function (this: ScenarioWorld) {
@@ -407,7 +504,6 @@ Given(
 );
 
 // A new session's payloads become the last results, as the plain new-session
-// `When` keeps them, so a payload no step states still fails the scenario.
 // `When` keeps them, so a payload no step states still fails the scenario.
 When(
   "the user starts a new pi session with the hooks recording",
@@ -447,25 +543,10 @@ When(
   },
 );
 
-// Pi forks a session at a user message the caller names, so the step asks
-// Pi for the messages it can fork at and picks the first.
 When(
   "the user forks the session at its first prompt with the hooks recording",
   async function (this: ScenarioWorld) {
-    await recordSessionAction(this, "fork", async () => {
-      const listed = await this.pi.request({ type: "get_fork_messages" });
-      assert.strictEqual(listed.response.success, true, JSON.stringify(listed.response));
-      const { messages } = listed.response.data as {
-        readonly messages: ReadonlyArray<{ readonly entryId: string; readonly text: string }>;
-      };
-      const [first] = messages;
-      if (first === undefined) {
-        assert.fail("the session holds no prompt to fork at");
-      }
-
-      const forked = await this.pi.request({ type: "fork", entryId: first.entryId });
-      assert.deepStrictEqual(forked.response.data, { text: first.text, cancelled: false });
-    });
+    await recordSessionAction(this, "fork", () => forkAtFirstPrompt(this));
   },
 );
 
@@ -473,6 +554,22 @@ When(
   "the user releases the hook {string} with the hooks recording",
   async function (this: ScenarioWorld, hook: string) {
     await recordSessionAction(this, "release", () => releaseHook(this, hook));
+  },
+);
+
+// The terminal Pi starts beside the profile Pi in the same sandbox and plays
+// its script. The step waits for a startup SessionStart run that the log
+// gained during the turn, so the turn holds the terminal Pi's own run and a
+// later reload cannot overtake it.
+When(
+  "the user starts pi in the terminal with the scripted model and the hooks recording",
+  { timeout: SCRIPTED_TERMINAL_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const harness = this.profileHarness();
+    await recordTerminalAction(this, "start", async (lengths) => {
+      await this.startTuiSession("scripted");
+      await waitForStartupRun(harness, lengths);
+    });
   },
 );
 
@@ -533,11 +630,12 @@ When(
     const tui = this.requireTuiSession();
     const harness = this.profileHarness();
     const prompt = expandTokens(text, this.tokens);
-    await recordTerminalAction(this, "/reload", async () => {
+    await recordTerminalAction(this, "/reload", async (lengths) => {
       await tui.reload();
       tui.sendLine(prompt);
       await waitForRun(
         harness,
+        lengths,
         (run) => run.event === "UserPromptSubmit" && run.stdin.prompt === prompt,
         TERMINAL_PROMPT_RUN_TIMEOUT_MS,
         "the terminal pi ran no UserPromptSubmit hook for the prompt after the reload",

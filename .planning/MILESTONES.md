@@ -1,5 +1,31 @@
 # Milestones: pi-claude-marketplace
 
+## integration-rescope Integration Test Rescope (Shipped: 2026-11-23)
+
+**Branch:** `claude/stoic-shannon-la9q7o` (pushed; no PR or npm release yet; version stays 0.23.0). Phase 6.1 was inserted on 2026-11-22 by user decision, to fix the `/reload` parity gap that the Phase 6 scenarios found.
+
+**Phases completed:** 9 phases, 26 plans, 43 tasks
+
+**Key accomplishments:**
+- A real pi-subagents child of an ordinary agent with an empty body now runs as an `@mcp` cucumber scenario under both profiles, six deliberate breaks proved the real-child scenarios guard the child's hook identity, and `test/integration/pi-subagents-child-identity.test.ts` is deleted with the docs citing scenarios instead.
+- Eight cucumber scenarios replace the seven cases of `plugin-layer-consistency.test.ts`: apply's layer gaps (project local, base, user local, legacy `--local` layer), the `demo@` source mismatch, the dangling reference beside an installing plugin, and pending/apply before the first-run migration. Each one failed under a deliberate break, and then the integration file was deleted.
+- Two cucumber scenarios in `features/plugin/list.feature` now guard the CMC-21 / D-13-17 orphan fold of the unfiltered list. Breaks B6, B6b, and B7 fail them on assertions, and `test/integration/fold-adoption.test.ts` is deleted.
+- Three new `marketplace autoupdate` scenarios (two D-09, one CFG-03) and red proofs for the existing LAYER-02 and D-07 scenarios replace all six cases of `marketplace-layer-autoupdate.test.ts`, which is deleted.
+- Six url-source scenarios replace the redeclare integration test and the user-visible half of seed-mirrors, and `seedSameRepoPluginMirrors` now seeds a same-repo git-subdir plugin whose url ends in `.git`, keyed by the plugin's own url.
+- Twelve prune scenarios (28 new rows) and three prune Givens replace 23 cases of `standalone-prune`; 26 of 27 deliberate breaks failed their scenarios on an assertion, K2 survives as accepted, and the integration file keeps only its two ITSCOPE-01 call-absence carriers.
+- Nine `@mcp` scenarios and three Outline rows now cover the home-path refusal, the tool-rule warning, the variable and credential handling, and the option references under both MCP profiles. Each one failed under its deliberate breaks (M1 to M10). The three integration files they replace are deleted.
+- The profile Pi's release now treats an ESRCH zombie as a stopped hook, and the stand-in log reader drops a half-written line. Four untagged hook scenarios (SS1, LC1, LC2, AC1) replace the user-visible integration cases. Every replaced case failed its scenario under a deliberate break first. Two of the three integration files are deleted, and the third keeps only its ITSCOPE-01 case.
+- A one-shot print-mode Pi driver that shares its runner with the json driver, four routed Device Flow scenarios (rejected-credential eviction, the new sign-in, the print-mode add refusal, the silent print-mode apply), red-proofed under seven breaks, and `auth-e2e` cut from 7 cases to its one fault-injection case.
+- A SessionStart hook's additionalContext now goes into the Pi session as a hidden `triggerTurn: false` message as soon as the hooks finish, so a `/reload` before the first prompt keeps it, as Claude Code 2.1.330 does; the SessionStart buffer and HOOK-E2E-04 are gone.
+- The eight in-memory fixed points of `reconcile-plan-convergence` now run as unit cases of the planner's pair (`plan.test.ts` 63 -> 71 tests, `plan.ts` at 100% direct coverage); the migration and D-09-16 cases were deleted as covered after breaks B1 to B3 turned their covering unit cases red, and the integration file is gone.
+- Four integration cases that a scenario or a unit case already covers are gone, each after a reverted break failed its cover: the single-process D-13 first load, the child-stage ownership case, the workflow install case, and the whole lifecycle cascade file; three trimmed files carry ITSCOPE-01 headers and the output catalog names the storage scenario.
+- Twenty integration files now name their ITSCOPE-01 class and what cucumber does not cover; both standalone-prune cases compare the whole recorded git-call object, and the openUi cache claim in docs/mcp-compatibility.md says it was read in the two peers' source.
+- The hooks doc now says that pi-subagents 0.88.1 puts a fork's boundary in its task message, that this was read in its source (`registerSubagentPromptBoundary`), and that no step reads the prompt. `npm run check` passed on the combined tree at `b9c0a04`: both cucumber profiles were green and every pair had 100% direct coverage.
+
+**Closeout:** Audit `tech_debt`, no blockers: 22/22 requirements, 9/9 phases passed, 4/4 integration points, 3/3 flows. The combined tree passes `npm run check` at `b9c0a04` (exit 0, adapter 2285/2285, builtin 260/260, 376 direct-coverage records). Closed as `override_closeout`: seven phase reports (01 to 06.1) read `stale` only because later phases edited files they cover (Phase 8 headers and doc claims, harness changes in phases 6, 6.1, and 7). That gate ran after all those edits, so no verifier was re-run. Known verification overrides: 7 newly acknowledged (stale only), 18 carried forward; the open-artifact audit was clear. The Phase 6.1 review loop ran four fix passes, one over the cap, because a pass 2 fix caused a regression that pass 3 found. Nyquist validation is draft for all nine phases. For the PR: the three Phase 6.1 CHANGELOG lines in STATE.md, the version bump offer, and the accepted fallow `weakened-tests` finding on `standalone-prune`. Left in BACKLOG: DIRGITTAG-01, HOOKLATESS-01 (a parity question for the user), and HOOKASYNCRESUME-01. [Roadmap](milestones/integration-rescope-ROADMAP.md), [requirements](milestones/integration-rescope-REQUIREMENTS.md), [audit](milestones/integration-rescope-MILESTONE-AUDIT.md), and [phase records](milestones/integration-rescope-phases/).
+
+---
+
 ## parity-gaps Claude Code Parity Gaps and Defects (Shipped: 2026-11-17)
 
 **Branch:** `features/gaps` (not yet pushed, no PR or npm release; version stays 0.23.0). Phases 7 and 8 ran on `features/gaps-agents` and phases 9 and 10 on `features/gaps-mcp`, and both merged back.

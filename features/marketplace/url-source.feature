@@ -201,3 +201,102 @@ Feature: Marketplace url source
       | 500    |
       | 502    |
       | 503    |
+
+  Scenario: Adding with --local a url marketplace that the base layer declares makes no second clone and no git request (LAYER-01)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" is added to the project scope
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the git host receives no request
+    Then the project scope holds these git clones:
+      | clone       | origin                            | revision |
+      | marketplace | https://{git host}/acme/tools.git |          |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                            |
+      | tools | https://{git host}/acme/tools.git |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                            |
+      | tools | https://{git host}/acme/tools.git |
+    Then the config and installation record bytes of the project scope are unchanged
+
+  Scenario: Adding again a url marketplace that the scope records but no layer declares declares it with no git request (D-09)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" is added to the project scope
+    Given a config in scope project and layer base, with this text:
+      """
+      { "schemaVersion": 1, "marketplaces": {} }
+      """
+    Given the installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the git host receives no request
+    Then the project scope holds these git clones:
+      | clone       | origin                            | revision |
+      | marketplace | https://{git host}/acme/tools.git |          |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                            |
+      | tools | https://{git host}/acme/tools.git |
+    Then the "claude-plugins.local.json" file of the project scope does not exist
+    Then the installation record bytes of the project scope are unchanged
+
+  Scenario Outline: Installing a pinned plugin from the repository of a url marketplace makes no git request after the add (D-SEED-01)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins from its own repository:
+      | name | version | url          | pinned |
+      | demo | 1.0.0   | <plugin url> | true   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install demo@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons | scope   | version |
+      | tools            | project           | demo@tools | demo | installed |         | project | 1.0.0   |
+    Then the git host receives no request
+
+    Examples:
+      | plugin url                         |
+      | https://{git host}/acme/tools      |
+      | https://{git host}/acme/tools.git  |
+      | https://{git host}/acme/tools/     |
+      | https://{git host}/acme/tools.git/ |
+
+  Scenario Outline: A plugin from the repository of a url marketplace lists as available right after the add (D-SEED-01)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins from its own repository:
+      | name | version | url          | pinned |
+      | demo | 1.0.0   | <plugin url> | false  |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons | version |
+      | tools            | project           | demo@tools | demo | available |         | 1.0.0   |
+
+    Examples:
+      | plugin url                         |
+      | https://{git host}/acme/tools      |
+      | https://{git host}/acme/tools.git  |
+      | https://{git host}/acme/tools/     |
+      | https://{git host}/acme/tools.git/ |

@@ -3,6 +3,7 @@
 ## Milestones
 
 - 🚧 **system-git** System Git
+- ✅ **integration-rescope** Integration Test Rescope — completed 2026-11-23 on branch `claude/stoic-shannon-la9q7o` (pushed, no PR or npm release yet; version stays 0.23.0); 9 phases (one inserted), 26 plans, 22/22 requirements. [Archive](milestones/integration-rescope-ROADMAP.md), [requirements](milestones/integration-rescope-REQUIREMENTS.md), [audit](milestones/integration-rescope-MILESTONE-AUDIT.md).
 - ✅ **parity-gaps** Claude Code Parity Gaps and Defects — completed 2026-11-17 on branch `features/gaps` (not yet pushed, no PR or npm release; version stays 0.23.0); 11 phases, 102 plans, 42/42 requirements. [Archive](milestones/parity-gaps-ROADMAP.md), [requirements](milestones/parity-gaps-REQUIREMENTS.md), [audit](milestones/parity-gaps-MILESTONE-AUDIT.md).
 - ✅ **behavioral-gaps** Behavioral Coverage Gaps — completed 2026-11-08 on branch `features/behavioral-gaps` (not yet pushed, no PR or npm release yet); 16 phases, 36 plans, 34/34 requirements. [Archive](milestones/behavioral-gaps-ROADMAP.md), [requirements](milestones/behavioral-gaps-REQUIREMENTS.md), [audit](milestones/behavioral-gaps-MILESTONE-AUDIT.md).
 - ✅ **mcp-builtin** MCP Built-in — completed 2026-11-05 on branch `features/mcp-builtin` (PR [#303](https://github.com/acolomba/pi-claude-marketplace/pull/303), version 0.23.0, not yet merged; user review done 2026-11-06, review fixes merged); 6 phases, 55 plans, 31/31 requirements. [Archive](milestones/mcp-builtin-ROADMAP.md), [requirements](milestones/mcp-builtin-REQUIREMENTS.md), [audit](milestones/mcp-builtin-MILESTONE-AUDIT.md).
@@ -110,19 +111,26 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
 - [ ] **Phase 8: Close** - `isomorphic-git` is gone, and the records, READMEs, codebase docs, and CHANGELOG describe the system git transport
 
 <details>
+<summary>✅ integration-rescope — Integration Test Rescope — SHIPPED 2026-11-23</summary>
+
+- [x] Phase 1: Duplicate Integration Files (2/2 plans) — completed 2026-11-21
+- [x] Phase 2: Plugin Layers, Names, and List Fold (4/4 plans) — completed 2026-11-21
+- [x] Phase 3: Marketplace Layers and Cross-Scope Install (4/4 plans) — completed 2026-11-21
+- [x] Phase 4: Prune (2/2 plans) — completed 2026-11-22
+- [x] Phase 5: MCP Install, Legacy Move, and Overrides (3/3 plans) — completed 2026-11-22
+- [x] Phase 6: Hooks and Auth (2/2 plans) — completed 2026-11-22
+- [x] Phase 06.1: Reload Keeps SessionStart Context (INSERTED) (3/3 plans) — completed 2026-11-23
+- [x] Phase 7: Path-Source Dependency Tags (1/1 plan) — completed 2026-11-23
+- [x] Phase 8: Integration Suite Rescope (5/5 plans) — completed 2026-11-23
+
+**Outcome:** 22/22 requirements, 9/9 phases, 4/4 integration points, and 3/3 flows pass; 2285 adapter-profile and 260 builtin-profile cucumber scenarios, and `test/integration/` down to 28 files and 236 cases. The audit reads `tech_debt` with no blockers. Seven phase reports closed with a stale-verification override: later phases edited files they verified, and the combined tree passes `npm run check`.
+
+</details>
+
+<details>
 <summary>✅ parity-gaps — Claude Code Parity Gaps and Defects — SHIPPED 2026-11-17</summary>
 
-- [x] Phase 1: Companion Floors and MCP Defaults (11/11 plans) — completed 2026-11-12
-- [x] Phase 2: Hook Payloads, Matchers, and Stop Limit (10/10 plans) — completed 2026-11-13
-- [x] Phase 3: Background Subagents (8/8 plans) — completed 2026-11-13
-- [x] Phase 4: Skill and Workflow Install Defects (6/6 plans) — completed 2026-11-14
-- [x] Phase 5: Stop Continuation and Hook Failures (6/6 plans) — completed 2026-11-14
-- [x] Phase 6: Hook Inputs and Events (13/13 plans) — completed 2026-11-15
-- [x] Phase 7: Agent Frontmatter and Grants (6/6 plans) — completed 2026-11-14
-- [x] Phase 8: Workflow Agents and Run Paths (7/7 plans) — completed 2026-11-15
-- [x] Phase 9: Adapter Entries and MCP Features (6/6 plans) — completed 2026-11-14
-- [x] Phase 10: Plugin Options, Variables, and Trust (21/21 plans) — completed 2026-11-15
-- [x] Phase 11: Skills, Commands, and Records (8/8 plans) — completed 2026-11-16
+11 phases, 102 plans. The phase list is in the [archive](milestones/parity-gaps-ROADMAP.md).
 
 **Outcome:** 42/42 requirements, 11/11 phases, 9/9 integration seams, and 6/6 flows pass; 2100 adapter-profile and 204 builtin-profile cucumber scenarios. The audit reads `tech_debt` with no blockers. Phase 5 closed with a verification override (`human_needed` on A9 alone: the start-failure notice has not run on Node 24, and the PR's CI closes it). The runtime UAT was skipped by the user's choice; the cucumber suite, with a real Pi and real companion extensions, stands in for it.
 
@@ -396,6 +404,7 @@ Plans:
 
 ## Carried Forward
 
+- integration-rescope: BACKLOG DIRGITTAG-01, HOOKLATESS-01 (a parity question for the user), and HOOKASYNCRESUME-01 in [BACKLOG.md](BACKLOG.md); the three Phase 6.1 CHANGELOG lines in STATE.md and the accepted fallow `weakened-tests` finding on `standalone-prune` go to the milestone PR; Nyquist validation for all nine phases; the `dispatch-exec.test.ts` large-environment fragility.
 - parity-gaps: AGTLONGNAME-01 and PG1-TIMING-01 stay open; Phase 5 A9 closes with the PR's CI `behavioral` job on Node 24; SEED-261107-kax stays dormant pending upstream open-gsd/gsd-core#4649; the BACKLOG entries the milestone added (among them HOOKRESULT-01, MCPSAMPLING-01, MCPOPENUI-01, PITRUSTPATHS-01, STOPMODECHECK-01, and SIBLINGPREFIX-01) in [BACKLOG.md](BACKLOG.md).
 - behavioral-gaps: the 25 BACKLOG entries the milestone added (among them ASYNCNEWSESSION-01, AMIGTRUST-01, WORKERHOMEDIR-01, SESSIONENDENV-01, PRUNECFG-01) in [BACKLOG.md](BACKLOG.md); the unknown writer to the real `~/.pi` during `npm run check` (P1-DC-53); Nyquist validation for phases 2, 3, 4, 8, 9, 10, 11, 12, 14, and 16.
 - mcp-builtin: BACKLOG COMPLIMPL-01, STAMPTYPE-01, GRANTRUNARG-01, STAMPREQ-01, EDGEDEPSCASES-01, PENDAPPLY-01, CONTAINCATCH-01, BLTREPEAT-01, SUBCHILDVAR-01, BLTOWNER-01 (narrowed), DENYPIN-01, and the 17 deferred built-in MCP items in [BACKLOG.md](BACKLOG.md); Phase 2's one open Nyquist gap (a `/reload` implementation switch, MSEL-02); the Pi 1.5.0 RPC double `session_start` fix on `acolomba/pi` branch `fix/rpc-double-session-start`, for the user to report upstream.

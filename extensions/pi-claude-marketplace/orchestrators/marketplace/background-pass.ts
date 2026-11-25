@@ -106,6 +106,9 @@ const DEBUG_TAG = "autoupdate";
 
 const SILENT_CONTEXT: NotificationContext = {
   mode: "print",
+  // RELOADCMD-D1: a silent sink takes no later commands, so its debug lines
+  // carry no reload hint.
+  hasUI: false,
   ui: {
     notify: (message) => {
       hookDebugLog(message, DEBUG_TAG);

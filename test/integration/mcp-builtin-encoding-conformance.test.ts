@@ -1,18 +1,26 @@
 // test/integration/mcp-builtin-encoding-conformance.test.ts
 //
-// BLT-02: every value the built-in path writes for a plugin MCP server comes
-// out of Pi 1.5.0 as Claude Code's value. Each row of the shared expansion
+// Peer conformance (ITSCOPE-01) against Pi's own resolver and validator.
+// BLT-02: every `env` and `headers` value the built-in path writes for a
+// plugin MCP server comes out of Pi 1.5.0's `resolveConfigValueOrThrow` as
+// Claude Code's value. Each `env` and `headers` row of the shared expansion
 // table runs through `builtinServerConfig`, with the session environment as
 // `runtimeEnv` and the session's working directory as `projectDir` for both
-// scopes (P2-DC-03). Pi resolves only `env` and `headers` values, so those go
-// through Pi's own `resolveConfigValueOrThrow`; every other field must be
-// Claude's value as written. A written secret value names no variable and is
-// no shell command, so Pi reads no environment and runs nothing (PI-1, PI-2).
-// Pi's own `validateMcpServerConfig` accepts each config the table builds and
-// returns it with the same JSON, so a re-registration does not reconnect
-// (P2-DC-08). D-PG10-12: each option row runs through `builtinServerConfig`
-// with the option's default filled in, and comes out of Pi as Claude Code's
-// value, with no command run and no variable of Pi's environment read.
+// scopes (P2-DC-03). A written `env` or `headers` value names no variable and
+// is no shell command, so Pi reads no environment and runs nothing (PI-1,
+// PI-2). Pi's own `validateMcpServerConfig` returns a stdio config, a remote
+// config with Claude Code's OAuth fields, and a direct-exposure config with
+// the same JSON, so a re-registration does not reconnect (P2-DC-08), and it
+// refuses a url that keeps an unset `${NAME}`. No table row reaches the
+// validator.
+// D-PG10-12: each `env` and `headers` option row runs through
+// `builtinServerConfig` with the option's default filled in, and comes out of
+// Pi as Claude Code's value, with no command run and no variable of Pi's
+// environment read. Pi resolves no other field, so the unit test of
+// `bridges/mcp/builtin-entry.ts` checks that the other rows are written as
+// Claude's value. A few env and option values are also in the scenarios of
+// `features/mcp-server/`; the table, the PI-1 and PI-2 cases, and the
+// validator cases need Pi's own functions.
 //
 // Pi publishes neither module in its `exports` map, so the test imports both
 // by absolute file URL from the repository's devDependency. It changes no
@@ -25,6 +33,7 @@ import { pathToFileURL } from "node:url";
 import { builtinServerConfig } from "../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
 import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import {
+  builtinRowInput,
   EXPANSION_BUILTINS,
   EXPANSION_CASES,
   OPTION_FIELD_CASES,
@@ -67,69 +76,39 @@ const SERVER_NAME = "plugin_demo_stub";
 
 const SERVER_URL = "https://mcp.example.test";
 
+/** The fields whose values Pi resolves when it connects. */
+type PiResolvedField = Extract<ExpansionField, "env" | "env-builtin" | "headers">;
+
 /** How one field sits in a Claude server object, and how to read it back from Pi's config. */
 interface FieldShape {
   readonly server: (value: string) => Record<string, unknown>;
   readonly written: (config: Readonly<Record<string, unknown>>) => unknown;
-  /** Whether Pi resolves the field's value when it connects. */
-  readonly secret: boolean;
 }
 
 function member(value: unknown, key: string): unknown {
   return typeof value === "object" && value !== null ? Reflect.get(value, key) : undefined;
 }
 
-const FIELD_SHAPES: Readonly<Record<ExpansionField, FieldShape>> = {
-  command: {
-    server: (value) => ({ command: value }),
-    written: (config) => config.command,
-    secret: false,
-  },
-  args: {
-    server: (value) => ({ command: "server", args: [value] }),
-    written: (config) => member(config.args, "0"),
-    secret: false,
-  },
+const FIELD_SHAPES: Readonly<Record<PiResolvedField, FieldShape>> = {
   env: {
     server: (value) => ({ command: "server", env: { VALUE: value } }),
     written: (config) => member(config.env, "VALUE"),
-    secret: true,
   },
   "env-builtin": {
     server: (value) => ({ command: "server", env: { CLAUDE_PLUGIN_ROOT: value } }),
     written: (config) => member(config.env, "CLAUDE_PLUGIN_ROOT"),
-    secret: true,
-  },
-  url: {
-    server: (value) => ({ type: "http", url: value }),
-    written: (config) => config.url,
-    secret: false,
   },
   headers: {
     server: (value) => ({ type: "http", url: SERVER_URL, headers: { Value: value } }),
     written: (config) => member(config.headers, "Value"),
-    secret: true,
-  },
-  "oauth.clientId": {
-    server: (value) => ({ type: "http", url: SERVER_URL, oauth: { clientId: value } }),
-    written: (config) => member(config.oauth, "clientId"),
-    secret: false,
-  },
-  "oauth.scope": {
-    server: (value) => ({ type: "http", url: SERVER_URL, oauth: { scopes: value } }),
-    written: (config) => member(config.oauth, "scope"),
-    secret: false,
-  },
-  "oauth.authServerMetadataUrl": {
-    server: (value) => ({
-      type: "http",
-      url: SERVER_URL,
-      oauth: { authServerMetadataUrl: value },
-    }),
-    written: (config) => member(config.oauth, "authServerMetadataUrl"),
-    secret: false,
   },
 };
+
+function isPiResolved<T extends { readonly field: ExpansionField }>(
+  row: T,
+): row is T & { readonly field: PiResolvedField } {
+  return Object.hasOwn(FIELD_SHAPES, row.field);
+}
 
 // The built-in path registers per session, so `projectDir` is the session's
 // working directory at both scopes (P2-DC-03).
@@ -153,7 +132,7 @@ function sentinelEnvironment(raw: string): Environment {
   return environment;
 }
 
-/** Pi's value for one written secret: resolved under `env`, then under sentinels for `raw`'s names. */
+/** Pi's value for one written field value: resolved under `env`, then under sentinels for `raw`'s names. */
 function piResolved(written: string, raw: string, env: Environment): readonly string[] {
   return [
     piConfigValues.resolveConfigValueOrThrow(written, "conformance value", env),
@@ -165,21 +144,8 @@ function piResolved(written: string, raw: string, env: Environment): readonly st
   ];
 }
 
-for (const row of EXPANSION_CASES.filter((candidate) => !FIELD_SHAPES[candidate.field].secret)) {
-  test(`BLT-02: ${row.title} is written as Claude Code's value`, () => {
-    // arrange
-    const shape = FIELD_SHAPES[row.field];
-
-    // act
-    const written = shape.written(builtinConfig(shape.server(row.raw), row.runtimeEnv));
-
-    // assert
-    assert.strictEqual(written, row.claudeOutput);
-  });
-}
-
-for (const row of EXPANSION_CASES.filter((candidate) => FIELD_SHAPES[candidate.field].secret)) {
-  test(`BLT-02: ${row.title} comes out of Pi's resolver as Claude Code's value`, () => {
+for (const row of EXPANSION_CASES.filter(isPiResolved)) {
+  test(`BLT-02: ${builtinRowInput(row)} comes out of Pi's resolver as Claude Code's value ${JSON.stringify(row.claudeOutput)}`, () => {
     // arrange
     const shape = FIELD_SHAPES[row.field];
 
@@ -304,27 +270,16 @@ function optionContext(value: string): McpSubstitutionContext {
   return { ...EXPANSION_BUILTINS, env: {}, options };
 }
 
-function optionWritten(row: (typeof OPTION_FIELD_CASES)[number]): unknown {
+function optionWritten(
+  row: (typeof OPTION_FIELD_CASES)[number] & { readonly field: PiResolvedField },
+): unknown {
   const shape = FIELD_SHAPES[row.field];
   const config = builtinServerConfig(shape.server(row.raw), optionContext(row.value), undefined);
   assert.ok(config !== undefined, `no config for ${row.raw}`);
   return shape.written({ ...config });
 }
 
-for (const row of OPTION_FIELD_CASES.filter((candidate) => !FIELD_SHAPES[candidate.field].secret)) {
-  test(`D-PG10-12: ${row.title} is written as Claude Code's value`, () => {
-    // arrange
-    const expectedWritten = row.claudeOutput;
-
-    // act
-    const written = optionWritten(row);
-
-    // assert
-    assert.strictEqual(written, expectedWritten);
-  });
-}
-
-for (const row of OPTION_FIELD_CASES.filter((candidate) => FIELD_SHAPES[candidate.field].secret)) {
+for (const row of OPTION_FIELD_CASES.filter(isPiResolved)) {
   test(`D-PG10-12: ${row.title} comes out of Pi's resolver as Claude Code's value`, () => {
     // arrange
     const environment = { HOME: "/leaked" };

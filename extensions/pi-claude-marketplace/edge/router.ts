@@ -7,7 +7,9 @@
 // `architecture/notify-chokepoint` forbids direct notify on the Pi context
 // outside of shared/notification-dispatch.ts.
 //
-// `TOP_LEVEL_USAGE` is a PRD-stable string. `MARKETPLACE_USAGE` is built from
+// `topLevelUsage` builds the PRD-stable top-level usage for the host: it lists
+// `reload` only where the host takes later commands (RELOADCMD-D1), and
+// without it its bytes are the PRD string. `MARKETPLACE_USAGE` is built from
 // one signature row per marketplace verb (USE-01). The same row also builds
 // that verb's own usage line through `marketplaceUsage`, and the rows supply
 // the marketplace spelling list in both help texts and the `MarketplaceVerb`
@@ -24,11 +26,13 @@
 // in. The router hands that run to whichever handler it dispatches.
 
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
+import { acceptsLaterCommands } from "../shared/session-host.ts";
 
 import { tokenizeArgs } from "./args.ts";
 
 import type { ExtensionCommandContext } from "../platform/pi-api.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
+import type { SessionHost } from "../shared/session-host.ts";
 
 /**
  * One subcommand handler: the argument text after the subcommand, the Pi
@@ -76,6 +80,8 @@ export interface SubcommandHandlers {
   marketplaceNoautoupdate: SubcommandHandler;
   // Interactive SelectList browser; non-TUI modes receive a refusal.
   browse: SubcommandHandler;
+  // RELOADCMD-D1: Pi's reload where the host takes later commands.
+  reload: SubcommandHandler;
   help: SubcommandHandler;
 }
 
@@ -101,6 +107,7 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "disable",
   "import",
   "browse",
+  "reload",
   "marketplace",
   "market",
   "help",
@@ -146,26 +153,44 @@ const MARKETPLACE_SPELLINGS = MARKETPLACE_VERB_ROWS.flatMap(([verb, { alias }]) 
   alias === undefined ? [verb] : [verb, alias],
 ).join("|");
 
-export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
-  "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
-  "  install <plugin>@<marketplace> [--scope user|project]\n" +
-  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
-  "  prune [--scope user|project] [--dry-run]\n" +
-  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
-  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
-  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
-  "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
-  "  info <plugin>@<marketplace> [--scope user|project]\n" +
-  "  pending [--scope user|project]\n" +
-  "  apply [--scope user|project]\n" +
-  "  autoapply [on|off] [--scope user|project] [--local]\n" +
-  "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
-  "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
-  "  import [--scope user|project]\n" +
-  "  browse\n" +
-  `  marketplace <${MARKETPLACE_SPELLINGS}> ...   (alias: market)\n` +
-  "  help [marketplace]";
+// RELOADCMD-D1: the top-level spellings and lines before `reload`, which a
+// host that takes no later commands leaves out of its usage.
+const SPELLINGS_BEFORE_RELOAD =
+  "bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse";
+
+const USAGE_LINES_BEFORE_RELOAD = [
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope",
+  "  install <plugin>@<marketplace> [--scope user|project]",
+  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]",
+  "  prune [--scope user|project] [--dry-run]",
+  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+  "  list [<marketplace>] [--scope user|project]   (alias: ls)",
+  "  info <plugin>@<marketplace> [--scope user|project]",
+  "  pending [--scope user|project]",
+  "  apply [--scope user|project]",
+  "  autoapply [on|off] [--scope user|project] [--local]",
+  "  enable <plugin>@<marketplace> [--scope user|project] [--local]",
+  "  disable <plugin>@<marketplace> [--scope user|project] [--local]",
+  "  import [--scope user|project]",
+  "  browse",
+];
+
+const RELOAD_USAGE_LINE =
+  "  reload                                             activate pending plugin changes in the current session";
+
+/** The top-level usage for `host`, with `reload` only where the host takes later commands (RELOADCMD-D1). */
+export function topLevelUsage(host: SessionHost): string {
+  const reload = acceptsLaterCommands(host);
+  return [
+    `Usage: /claude:plugin <${SPELLINGS_BEFORE_RELOAD}${reload ? "|reload" : ""}|marketplace|market|help> ...`,
+    ...USAGE_LINES_BEFORE_RELOAD,
+    ...(reload ? [RELOAD_USAGE_LINE] : []),
+    `  marketplace <${MARKETPLACE_SPELLINGS}> ...   (alias: market)`,
+    "  help [marketplace]",
+  ].join("\n");
+}
 
 /** The usage line of one marketplace verb, built from its signature row. */
 export function marketplaceUsage(verb: MarketplaceVerb): string {
@@ -224,7 +249,7 @@ export async function routeClaudePlugin(
   ctx: ExtensionCommandContext,
   run: NotificationRun,
 ): Promise<void> {
-  const route = typeof args === "string" ? selectClaudePluginRoute(args, handlers) : args;
+  const route = typeof args === "string" ? selectClaudePluginRoute(args, handlers, ctx) : args;
   if ("handler" in route) {
     return route.handler(route.args, ctx, run);
   }
@@ -258,12 +283,18 @@ const TOP_LEVEL_VERB_ROUTES: ReadonlyMap<string, VerbRoute> = new Map([
   ["disable", { commandId: "plugin disable", handler: "disable" }],
   ["import", { commandId: "plugin import", handler: "import" }],
   ["browse", { commandId: "plugin browse", handler: "browse" }],
+  ["reload", { commandId: "plugin reload", handler: "reload" }],
 ]);
 
-/** Selects canonical identity and dispatch together, preserving handler arguments. */
+/**
+ * Selects canonical identity and dispatch together, preserving handler
+ * arguments. Only the unknown-subcommand arm reads `host`, for its usage
+ * (RELOADCMD-D1).
+ */
 export function selectClaudePluginRoute(
   args: string,
   handlers: SubcommandHandlers,
+  host: SessionHost,
 ): SelectedCommandRoute {
   const [head, rest] = peelToken(args);
 
@@ -292,7 +323,7 @@ export function selectClaudePluginRoute(
       return {
         commandId: "plugin",
         message: `Unknown subcommand: "${head}".`,
-        usage: TOP_LEVEL_USAGE,
+        usage: topLevelUsage(host),
       };
   }
 }

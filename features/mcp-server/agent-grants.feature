@@ -559,14 +559,12 @@ Feature: MCP server agent grants
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
     Given pi runs with the scripted model and pi-subagents as a pi-subagents background child
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
     Then the project scope has no installed plugins
 

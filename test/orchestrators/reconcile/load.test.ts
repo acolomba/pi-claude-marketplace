@@ -788,6 +788,7 @@ test("AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run",
   const attempted: string[] = [];
   const ctx: LoadReconcileOptions["ctx"] = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify: (message: string): never => {
         attempted.push(message);

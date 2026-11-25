@@ -14,10 +14,13 @@
  * revision a scenario published to a git plugin repository, the version Claude
  * Code records for a git plugin that declares none, and a commit token such as
  * `{ghp commit 1}` for that revision's full 40-hex commit; commit dates change
- * every run, so the sha does too. A commit starts with its revision's digits,
- * so a result is projected through the commit tokens first. An error token
- * such as `{mcp-adapter.json read error}` stands for the message this Node
- * gives a file call that a step set up to fail, which differs between Node
+ * every run, so the sha does too. A release tag that a scenario put on a git
+ * marketplace's commit has the same two tokens, with the tag in place of the
+ * revision's number: `{tools revision formatter--v1.0.0}` and
+ * `{tools commit formatter--v1.0.0}`. A commit starts with its revision's
+ * digits, so a result is projected through the commit tokens first. An error
+ * token such as `{mcp-adapter.json read error}` stands for the message this
+ * Node gives a file call that a step set up to fail, which differs between Node
  * majors; the step reads it back by making the same call. An error token also
  * stands for its message with each quoted path cut to its last segment, which
  * is how import and apply show a redacted cause. Only
@@ -42,9 +45,15 @@ export interface RunTokens {
   readonly gitHost: string;
   /** When the scenario started, in milliseconds since the epoch. */
   readonly scenarioStartedAt: number;
-  /** The version each revision token, such as `{ghp revision 1}`, stands for. */
+  /**
+   * The version each revision token, such as `{ghp revision 1}` or
+   * `{tools revision formatter--v1.0.0}`, stands for.
+   */
   readonly revisions: ReadonlyMap<string, string>;
-  /** The full commit each commit token, such as `{ghp commit 1}`, stands for. */
+  /**
+   * The full commit each commit token, such as `{ghp commit 1}` or
+   * `{tools commit formatter--v1.0.0}`, stands for.
+   */
   readonly commits: ReadonlyMap<string, string>;
   /** The error message each error token, such as `{mcp-adapter.json read error}`, stands for. */
   readonly errors: ReadonlyMap<string, string>;

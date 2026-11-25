@@ -121,7 +121,7 @@ Feature: Hook session
       | pre  | PreCompact | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |
@@ -167,7 +167,7 @@ Feature: Hook session
       | prompt | UserPromptSubmit |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has named the session "Release prep"
     Given the scripted model plays these steps:
       | reply |
@@ -276,7 +276,7 @@ Feature: Hook session
       | post-auto   | PostCompact | auto    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |
@@ -303,7 +303,7 @@ Feature: Hook session
       | post-other  | PostCompact | threshold, auto  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |
@@ -563,3 +563,49 @@ Feature: Hook session
     Then the hooks record these runs:
       | event        | session | source  | model  | cwd           | transcript path | arguments  | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | SessionStart | first   | startup | faux-1 | {project dir} | {session file}  | on-startup | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+
+  Scenario: A user plugin's session start hook leaves a project with no .pi directory empty (WR-05)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher |
+      | start | SessionStart | *       |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    When the user starts a new pi session with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | source | model  | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_ENV_FILE                                                     | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionStart | first   | clear  | faux-1 | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | {agent dir}/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+    Then the project directory is empty
+
+  Scenario: A plugin that autoapply installs as pi starts in json mode runs its session start hooks without running the others twice
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | early | 1.0.0   |
+      | late  | 1.0.0   |
+    Given the published plugin "early" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name        | event        | matcher |
+      | early-start | SessionStart | *       |
+    Given the published plugin "late" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event        | matcher |
+      | late-start | SessionStart | *       |
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install early@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | early  |         |
+      | fixtures    | late   |         |
+    When the user runs "/claude:plugin list" in pi's json mode with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | source  | model  | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                         | CLAUDE_PLUGIN_DATA                                          | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionStart | first   | startup | faux-1 | {project dir} |                 | early-start | {project dir}      | {home}/marketplaces/fixtures/plugins/early | {project dir}/.pi/pi-claude-marketplace/data/fixtures/early | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+      | SessionStart | first   | startup | faux-1 | {project dir} |                 | late-start  | {project dir}      | {home}/marketplaces/fixtures/plugins/late  | {project dir}/.pi/pi-claude-marketplace/data/fixtures/late  | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |

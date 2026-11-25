@@ -38,7 +38,7 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
-const CTX: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
+const CTX: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
 
 /** The command's authentication collaborators, network disabled. */
 function auth() {

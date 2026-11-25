@@ -63,7 +63,11 @@ function createFakeSeam(options: FakeSeamOptions = {}): FakeSeam {
 }
 
 function auth(): NonNullable<MarketplaceTagProbeOptions["auth"]> {
-  const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
+  const ctx: NotificationContext = {
+    mode: "tui",
+    hasUI: true,
+    ui: { notify: () => undefined },
+  };
   const credentialOps: CredentialOps = {
     approve: () => Promise.resolve(),
     fill: () => Promise.resolve(null),

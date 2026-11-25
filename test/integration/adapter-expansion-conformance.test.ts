@@ -1,5 +1,6 @@
 // test/integration/adapter-expansion-conformance.test.ts
 //
+// Peer conformance (ITSCOPE-01) against pi-mcp-adapter's own expansion code.
 // AVAR-03: every value this extension writes into a plugin MCP entry comes out
 // of pi-mcp-adapter as Claude Code's value. Each row of the shared expansion
 // table runs through the adapter's real call chain for its field, with
@@ -7,7 +8,10 @@
 // process. A bounded-exhaustive property runs short adversarial values through
 // the real `interpolateEnvVars`, and a drift guard pins the adapter code the
 // escape relies on. AVAR-05: no deny-listed credential reaches the adapter's
-// url or headers output.
+// url or headers output. The scenarios of
+// `features/mcp-server/configuration.feature` and
+// `features/mcp-server/options.feature` hold a few of these values; the table,
+// the property, and the drift guard need the adapter's own functions.
 //
 // pi-mcp-adapter is an optional peer. The test imports its compiled `dist/`
 // modules in place from the declared floor that

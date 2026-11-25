@@ -601,6 +601,17 @@ function stripGitSuffix(url: string): string {
 }
 
 /**
+ * D-76-01 / D-SEED-01: the identity form of a url that carries no `#<ref>`
+ * fragment: its trailing slashes stripped, then one trailing `.git`. This is
+ * the step `stripUrlDecorations` applies to a url's path half. Seeding applies
+ * it to a git-subdir url, which keeps the form its manifest wrote, to compare
+ * that url with a marketplace's identity.
+ */
+export function urlPathIdentity(url: string): string {
+  return stripGitSuffix(stripTrailingSlashes(url));
+}
+
+/**
  * Split an optional `#<ref>` fragment off a URL. SP-5: a fragment that is empty
  * once its own trailing slashes are stripped is dropped. The path half is
  * returned untouched, because whether a path's trailing slashes come off before
@@ -647,7 +658,7 @@ export function stripSlashAndFragment(input: string): { base: string; ref: strin
  */
 function stripUrlDecorations(input: string): { base: string; ref: string | undefined } {
   const { path, ref } = splitUrlFragment(input);
-  return { base: stripGitSuffix(stripTrailingSlashes(path)), ref };
+  return { base: urlPathIdentity(path), ref };
 }
 
 /**

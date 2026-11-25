@@ -1,3 +1,16 @@
+// test/integration/workflow-kind-inversion.test.ts
+//
+// Three internal cases (ITSCOPE-01) of the reconcile over a plugin with a
+// workflow. RECON-05: two applies over a declared, enabled, recorded plugin
+// write neither its saved workflow nor state.json (writes that must not
+// happen, read from backdated modification times). D-10: a record that a
+// release without workflow support wrote, whose supported set has grown, gets
+// its saved workflow written again. WCONV-01 / WCONV-02: a record from a build
+// in which the workflows kind was invisible is left alone by a load, brought
+// up to date by one apply, and left alone by the next apply. What a user sees
+// of the install and the saved workflow is in
+// `features/workflow/storage.feature`.
+
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -29,16 +42,6 @@ const installPlugin = createInstallOperation(
   createHooksRouting(createHooksRuntime(), { readHooksJson }),
   createCompletionCache(),
 );
-
-// WINV-02 install-level proof: a plugin carrying a `workflows/` directory
-// installs on a plain `install`, with no partial opt-in, and renders the clean
-// installed row. WBRG-01 and WPTH-01 pin the other half -- the plugin's
-// workflow script materializes as an envelope at the scope's canonical saved
-// path, carrying the script text verbatim.
-//
-// The case asserts both halves after one `installPlugin` call: WLIF-01 has the
-// install drive the bridge, so the envelope lands in the project's saved
-// directory and nothing is written under the user's workflow home.
 
 interface NotifyRecord {
   message: string;
@@ -167,77 +170,6 @@ async function seedWorkflowPlugin(opts: {
 
   return { pluginRoot, manifestPath };
 }
-
-test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag, and the bridge materializes its script as an envelope", async () => {
-  await withHermeticHome(async (home) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "workflow-inversion-"));
-    try {
-      // arrange
-      await seedWorkflowPlugin({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-      });
-      const { ctx, notifications } = makeCtx();
-
-      // act
-      await installPlugin({
-        ctx,
-        run: runWithNothingLoaded(),
-        scope: "project",
-        cwd,
-        marketplace: "mp",
-        plugin: "hello",
-      });
-
-      // assert -- WINV-02: the plain install succeeds on the clean installed row
-      const summary = notifications.map((n) => n.message).join("\n");
-      assert.ok(summary.includes("(installed)"), `expected (installed) row; got: ${summary}`);
-      assert.ok(!summary.includes("(failed)"), `expected no failure row; got: ${summary}`);
-      assert.ok(
-        !summary.includes("(partially-available)"),
-        `expected no partially-available token; got: ${summary}`,
-      );
-      assert.ok(!summary.includes("--partial"), `expected no partial-flag hint; got: ${summary}`);
-      assert.ok(!summary.includes("{workflows}"), `expected no reason brace; got: ${summary}`);
-
-      // assert -- WINV-01 precondition: the fixture must actually engage the
-      // inverted kind. This is what keeps the envelope assertion below from
-      // being green for the wrong reason: this block proves the resolver
-      // admitted the kind, and that one proves the bridge acted on it.
-      const persisted = await loadState(locationsFor("project", cwd).extensionRoot);
-      const record = persisted.marketplaces["mp"]?.plugins["hello"];
-      assert.ok(record, "expected an installed record for hello");
-      assert.ok(
-        record.compatibility.supported.includes("workflows"),
-        `fixture must resolve workflows supported; got: ${record.compatibility.supported.join(" / ")}`,
-      );
-      assert.ok(
-        !record.compatibility.unsupported.includes("workflows"),
-        `workflows must not be recorded unsupported; got: ${record.compatibility.unsupported.join(" / ")}`,
-      );
-
-      // assert -- WLIF-01 / WBRG-01 / D-LOC-01: the install itself drives
-      // the bridge, so the script has materialized as an envelope in the
-      // project's own saved directory, and nothing was written under the
-      // user's workflow home. The whole object is compared so a missing or
-      // extra field fails the case; the byte-level key order is pinned by the
-      // staging module's own owner test.
-      await assert.rejects(stat(path.join(home, ".pi", "workflows")), { code: "ENOENT" });
-      const envelopePath = path.join(cwd, ".pi", "workflows", "saved", "hello:greet.json");
-
-      assert.deepStrictEqual(JSON.parse(await readFile(envelopePath, "utf8")), {
-        name: "hello:greet",
-        description: "greets",
-        script: 'export const meta = { name: "greet", description: "greets" };\n',
-      });
-      // WLIF-01: the record names exactly the envelope the install placed. It
-      // is the only inventory of it that survives the process.
-      assert.deepStrictEqual(record.resources.workflows, ["hello:greet"]);
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
 
 // RECON-05: `apply` does not re-materialize workflow envelopes
 //

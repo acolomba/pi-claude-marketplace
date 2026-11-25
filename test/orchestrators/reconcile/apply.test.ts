@@ -3064,6 +3064,7 @@ describe("applyReconcile", () => {
       const capture = createJsonCapture();
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -3180,6 +3181,7 @@ describe("applyReconcile", () => {
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },
@@ -3789,6 +3791,7 @@ describe("applyReconcile", () => {
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },

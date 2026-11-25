@@ -361,6 +361,197 @@ describe("planReconcile", () => {
     });
   });
 
+  for (const scope of ["project", "user"] as const) {
+    test(`plans nothing in the ${scope} scope for a config that declares every recorded marketplace and plugin, a non-installable record included`, () => {
+      // arrange
+      const merged = mergedConfig(
+        { "mp-github": { source: "acme/tools" }, "mp-path": { source: "./mp-path-local" } },
+        { "code-reviewer@mp-path": {}, "formatter@mp-github": {}, "soft-degraded@mp-path": {} },
+      );
+      const state = stateWith({
+        "mp-path": marketplaceRecord("mp-path", pathSource("./mp-path-local"), {
+          "code-reviewer": pluginRecord(true),
+          "soft-degraded": pluginRecord(true, {
+            installable: false,
+            skills: [],
+            unsupported: ["agents"],
+          }),
+        }),
+        "mp-github": marketplaceRecord("mp-github", githubSource("acme/tools"), {
+          formatter: pluginRecord(true),
+        }),
+      });
+
+      // act
+      const plan = planReconcile(merged, state, scope);
+
+      // assert
+      assert.deepStrictEqual(plan, emptyReconcilePlan(scope));
+    });
+  }
+
+  test("plans nothing for a declared alias whose plugin the canonical recorded marketplace holds", () => {
+    // arrange
+    const merged = mergedConfig(
+      { "declared-name": { source: "./local-marketplace" } },
+      { "formatter@declared-name": {} },
+    );
+    const state = stateWith({
+      "canonical-name": marketplaceRecord("canonical-name", pathSource("./local-marketplace"), {
+        formatter: pluginRecord(true),
+      }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("D-09-14: the same unsatisfied declaration plans the same dependency install again", () => {
+    // arrange
+    const merged = mergedConfig({ mp: { source: "acme/mp" } }, { "app@mp": {} });
+    const state = stateWith({
+      mp: marketplaceRecord("mp", githubSource("acme/mp"), { app: pluginRecord(true) }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [{ dependent: "app@mp", dependency: "vault@mp", kind: "missing" }],
+    };
+    const expectedPlan = {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [
+        {
+          scope: "project",
+          plugin: "app",
+          marketplace: "mp",
+          dependency: "vault@mp",
+          kind: "missing",
+        },
+      ],
+      pluginsToDependencyInstall: [
+        {
+          scope: "project",
+          plugin: "vault",
+          marketplace: "mp",
+          ranges: [],
+          requiredBy: "app@mp",
+          declarers: ["app@mp"],
+        },
+      ],
+      sourceMismatches: [],
+    };
+
+    // act
+    const plans = [
+      planReconcile(merged, state, "project", verdict),
+      planReconcile(merged, state, "project", verdict),
+    ];
+
+    // assert
+    assert.deepStrictEqual(plans, [expectedPlan, expectedPlan]);
+  });
+
+  test("FIX-02: a base layer without the local declarations and the local layer plan nothing for their records", () => {
+    // arrange
+    const merged = mergedConfig(
+      { "mp-base": { source: "./mp-base" } },
+      { "bp@mp-base": {} },
+      { "mp-local": { source: "./mp-local" } },
+      { "lp@mp-local": {}, "lbp@mp-base": {} },
+    );
+    const state = stateWith({
+      "mp-local": marketplaceRecord("mp-local", pathSource("./mp-local"), {
+        lp: pluginRecord(true),
+        dep: pluginRecord(true, { provenance: "dependency" }),
+      }),
+      "mp-base": marketplaceRecord("mp-base", pathSource("./mp-base"), {
+        bp: pluginRecord(true),
+        lbp: pluginRecord(true),
+      }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("LAYER-01: a marketplace both layers declare with its recorded source plans nothing", () => {
+    // arrange
+    const merged = mergedConfig(
+      { tools: { source: "./tools", autoupdate: true } },
+      { "formatter@tools": {} },
+      { tools: { source: "./tools" } },
+    );
+    const state = stateWith({
+      tools: marketplaceRecord("tools", pathSource("./tools"), { formatter: pluginRecord(true) }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("LAYER-09: a disabled record under a base enabled false and a local entry without enabled plans nothing", () => {
+    // arrange
+    const merged = mergedConfig(
+      { tools: { source: "./tools" } },
+      { "formatter@tools": { enabled: false } },
+      {},
+      { "formatter@tools": {} },
+    );
+    const state = stateWith({
+      tools: marketplaceRecord("tools", pathSource("./tools"), { formatter: pluginRecord(false) }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+
+  test("LAYER-09: an enabled record under a base enabled false and a local entry without enabled plans a disable", () => {
+    // arrange
+    const merged = mergedConfig(
+      { tools: { source: "./tools" } },
+      { "formatter@tools": { enabled: false } },
+      {},
+      { "formatter@tools": {} },
+    );
+    const state = stateWith({
+      tools: marketplaceRecord("tools", pathSource("./tools"), { formatter: pluginRecord(true) }),
+    });
+
+    // act
+    const plan = planReconcile(merged, state, "project");
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [{ scope: "project", plugin: "formatter", marketplace: "tools" }],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
+      sourceMismatches: [],
+    });
+  });
+
   test("preserves base and local marketplace declaration order and provenance", () => {
     // arrange
     const merged = mergedConfig(

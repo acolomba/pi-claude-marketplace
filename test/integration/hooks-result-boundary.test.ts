@@ -1,3 +1,15 @@
+// test/integration/hooks-result-boundary.test.ts
+//
+// Peer conformance (ITSCOPE-01) against Pi's own `ExtensionRunner` from the
+// installed `@earendil-works/pi-coding-agent`. Each case puts the patch that
+// `adaptToolResultResult` returns for a PostToolUse hook into Pi's real
+// `emitToolResult` and reads what Pi returns and what a later handler gets
+// (D-PG2-06). A replacement clears the stale `details`,
+// `structuredContent`, and image blocks; block feedback keeps
+// `structuredContent` and `isError`; an echoed file result changes nothing.
+// The scenarios of `features/hook/tool-use.feature` see only what the model
+// gets, not what a later Pi handler reads.
+
 import assert from "node:assert/strict";
 import test from "node:test";
 

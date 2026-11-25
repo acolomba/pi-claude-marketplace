@@ -15,7 +15,6 @@ import type {
   CacheEntry,
   PendingFollowUpContext,
   PendingPromptContext,
-  PendingSessionStartContext,
   RoutingEntry,
 } from "./routing-state.ts";
 import type { StreamText } from "./stream-text.ts";
@@ -148,9 +147,6 @@ export interface HooksRuntime {
    * scopes, or `undefined` when none or two different servers claim it.
    */
   readonly mcpServerFor: (tool: McpToolIdentity) => HookMcpServer | undefined;
-  readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
-  readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
-  readonly drainPendingSessionStartContext: () => readonly PendingSessionStartContext[];
   readonly appendPendingPromptContext: (entry: PendingPromptContext) => void;
   readonly pendingPromptContextEntries: () => readonly PendingPromptContext[];
   readonly drainPendingPromptContext: () => readonly PendingPromptContext[];
@@ -321,9 +317,9 @@ export function createHooksRuntime(): HooksRuntime {
   let generation = 0;
   let trustedProject: string | undefined;
   const mcpServers = new Map<Scope, readonly McpServerEntry[]>();
-  // D-CF5-13: the SessionStart context waits for the next turn of the
-  // session; a prompt's context belongs to the turn of that prompt.
-  const pendingSessionStartContext = createContextBuffer<PendingSessionStartContext>();
+  // D-CF5-13: a prompt's context belongs to the turn of that prompt. A
+  // SessionStart context waits in no buffer: the adapter sends it into the
+  // session at once (HKRL-01).
   const pendingPromptContext = createContextBuffer<PendingPromptContext>();
   // A queued follow-up's context waits, in queue order, for the turn end
   // after which the agent reads that follow-up. Pi reads its follow-ups in
@@ -416,9 +412,6 @@ export function createHooksRuntime(): HooksRuntime {
       return findMcpServer([...mcpServers.values()].flat(), tool);
     },
 
-    appendPendingSessionStartContext: pendingSessionStartContext.append,
-    pendingSessionStartContextEntries: pendingSessionStartContext.entries,
-    drainPendingSessionStartContext: pendingSessionStartContext.drain,
     appendPendingPromptContext: pendingPromptContext.append,
     pendingPromptContextEntries: pendingPromptContext.entries,
     drainPendingPromptContext: pendingPromptContext.drain,
@@ -431,7 +424,6 @@ export function createHooksRuntime(): HooksRuntime {
     // D-CF5-13: a bridge load empties every buffer, so no context reaches a
     // later session.
     preparePendingContextForRegistration(): void {
-      pendingSessionStartContext.drain();
       pendingPromptContext.drain();
       pendingFollowUpContext.drain();
     },

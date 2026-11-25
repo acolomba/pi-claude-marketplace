@@ -35,7 +35,8 @@ jq -c -e -s --arg invocation "$invocation_id" '
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
        "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
-       "usage-error", "usage-info", "autoapply-status", "internal-error"] | index($kind) != null;
+       "usage-error", "usage-info", "autoapply-status", "reload-started",
+       "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -82,7 +83,8 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
        "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
-       "usage-error", "usage-info", "autoapply-status", "internal-error"] | index($kind) != null;
+       "usage-error", "usage-info", "autoapply-status", "reload-started",
+       "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -98,7 +100,7 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
 ' "$input_file") || exit $?
 ```
 
-An outcome reports a command result. The thirteen kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
+An outcome reports a command result. The fifteen kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
 
 Unknown kinds remain in the selected data but cannot establish an outcome. Additional fields are preserved. An unfamiliar severity, a nonboolean `needsReload`, or an unsupported schema version fails with `Unsupported command envelope`. These checks cover the fields used here. They do not replace validation of the full payload against the schema.
 
@@ -144,7 +146,7 @@ After preparation, combine every selected `needsReload` with boolean OR. This in
 printf '%s\n' "$command_entries" | jq 'any(.[]; .needsReload)'
 ```
 
-The output is the JSON boolean `true` or `false`. This example reports reload needs even for failed commands. Use the exit-status example to judge success.
+The output is the JSON boolean `true` or `false`. This example reports reload needs even for failed commands. Use the exit-status example to judge success. An RPC client that reads `true` sends `/claude:plugin reload`, because RPC has no `/reload` (RELOADCMD-D1).
 
 ## Keep partial results
 
@@ -171,13 +173,13 @@ Every kind includes these fields. The `internal-error` kind narrows origin and s
 
 <!-- fields: common-fields -->
 
-| Field path      | Type              | Presence | Meaning                                                |
-| --------------- | ----------------- | -------- | ------------------------------------------------------ |
-| `schemaVersion` | integer `1`       | required | Payload compatibility version.                         |
-| `kind`          | string            | required | Payload kind from the twenty-four kind sections below. |
-| `origin`        | [Origin](#origin) | required | Source of this notification.                           |
-| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.    |
-| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.              |
+| Field path      | Type              | Presence | Meaning                                                                                                                                           |
+| --------------- | ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                                                                                                                    |
+| `kind`          | string            | required | Payload kind from the twenty-five kind sections below.                                                                                            |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                                                                                                                      |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.                                                                                               |
+| `needsReload`   | boolean           | required | Whether completed changes need a reload: `/reload` in Pi's terminal, `/claude:plugin reload` over RPC. A one-shot run loads them at its next run. |
 
 <!-- /fields -->
 
@@ -588,6 +590,16 @@ One notice that a plugin's hook shows the user: a hook's `systemMessage` as `<Ev
 | Field path | Type   | Presence | Meaning                                                                                                                                                                                              |
 | ---------- | ------ | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `text`     | string | required | Notice text without terminal escapes or control characters other than line breaks and tabs, at most 2,000 characters before a `… (+N chars)` marker. This is distinct from the envelope's `summary`. |
+
+<!-- /fields -->
+
+#### reload-started
+
+What `/claude:plugin reload` reports right before Pi reloads (RELOADCMD-D1). Pi makes the command's context stale once it reloads, so the command cannot report after the reload. Pi answers the RPC prompt once the reload is done, and a reload that fails after it started reaches the client as Pi's `extension_error`. Its origin is `command`, severity is always `info`, and `needsReload` is always `false`. A one-shot run and a busy session refuse the command with a `usage-error` instead.
+
+<!-- fields: kind:reload-started -->
+
+<!-- use: common-fields -->
 
 <!-- /fields -->
 

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { SessionManager } from "@earendil-works/pi-coding-agent";
+
 import {
   adaptInputResult,
   adaptObservationResultForEvent,
@@ -23,7 +25,9 @@ import type {
   HookAdapterContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { SessionStartSource } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
   AgentMessage,
   ExtensionAPI,
@@ -103,6 +107,158 @@ function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
       sent.push({ message, options });
     },
   } as ExtensionAPI;
+}
+
+/**
+ * The hidden message that carries SessionStart hook values to the model,
+ * with the values in its details (HKRL-01, HKRL-02), sent with `options`
+ * (HKRL-03).
+ */
+function sessionStartContextMessage(
+  values: readonly string[],
+  options: unknown = { triggerTurn: false },
+): SentMessage {
+  return {
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [sessionStartPart(values)],
+      display: false,
+      details: { event: "SessionStart", values },
+    },
+    options,
+  };
+}
+
+// The labeled text part of a SessionStart context message.
+function sessionStartPart(values: readonly string[]): {
+  readonly type: "text";
+  readonly text: string;
+} {
+  return { type: "text", text: `SessionStart hook additional context: ${values.join("\n")}` };
+}
+
+/** What the SessionStart dispatch passes the adapter: its Claude event and every hook's value. */
+interface SessionStartDispatch {
+  readonly event: ClaudeSessionStartEvent;
+  readonly values: readonly string[];
+}
+
+// `nextCallReadsSteer` stands for the answer of the compaction leg's
+// delivery hint (HKRL-03).
+function sessionStartDispatch(
+  source: SessionStartSource,
+  values: readonly string[],
+  nextCallReadsSteer?: boolean,
+): SessionStartDispatch {
+  return {
+    event:
+      nextCallReadsSteer === undefined
+        ? { source }
+        : { source, nextCallReadsSteer: () => nextCallReadsSteer },
+    values,
+  };
+}
+
+type SessionAppend = (sessionManager: SessionManager) => void;
+
+// A print context whose session holds what `append` adds, as a resumed or
+// forked session holds its earlier conversation. Assigning keeps the
+// throwing `ui` getter, which a spread would read.
+function heldSession(append: SessionAppend): ExtensionContext {
+  const sessionManager = SessionManager.inMemory("/work", { id: "adapter-held-session" });
+  append(sessionManager);
+  return Object.assign(headlessContext("print"), { sessionManager });
+}
+
+// A print context whose session cannot be read, as after Pi replaced it.
+function unreadableSession(): ExtensionContext {
+  const sessionManager = Object.assign(
+    SessionManager.inMemory("/work", { id: "adapter-unreadable-session" }),
+    {
+      buildSessionProjection(): never {
+        throw new Error("session closed");
+      },
+    },
+  );
+  return Object.assign(headlessContext("print"), { sessionManager });
+}
+
+// A held custom message of `customType` with `content` and `details`; an
+// absent `details` stands for a message written before details existed.
+function heldMessage(
+  content: Parameters<SessionManager["appendCustomMessageEntry"]>[1],
+  details?: unknown,
+  customType = "claude-hook-additional-context",
+): SessionAppend {
+  return (sessionManager) => {
+    sessionManager.appendCustomMessageEntry(customType, content, false, details);
+  };
+}
+
+// A held SessionStart context message that carries `values` in its details.
+function heldDetails(values: readonly string[]): SessionAppend {
+  return heldMessage([sessionStartPart(values)], { event: "SessionStart", values });
+}
+
+// A held SessionStart context message with `values` in its details whose
+// text a context edit replaced with `text`, as a context-trimming extension
+// writes one at a turn end, in one text part or, with `asTextContent`, as
+// text content. Pi's projection keeps the details.
+function heldEdited(values: readonly string[], text: string, asTextContent = false): SessionAppend {
+  return (sessionManager) => {
+    const id = sessionManager.appendCustomMessageEntry(
+      "claude-hook-additional-context",
+      [sessionStartPart(values)],
+      false,
+      { event: "SessionStart", values },
+    );
+    sessionManager.appendContextEdit(id, {
+      content: asTextContent ? text : [{ type: "text", text }],
+    });
+  };
+}
+
+// A held SessionStart context message with `values` in its details, then a
+// prompt and a compaction that keeps the conversation from the held message
+// on (`keepsHeld`) or from the prompt on, which summarizes the message away.
+function heldBeforeCompaction(values: readonly string[], keepsHeld: boolean): SessionAppend {
+  return (sessionManager) => {
+    const heldId = sessionManager.appendCustomMessageEntry(
+      "claude-hook-additional-context",
+      [sessionStartPart(values)],
+      false,
+      { event: "SessionStart", values },
+    );
+    const promptId = sessionManager.appendMessage({ role: "user", content: "hello", timestamp: 0 });
+    sessionManager.appendCompaction("compaction summary", keepsHeld ? heldId : promptId, 100);
+  };
+}
+
+// The wrapper `context-cap.ts` gives a context saved to the file `path`.
+function savedOutput(path: string): string {
+  return [
+    "<persisted-output>",
+    `Output too large (11.7KB). Full output saved to: ${path}`,
+    "",
+    "Preview (first 2KB):",
+    "saved preview",
+    "...",
+    "</persisted-output>",
+  ].join("\n");
+}
+
+// Runs the SessionStart adapter for `start` over a session that holds what
+// `append` adds, with a fold whose context joins the values as the fold
+// builds it, and returns the messages it sends.
+function sendOverHeldSession(append: SessionAppend, start: SessionStartDispatch): SentMessage[] {
+  const sent: SentMessage[] = [];
+  adaptObservationResultForEvent(
+    { kind: "mutate", additionalContext: start.values.join("\n") },
+    "SessionStart",
+    { ...adapterContext(guardEntry()), ctx: heldSession(append), pi: createMessagePi(sent) },
+    start,
+  );
+  return sent;
 }
 
 describe("adaptToolCallResult", () => {
@@ -1459,7 +1615,31 @@ describe("adaptInputResult", () => {
         event: "UserPromptSubmit",
       },
     ]);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+  });
+
+  test("buffers a prompt context that no entry is attributed to under an empty provenance (D-CF5-13)", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "orphan context" },
+      { type: "input", text: "original prompt", source: "interactive" },
+      { ...adapterContext(undefined), runtime },
+      "UserPromptSubmit",
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+      {
+        context: "orphan context",
+        scope: "user",
+        marketplace: "",
+        pluginId: "",
+        event: "UserPromptSubmit",
+      },
+    ]);
   });
 
   test("sends the context of a queued steer to the model instead of buffering it (D-CF5-13)", () => {
@@ -1850,57 +2030,92 @@ describe("sendDueFollowUpContext", () => {
 });
 
 describe("adaptObservationResultForEvent", () => {
-  test("captures ordered SessionStart context with exact plugin provenance", () => {
+  test("sends each SessionStart context to the model at once in a hidden message (HKRL-01)", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const firstProvenance = {
-      scope: "user",
-      marketplace: "user-marketplace",
-      pluginId: "first-plugin",
-    } as const;
-    const secondProvenance = {
-      scope: "project",
-      marketplace: "project-marketplace",
-      pluginId: "second-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
+    const pi = createMessagePi(sent);
 
     // act
     adaptObservationResultForEvent(
       { kind: "mutate", additionalContext: "first context" },
       "SessionStart",
-      provenanceContext(runtime, firstProvenance),
+      { ...adapterContext(guardEntry()), pi },
+      sessionStartDispatch("startup", ["first context"]),
     );
     adaptObservationResultForEvent(
       { kind: "mutate", additionalContext: "second context" },
       "SessionStart",
-      provenanceContext(runtime, secondProvenance),
+      { ...adapterContext(guardEntry()), pi },
+      sessionStartDispatch("startup", ["second context"]),
     );
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-      {
-        context: "first context",
-        scope: "user",
-        marketplace: "user-marketplace",
-        pluginId: "first-plugin",
-      },
-      {
-        context: "second context",
-        scope: "project",
-        marketplace: "project-marketplace",
-        pluginId: "second-plugin",
-      },
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage(["first context"]),
+      sessionStartContextMessage(["second context"]),
     ]);
   });
 
-  test("does not capture SessionStart context when it is truly absent", () => {
+  test("steers a compaction's SessionStart context into a run whose next model call follows (HKRL-03)", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "user",
-      marketplace: "owner-marketplace",
-      pluginId: "owner-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "compact context" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      sessionStartDispatch("compact", ["compact context"], true),
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage(["compact context"], { deliverAs: "steer" }),
+    ]);
+  });
+
+  test("holds a compaction's SessionStart context when no model call of the run follows (HKRL-03)", () => {
+    // arrange
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "compact context" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      sessionStartDispatch("compact", ["compact context"], false),
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage(["compact context"], { triggerTurn: false }),
+    ]);
+  });
+
+  test("holds the context of a late SessionStart that ended after Pi went on to the first prompt for the next prompt (HOOKLATESS-D1)", () => {
+    // arrange
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "late context" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      {
+        event: { source: "startup", heldForNextPrompt: () => true },
+        values: ["late context"],
+      } satisfies SessionStartDispatch,
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage(["late context"], { deliverAs: "nextTurn" }),
+    ]);
+  });
+
+  test("sends no SessionStart context when it is truly absent", () => {
+    // arrange
+    const sent: SentMessage[] = [];
     const hookOutcome = {
       kind: "mutate",
       updatedInput: { ignored: true },
@@ -1910,75 +2125,54 @@ describe("adaptObservationResultForEvent", () => {
     adaptObservationResultForEvent(
       hookOutcome,
       "SessionStart",
-      provenanceContext(runtime, provenance),
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      sessionStartDispatch("startup", []),
     );
 
     // assert
     assert.strictEqual(Object.hasOwn(hookOutcome, "additionalContext"), false);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(sent, []);
   });
 
-  test("does not capture an empty SessionStart context", () => {
-    // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "project",
-      marketplace: "owner-marketplace",
-      pluginId: "owner-plugin",
-    } as const;
-
-    // act
-    adaptObservationResultForEvent(
-      { kind: "mutate", additionalContext: "" },
-      "SessionStart",
-      provenanceContext(runtime, provenance),
-    );
-
-    // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-  });
-
-  for (const { eventName, context, scope } of [
-    { eventName: "SessionEnd", context: "discarded SessionEnd context", scope: "user" },
-    { eventName: "PostCompact", context: "discarded PostCompact context", scope: "user" },
-  ] as const) {
-    test(`drops ${eventName} additional context`, () => {
+  for (const { name, additionalContext } of [
+    { name: "empty", additionalContext: "" },
+    { name: "white-space-only", additionalContext: " \n\t" },
+  ]) {
+    test(`sends no ${name} SessionStart context (HKRL-01)`, () => {
       // arrange
-      const runtime = createHooksRuntime();
-      const provenance = {
-        scope,
-        marketplace: `${eventName}-marketplace`,
-        pluginId: `${eventName}-plugin`,
-      } as const;
+      const sent: SentMessage[] = [];
 
       // act
       adaptObservationResultForEvent(
-        { kind: "mutate", additionalContext: context },
-        eventName,
-        provenanceContext(runtime, provenance),
+        { kind: "mutate", additionalContext },
+        "SessionStart",
+        { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+        sessionStartDispatch("startup", [additionalContext]),
       );
 
       // assert
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+      assert.deepStrictEqual(sent, []);
     });
   }
 
-  test("captures SessionStart context that no entry is attributed to under an empty provenance", () => {
-    // arrange
-    const runtime = createHooksRuntime();
+  for (const { eventName, context } of [
+    { eventName: "SessionEnd", context: "discarded SessionEnd context" },
+    { eventName: "PostCompact", context: "discarded PostCompact context" },
+  ] as const) {
+    test(`drops ${eventName} additional context`, () => {
+      // arrange
+      const sent: SentMessage[] = [];
 
-    // act
-    adaptObservationResultForEvent(
-      { kind: "mutate", additionalContext: "orphan context" },
-      "SessionStart",
-      { ...adapterContext(undefined), runtime },
-    );
+      // act
+      adaptObservationResultForEvent({ kind: "mutate", additionalContext: context }, eventName, {
+        ...adapterContext(guardEntry()),
+        pi: createMessagePi(sent),
+      });
 
-    // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-      { context: "orphan context", scope: "user", marketplace: "", pluginId: "" },
-    ]);
-  });
+      // assert
+      assert.deepStrictEqual(sent, []);
+    });
+  }
 
   for (const { arm, hookOutcome } of [
     {
@@ -1991,72 +2185,389 @@ describe("adaptObservationResultForEvent", () => {
     },
     { arm: "is a noop", hookOutcome: { kind: "noop", additionalContext: "kept context" } as const },
   ]) {
-    test(`captures the SessionStart context of a fold that ${arm} (D-CF5-09)`, () => {
+    test(`sends the SessionStart context of a fold that ${arm} (D-CF5-09, HKRL-01)`, () => {
       // arrange
-      const runtime = createHooksRuntime();
-      const provenance = {
-        scope: "project",
-        marketplace: "owner-marketplace",
-        pluginId: "owner-plugin",
-      } as const;
+      const sent: SentMessage[] = [];
 
       // act
       adaptObservationResultForEvent(
         hookOutcome,
         "SessionStart",
-        provenanceContext(runtime, provenance),
+        { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+        sessionStartDispatch("startup", ["kept context"]),
       );
 
       // assert
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-        {
-          context: "kept context",
-          scope: "project",
-          marketplace: "owner-marketplace",
-          pluginId: "owner-plugin",
-        },
-      ]);
+      assert.deepStrictEqual(sent, [sessionStartContextMessage(["kept context"])]);
     });
   }
 
   test("drops the PostCompact context of a fold that blocks", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "project",
-      marketplace: "owner-marketplace",
-      pluginId: "owner-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
 
     // act
     adaptObservationResultForEvent(
       { kind: "block", reason: "denied", additionalContext: "dropped context" },
       "PostCompact",
-      provenanceContext(runtime, provenance),
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
     );
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(sent, []);
   });
 
-  test("returns from noop without changing pending state", () => {
+  test("sends nothing for a SessionStart noop", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "user",
-      marketplace: "noop-marketplace",
-      pluginId: "noop-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
 
     // act
     adaptObservationResultForEvent(
       { kind: "noop" },
       "SessionStart",
-      provenanceContext(runtime, provenance),
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      sessionStartDispatch("startup", []),
     );
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(sent, []);
+  });
+
+  test("sends nothing and logs nothing for SessionStart context without a Pi API (HKRL-01)", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "ctx" },
+      "SessionStart",
+      adapterContext(guardEntry()),
+      sessionStartDispatch("startup", ["ctx"]),
+    );
+
+    // assert
+    assert.deepStrictEqual(lines, []);
+  });
+
+  for (const { title, attributedTo, line } of [
+    {
+      title:
+        "debug-logs a SessionStart context that fails to send with the plugin it is attributed to (NFR-2, OBS-01)",
+      attributedTo: guardEntry(),
+      line: "[hooks] adaptObservation: session start context failed for demo@fixtures: closed",
+    },
+    {
+      title:
+        "debug-logs a SessionStart context that no entry is attributed to and fails to send (NFR-2, OBS-01)",
+      attributedTo: undefined,
+      line: "[hooks] adaptObservation: session start context failed for <unattributed>: closed",
+    },
+  ]) {
+    test(title, (t) => {
+      // arrange
+      const lines = captureDebugLog(t);
+
+      // act
+      adaptObservationResultForEvent(
+        { kind: "mutate", additionalContext: "ctx" },
+        "SessionStart",
+        { ...adapterContext(attributedTo), pi: createMessagePi([], new Error("closed")) },
+        sessionStartDispatch("startup", ["ctx"]),
+      );
+
+      // assert
+      assert.deepStrictEqual(lines, [line]);
+    });
+  }
+
+  for (const { title, source, held, values, sends } of [
+    {
+      title: "sends every value of a startup SessionStart that the session already holds (HKRL-02)",
+      source: "startup",
+      held: heldDetails(["held context"]),
+      values: ["held context", "new context"],
+      sends: [["held context", "new context"]],
+    },
+    {
+      title: "sends every value of a clear SessionStart that the session already holds (HKRL-02)",
+      source: "clear",
+      held: heldDetails(["held context"]),
+      values: ["held context", "new context"],
+      sends: [["held context", "new context"]],
+    },
+    {
+      title: "sends every value of a compact SessionStart that the session already holds (HKRL-02)",
+      source: "compact",
+      held: heldDetails(["held context"]),
+      values: ["held context", "new context"],
+      sends: [["held context", "new context"]],
+    },
+    {
+      title: "sends only the values a resumed session does not hold yet (HKRL-02)",
+      source: "resume",
+      held: heldDetails(["held context"]),
+      values: ["held context", "fresh context"],
+      sends: [["fresh context"]],
+    },
+    {
+      title: "sends only the values a forked session does not hold yet (HKRL-02)",
+      source: "fork",
+      held: heldDetails(["held context"]),
+      values: ["held context", "fresh context"],
+      sends: [["fresh context"]],
+    },
+    {
+      title: "sends nothing when the resumed session holds every value (HKRL-02)",
+      source: "resume",
+      held: heldDetails(["first context", "second context"]),
+      values: ["first context", "second context"],
+      sends: [],
+    },
+    {
+      title: "drops a value that a message without details holds in a SessionStart part (HKRL-02)",
+      source: "resume",
+      held: heldMessage([
+        { type: "text", text: "SessionStart hook additional context: held context" },
+        { type: "text", text: "UserPromptSubmit hook additional context: prompt context" },
+      ]),
+      values: ["held context", "fresh context"],
+      sends: [["fresh context"]],
+    },
+    {
+      title:
+        "sends nothing when a message without details holds the whole joined context (HKRL-02)",
+      source: "resume",
+      held: heldMessage([sessionStartPart(["first context", "second context"])]),
+      values: ["first context", "second context"],
+      sends: [],
+    },
+    {
+      title: "sends a value again when a context edit removed it from the text (HKRL-02)",
+      source: "resume",
+      held: heldEdited(
+        ["held context", "kept context"],
+        "SessionStart hook additional context: kept context",
+      ),
+      values: ["held context", "kept context"],
+      sends: [["held context"]],
+    },
+    {
+      title: "drops a value that a context edit wrote into the text (HKRL-02)",
+      source: "fork",
+      held: heldEdited(["old context"], "SessionStart hook additional context: edited context"),
+      values: ["old context", "edited context"],
+      sends: [["old context"]],
+    },
+    {
+      title: "drops a value that a message with text content holds (HKRL-02)",
+      source: "resume",
+      held: heldMessage("SessionStart hook additional context: held context"),
+      values: ["held context", "fresh context"],
+      sends: [["fresh context"]],
+    },
+    {
+      title:
+        "sends a value again when a context edit to text content removed it from the text (HKRL-02)",
+      source: "resume",
+      held: heldEdited(
+        ["held context", "kept context"],
+        "SessionStart hook additional context: kept context",
+        true,
+      ),
+      values: ["held context", "kept context"],
+      sends: [["held context"]],
+    },
+    {
+      title: "drops a value that a context edit wrote into text content (HKRL-02)",
+      source: "fork",
+      held: heldEdited(
+        ["old context"],
+        "SessionStart hook additional context: edited context",
+        true,
+      ),
+      values: ["old context", "edited context"],
+      sends: [["old context"]],
+    },
+    {
+      title: "sends a value again when text content has no SessionStart label (HKRL-02)",
+      source: "resume",
+      held: heldEdited(
+        ["old context"],
+        "UserPromptSubmit hook additional context: old context",
+        true,
+      ),
+      values: ["old context"],
+      sends: [["old context"]],
+    },
+    {
+      title: "sends a value again that a compaction summarized away (HKRL-02)",
+      source: "resume",
+      held: heldBeforeCompaction(["held context"], false),
+      values: ["held context"],
+      sends: [["held context"]],
+    },
+    {
+      title: "drops a value that the messages a compaction kept hold (HKRL-02)",
+      source: "resume",
+      held: heldBeforeCompaction(["held context"], true),
+      values: ["held context"],
+      sends: [],
+    },
+    {
+      title: "drops a saved context whose file path differs (HKRL-02)",
+      source: "resume",
+      held: heldDetails([savedOutput("/saved/one.txt")]),
+      values: [savedOutput("/saved/two.txt")],
+      sends: [],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly title: string;
+    readonly source: SessionStartSource;
+    readonly held: SessionAppend;
+    readonly values: readonly string[];
+    readonly sends: ReadonlyArray<readonly string[]>;
+  }>) {
+    test(title, () => {
+      // arrange
+      const start = sessionStartDispatch(source, values);
+
+      // act
+      const sent = sendOverHeldSession(held, start);
+
+      // assert
+      assert.deepStrictEqual(
+        sent,
+        sends.map((message) => sessionStartContextMessage(message)),
+      );
+    });
+  }
+
+  for (const { kind, held } of [
+    {
+      kind: "a message of another custom type",
+      held: heldMessage(
+        [sessionStartPart(["held context"])],
+        { event: "SessionStart", values: ["held context"] },
+        "other-extension-context",
+      ),
+    },
+    {
+      kind: "a user message",
+      held: (sessionManager: SessionManager) => {
+        sessionManager.appendMessage({
+          role: "user",
+          content: "SessionStart hook additional context: held context",
+          timestamp: 0,
+        });
+      },
+    },
+    {
+      kind: "a part with another event's label",
+      held: heldMessage([
+        { type: "text", text: "UserPromptSubmit hook additional context: held context" },
+      ]),
+    },
+    {
+      kind: "an image part",
+      held: heldMessage([{ type: "image", data: "aGk=", mimeType: "image/png" }]),
+    },
+  ] satisfies ReadonlyArray<{ readonly kind: string; readonly held: SessionAppend }>) {
+    test(`ignores ${kind} when it looks for the values a resumed session holds (HKRL-02)`, () => {
+      // arrange
+      const start = sessionStartDispatch("resume", ["held context"]);
+
+      // act
+      const sent = sendOverHeldSession(held, start);
+
+      // assert
+      assert.deepStrictEqual(sent, [sessionStartContextMessage(["held context"])]);
+    });
+  }
+
+  for (const { kind, details } of [
+    { kind: "details of another event", details: { event: "UserPromptSubmit", values: ["a"] } },
+    {
+      kind: "details whose values are not a list",
+      details: { event: "SessionStart", values: "a" },
+    },
+    {
+      kind: "details with a value that is not text",
+      details: { event: "SessionStart", values: ["a", 1] },
+    },
+    { kind: "details that are text", details: "a" },
+    { kind: "null details", details: null },
+    {
+      kind: "details of a shape this release does not know",
+      details: { event: "SessionStart", version: 2, entries: [{ text: "a" }] },
+    },
+  ]) {
+    test(`reads the text the model sees for a held message with ${kind} (HKRL-02)`, () => {
+      // arrange
+      const start = sessionStartDispatch("resume", ["first context", "second context"]);
+
+      // act
+      const sent = sendOverHeldSession(
+        heldMessage([sessionStartPart(["first context"])], details),
+        start,
+      );
+
+      // assert
+      assert.deepStrictEqual(sent, [sessionStartContextMessage(["second context"])]);
+    });
+  }
+
+  test("sends nothing when a held message with unknown details holds the whole joined context (HKRL-02)", () => {
+    // arrange
+    const start = sessionStartDispatch("resume", ["first context", "second context"]);
+
+    // act
+    const sent = sendOverHeldSession(
+      heldMessage([sessionStartPart(["first context", "second context"])], { version: 2 }),
+      start,
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, []);
+  });
+
+  test("sends every value and debug-logs a session it cannot read (NFR-2, HKRL-02)", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "held context" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), ctx: unreadableSession(), pi: createMessagePi(sent) },
+      sessionStartDispatch("resume", ["held context"]),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { lines, sent },
+      {
+        lines: ["[hooks] adaptObservation: session start context read failed: session closed"],
+        sent: [sessionStartContextMessage(["held context"])],
+      },
+    );
+  });
+
+  test("reads no session for a resumed SessionStart with no context (HKRL-02)", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "noop" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), ctx: unreadableSession(), pi: createMessagePi(sent) },
+      sessionStartDispatch("resume", []),
+    );
+
+    // assert
+    assert.deepStrictEqual({ lines, sent }, { lines: [], sent: [] });
   });
 
   for (const { name, eventName, hookOutcome, diagnostic } of [
@@ -2118,7 +2629,6 @@ describe("adaptObservationResultForEvent", () => {
       );
 
       // assert
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
       assert.deepStrictEqual(
         consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
         [[diagnostic]],

@@ -26,6 +26,7 @@ import type {
 
 interface NotificationContext {
   mode: string;
+  hasUI: boolean;
   readonly ui: {
     readonly notify: Mock<(message: string, severity?: "info" | "warning" | "error") => void>;
   };
@@ -34,6 +35,7 @@ interface NotificationContext {
 function createContext(t: TestContext): NotificationContext {
   return {
     mode: "tui",
+    hasUI: true,
     ui: { notify: t.mock.fn((_message: string, _severity?: "info" | "warning" | "error") => {}) },
   };
 }

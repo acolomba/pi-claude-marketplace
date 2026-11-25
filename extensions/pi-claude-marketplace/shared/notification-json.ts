@@ -251,6 +251,8 @@ function wireRawSurface(
       };
     case "hook-notice":
       return { ...envelope, kind: surface.kind, text: surface.text };
+    case "reload-started":
+      return { ...envelope, kind: surface.kind };
   }
 }
 

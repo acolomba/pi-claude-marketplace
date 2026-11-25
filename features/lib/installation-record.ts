@@ -45,8 +45,11 @@ function objectMember(
   throw new Error(`${what} is not a JSON object`);
 }
 
-// The plugin and marketplace names of `pluginId`, split at its last `@`.
-function splitPluginId(pluginId: string): { plugin: string; marketplace: string } {
+/**
+ * The plugin and marketplace names of `pluginId`, split at its last `@`.
+ * Throws when either name is empty.
+ */
+export function splitPluginId(pluginId: string): { plugin: string; marketplace: string } {
   const at = pluginId.lastIndexOf("@");
   if (at <= 0 || at === pluginId.length - 1) {
     throw new Error(`${pluginId} is not a <plugin>@<marketplace> id`);

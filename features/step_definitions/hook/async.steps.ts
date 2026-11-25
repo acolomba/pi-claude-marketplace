@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps about async hooks: the turn an async rewake hook wakes,
  * the release of a waiting hook whose exit wakes the model or shows nothing,
- * and the absence of a rewake summary (ASYNC-01, ASYNC-02).
+ * also as a setup that keeps no turn, and the absence of a rewake summary
+ * (ASYNC-01, ASYNC-02).
  *
  * An async rewake hook that exits 2 shows the user its summary, then wakes
  * the model with a turn of its own (D-BG-201, D-BG-204). The extension shows
@@ -179,9 +180,35 @@ async function releaseWaitingHook(
   return ended.pid;
 }
 
+// Releases the waiting hook `hook`, waits until Pi handled its exit, and
+// asserts that the exit started no turn. Returns the log lengths and the
+// record count from before the release.
+async function releaseToHandledExit(
+  world: ScenarioWorld,
+  hook: string,
+): Promise<{ readonly lengths: ReadonlyMap<string, number>; readonly from: number }> {
+  const lengths = await readLogLengths(world.profileHarness());
+  const from = world.pi.recordCount();
+  const pid = await releaseWaitingHook(world, hook, lengths);
+  await waitForHandledExit(world, pid);
+  const started = world.pi.recordsSince(from).filter((record) => record.type === "agent_start");
+  assert.deepStrictEqual(started, [], "the hook's exit started a turn");
+  return { lengths, from };
+}
+
 Given("the model has answered the woken turn", async function (this: ScenarioWorld) {
   await waitForWokenTurn(this, 0);
 });
+
+// The setup twin of the release `When` below: it keeps no turn, and it
+// fails on a fault that the release caused.
+Given(
+  "the user has released the hook {string} and pi has handled its exit",
+  async function (this: ScenarioWorld, hook: string) {
+    const { from } = await releaseToHandledExit(this, hook);
+    assert.deepStrictEqual(this.pi.recordsSince(from).filter(faultOf), []);
+  },
+);
 
 When(
   "the user prompts {string} after the woken turn ends",
@@ -207,12 +234,7 @@ When(
 When(
   "the user releases the hook {string} and pi handles its exit",
   async function (this: ScenarioWorld, hook: string) {
-    const lengths = await readLogLengths(this.profileHarness());
-    const from = this.pi.recordCount();
-    const pid = await releaseWaitingHook(this, hook, lengths);
-    await waitForHandledExit(this, pid);
-    const started = this.pi.recordsSince(from).filter((record) => record.type === "agent_start");
-    assert.deepStrictEqual(started, [], "the hook's exit started a turn");
+    const { lengths, from } = await releaseToHandledExit(this, hook);
     await keepTurn(this, "release", lengths, from);
   },
 );

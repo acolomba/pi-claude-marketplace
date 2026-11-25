@@ -136,6 +136,7 @@ test("returns the unchanged verdict for the recorded revision in direct mode", a
   const stateBefore = await readFile(base.locations.stateJsonPath, "utf8");
   const ctx: NotificationContext = {
     mode: "tui",
+    hasUI: true,
     ui: { notify: () => assert.fail("the unchanged verdict notifies nothing") },
   };
 
@@ -527,6 +528,7 @@ test("UPD-DEP-D1: a cascade run authenticates in the command's context when it c
   const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
   const ctx: NotificationContext = {
     mode: "tui",
+    hasUI: true,
     ui: { notify: () => assert.fail("a path source prompts for nothing") },
   };
 
