@@ -331,12 +331,12 @@ Plans:
   2. For an `owner/repo` marketplace source the user sees upstream's progress lines: SSH first only when the probe reports SSH configured, HTTPS first otherwise, a retry with the other transport on failure, and upstream's error when both fail; with `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` no probe runs and every GitHub clone uses HTTPS, and `CLAUDE_CODE_REMOTE` changes nothing; cucumber scenarios pin each path (SG-SSH-02, SG-SSH-03).
   3. A `github` plugin source on install, update, and dependency install follows the probe, fallback, and skip rules of the upstream surface discuss chose (Q7), with cucumber scenarios for each, and on Windows a plugin install retries an SSH failure over HTTPS as upstream does (SG-SSH-04, SG-SSH-05).
   4. A marketplace or plugin cloned over SSH is the same source as its HTTPS form: a later update, reinstall, or install never refuses it as a stale clone, and its `plugin-clones/<key>/` directory does not move (SG-SSH-06).
-**Plans**: 18 plans in 11 waves
+**Plans**: 2/18 plans executed in 11 waves
 
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md — Upstream's git address validator (`iTs`) for every git address, the scp `marketplace add` arm over the ssh stand-in, the command-line refusal of the URL-scheme SSH forms, the import `git` kind, the git-subdir gate (F-2), and the F-5 harness guard (wave 1)
-- [ ] 04-02-PLAN.md — The clone note field on marketplace blocks and plugin rows (types, wire, JSON, grammar, schema), the `ssh-auth` detail, and the typed both-failed error (wave 1)
+- [x] 04-01-PLAN.md — Upstream's git address validator (`iTs`) for every git address, the scp `marketplace add` arm over the ssh stand-in, the command-line refusal of the URL-scheme SSH forms, the import `git` kind, the git-subdir gate (F-2), and the F-5 harness guard (wave 1)
+- [x] 04-02-PLAN.md — The clone note field on marketplace blocks and plugin rows (types, wire, JSON, grammar, schema), the `ssh-auth` detail, and the typed both-failed error (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-03-PLAN.md — The GitHub identity fold (`Ort`) in comparisons only, per-URL D-SG-21 SSH-form `insteadOf` pairs, and the scp-safe host reads (wave 2)
@@ -440,7 +440,7 @@ Plans:
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
-| 4. SSH Sources and Transport Selection | 0/TBD | Not started | - |
+| 4. SSH Sources and Transport Selection | 2/18 | In Progress | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |
