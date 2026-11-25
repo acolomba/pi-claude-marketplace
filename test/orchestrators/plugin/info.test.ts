@@ -808,6 +808,7 @@ test("VER-02: a partially available path plugin shows the version its plugin.jso
         plugins: [{ name: "bar", source: "./bar", version: "0.5.0", lspServers: { bar: {} } }],
       },
       installablePluginDirs: ["bar"],
+      componentDirs: { bar: ["skills"] },
     });
     await mkdir(path.join(mpRoot, "bar", ".claude-plugin"), { recursive: true });
     await writeFile(
@@ -1525,15 +1526,17 @@ test("FSTAT-07 / D-66-04: installed plugin re-resolving unsupported (lspServers)
             source: "./degraded",
             version: "1.0.0",
             description: "Degraded plugin.",
-            // An unsupported component kind flips resolveStrict to the
-            // `partially-available` arm (D-64-06); narrowUnsupportedKinds maps
-            // `lspServers` -> the `lsp` manifest-field marker.
+            // An unsupported component kind beside the supported `skills`
+            // folder flips resolveStrict to the `partially-available` arm
+            // (D-64-06); narrowUnsupportedKinds maps `lspServers` -> the `lsp`
+            // manifest-field marker.
             lspServers: { foo: { command: "foo-lsp" } },
           },
         ],
       },
       installed: { degraded: { version: "1.0.0" } },
       installablePluginDirs: ["degraded"],
+      componentDirs: { degraded: ["skills"] },
     });
 
     const { ctx, run, notifications } = makeCtx();
@@ -5764,6 +5767,7 @@ test("INFO-05: lenient reader lists `Notification (unsupported)` on a path-resol
         plugins: [{ name: "ralph", source: "./ralph", version: "0.1.0" }],
       },
       installablePluginDirs: ["ralph"],
+      componentDirs: { ralph: ["skills"] },
     });
 
     // A single top-level `Notification` event, which is not in
@@ -6371,6 +6375,7 @@ test("info flags binaries on an uninstalled path plugin of an official marketpla
         ],
       },
       installablePluginDirs: ["bin"],
+      componentDirs: { bin: ["skills"] },
     });
 
     const { ctx, run, notifications } = makeCtx();
@@ -6416,6 +6421,7 @@ test("info flags binaries on an installed path plugin of an official marketplace
       },
       installed: { bin: { version: "1.0.0" } },
       installablePluginDirs: ["bin"],
+      componentDirs: { bin: ["skills"] },
     });
 
     const { ctx, run, notifications } = makeCtx();
@@ -6461,7 +6467,13 @@ test("info flags binaries on an uninstalled warm git plugin of an official marke
         ],
       },
     });
-    await seedWarmMirror({ scope: "user", cwd, cloneUrl, pluginJson: { name: "bin" } });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "bin" },
+      componentDirs: ["skills"],
+    });
 
     const { ctx, run, notifications } = makeCtx();
 
@@ -7690,6 +7702,7 @@ test("OUT-03: a `(partially-available)` row appends `installs disabled` at the t
       cwd,
       cloneUrl,
       pluginJson: { name: "lspplug", lspServers: { foo: {} } },
+      componentDirs: ["skills"],
     });
 
     const { ctx, run, notifications } = makeCtx();
@@ -7893,6 +7906,7 @@ test("OUT-03: a `(partially-installed)` row never acquires `installs disabled`, 
       },
       installed: { degraded: { version: "1.0.0" } },
       installablePluginDirs: ["degraded"],
+      componentDirs: { degraded: ["skills"] },
     });
 
     // Clean for the reason given on the `(installed)` case above.
@@ -8011,6 +8025,7 @@ test("lenient hook inventory ignores an array hooks value exactly", async () => 
         plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
       },
       installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills"] },
     });
     await mkdir(path.join(mpRoot, "alpha", "hooks"), { recursive: true });
     await writeFile(
@@ -8048,6 +8063,7 @@ test("lenient hook inventory ignores blank events exactly", async () => {
         plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
       },
       installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills"] },
     });
     await mkdir(path.join(mpRoot, "alpha", "hooks"), { recursive: true });
     await writeFile(
@@ -8085,6 +8101,7 @@ test("lenient hook inventory ignores empty event groups exactly", async () => {
         plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0" }],
       },
       installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills"] },
     });
     await mkdir(path.join(mpRoot, "alpha", "hooks"), { recursive: true });
     await writeFile(
@@ -8264,10 +8281,11 @@ test("AVAR-03: info names a server left out for a leading ~ with its field", asy
 test("ADET-01 / MREC-07: info names no MCP implementation when both implementations leave out every MCP server (D-P3-08)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
-    await seedAlphaWithPluginJson(home, cwd, {
+    const mpRoot = await seedAlphaWithPluginJson(home, cwd, {
       name: "alpha",
       mcpServers: { live: { type: "ws", url: "wss://alpha.example.test/live" } },
     });
+    await mkdir(path.join(mpRoot, "alpha", "skills"));
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -11906,14 +11924,15 @@ const SSE_SERVER = { type: "sse", url: "http://127.0.0.1:9/sse" };
 
 /**
  * Seeds a user-scope path-source `alpha` plugin whose `plugin.json` declares
- * `mcpServers`, installed when `installed` is set.
+ * `mcpServers`, installed when `installed` is set, and returns the
+ * marketplace root.
  */
 async function seedAlphaMcpPlugin(
   home: string,
   cwd: string,
   mcpServers: Record<string, unknown> | undefined,
   installed: boolean,
-): Promise<void> {
+): Promise<string> {
   const mpRoot = await seedPathMarketplace({
     scope: "user",
     scopeRoot: path.join(home, ".pi", "agent"),
@@ -11929,6 +11948,7 @@ async function seedAlphaMcpPlugin(
     JSON.stringify({ name: "alpha", ...(mcpServers !== undefined && { mcpServers }) }),
     "utf8",
   );
+  return mpRoot;
 }
 
 /** Runs user-scope `info alpha@mp` under `implementation` and returns what it printed. */
@@ -12104,12 +12124,13 @@ for (const implementation of ["adapter", "builtin", "none"] as const) {
   test(`MREC-04: under ${implementation} a ws server reads as left out`, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
       // arrange
-      await seedAlphaMcpPlugin(
+      const mpRoot = await seedAlphaMcpPlugin(
         home,
         cwd,
         { live: { type: "ws", url: "wss://h.test/live" } },
         false,
       );
+      await mkdir(path.join(mpRoot, "alpha", "skills"));
 
       // act
       const notifications = await infoAlphaUnder(implementation, cwd);

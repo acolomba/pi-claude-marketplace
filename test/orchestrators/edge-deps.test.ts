@@ -60,9 +60,15 @@ interface FixturePlugin {
   readonly manifestVersion?: string;
   /** The plugin.json version, when it differs from the manifest entry's. */
   readonly pluginJsonVersion?: string;
-  /** Declare an unsupported component kind on the manifest entry. */
+  /**
+   * Declare an unsupported component kind on the manifest entry, beside an
+   * empty `skills` folder, so the plugin stays partially available.
+   */
   readonly declaresUnsupported?: boolean;
-  /** Declare a non-empty `binaries` map, unsupported only for an official marketplace. */
+  /**
+   * Declare a non-empty `binaries` map, unsupported only for an official
+   * marketplace, beside an empty `skills` folder.
+   */
   readonly declaresBinaries?: boolean;
   /** Create the on-disk plugin tree (default true). */
   readonly pluginTree?: boolean;
@@ -164,6 +170,35 @@ async function writeStateFile(cwd: string, records: readonly MarketplaceRecord[]
 }
 
 /**
+ * Write one plugin's tree under `pluginRoot`: its `plugin.json`, the files the
+ * fixture ships, and an empty `skills` folder beside an unsupported kind.
+ */
+async function writePluginTree(pluginRoot: string, plugin: FixturePlugin): Promise<void> {
+  const pluginJsonVersion = plugin.pluginJsonVersion ?? plugin.manifestVersion;
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: plugin.name,
+      ...(pluginJsonVersion === undefined ? {} : { version: pluginJsonVersion }),
+    }),
+    "utf8",
+  );
+  if (plugin.mcpJson !== undefined) {
+    await writeFile(path.join(pluginRoot, ".mcp.json"), plugin.mcpJson, "utf8");
+  }
+
+  if (plugin.hooksJson !== undefined) {
+    await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
+    await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), plugin.hooksJson, "utf8");
+  }
+
+  if (plugin.declaresUnsupported === true || plugin.declaresBinaries === true) {
+    await mkdir(path.join(pluginRoot, "skills"));
+  }
+}
+
+/**
  * Lay out a path-source marketplace inside the case's own working directory:
  * `marketplace.json`, the declared plugin trees, and the state record that names
  * them. Everything lives under `cwd`, so the case's removal covers it.
@@ -196,24 +231,7 @@ async function layoutMarketplace(
   for (const plugin of plugins) {
     const pluginRoot = pluginRootIn(cwd, marketplaceName, plugin.name);
     if (plugin.pluginTree !== false) {
-      const pluginJsonVersion = plugin.pluginJsonVersion ?? plugin.manifestVersion;
-      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-      await writeFile(
-        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-        JSON.stringify({
-          name: plugin.name,
-          ...(pluginJsonVersion === undefined ? {} : { version: pluginJsonVersion }),
-        }),
-        "utf8",
-      );
-      if (plugin.mcpJson !== undefined) {
-        await writeFile(path.join(pluginRoot, ".mcp.json"), plugin.mcpJson, "utf8");
-      }
-
-      if (plugin.hooksJson !== undefined) {
-        await mkdir(path.join(pluginRoot, "hooks"), { recursive: true });
-        await writeFile(path.join(pluginRoot, "hooks", "hooks.json"), plugin.hooksJson, "utf8");
-      }
+      await writePluginTree(pluginRoot, plugin);
     }
 
     if (plugin.installed !== undefined) {

@@ -3783,7 +3783,7 @@ describe("resolvePendingForceInstalls", () => {
     // arrange
     const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-force-"));
     t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
-    await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
+    await mkdir(path.join(marketplaceRoot, "cr", "skills"), { recursive: true });
     await writeFile(path.join(marketplaceRoot, "cr", ".lsp.json"), "{}", "utf8");
     const plans = [reconcilePlan("project", { pluginsToInstall: [install] })];
     const locate = (): Promise<PendingInstallCandidate> =>
@@ -3856,7 +3856,7 @@ describe("resolvePendingForceInstalls", () => {
     // arrange
     const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "reconcile-official-"));
     t.after(() => rm(marketplaceRoot, { recursive: true, force: true }));
-    await mkdir(path.join(marketplaceRoot, "cr"), { recursive: true });
+    await mkdir(path.join(marketplaceRoot, "cr", "skills"), { recursive: true });
     const plans = [
       reconcilePlan("project", {
         pluginsToInstall: [{ ...install, marketplace: "claude-plugins-official" }],

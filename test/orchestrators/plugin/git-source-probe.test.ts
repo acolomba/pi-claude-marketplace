@@ -697,7 +697,8 @@ describe("probeManifestEntry", () => {
     // arrange
     const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/partial-plugin";
-    await cloneDirectory(locations, cloneUrl, SHA_A);
+    const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+    await mkdir(path.join(cloneDir, "skills"));
     const entry: ManifestEntry = {
       name: "partial-plugin",
       source: { source: "url", url: cloneUrl, sha: SHA_A },
@@ -714,7 +715,9 @@ describe("probeManifestEntry", () => {
   test("flags binaries on a path entry for an official marketplace name", async (testContext) => {
     // arrange
     const { locations, marketplaceRoot, marketplaceContext } = await freshLocations(testContext);
-    await mkdir(path.join(marketplaceRoot, "plugins", "path-plugin"), { recursive: true });
+    await mkdir(path.join(marketplaceRoot, "plugins", "path-plugin", "skills"), {
+      recursive: true,
+    });
     const entry: ManifestEntry = {
       name: "path-plugin",
       source: "./plugins/path-plugin",
@@ -737,7 +740,8 @@ describe("probeManifestEntry", () => {
     // arrange
     const { locations, marketplaceContext } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/official-binaries";
-    await cloneDirectory(locations, cloneUrl, SHA_A);
+    const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+    await mkdir(path.join(cloneDir, "skills"));
     const entry: ManifestEntry = {
       name: "official-binaries",
       source: { source: "url", url: cloneUrl, sha: SHA_A },

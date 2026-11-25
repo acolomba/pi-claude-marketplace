@@ -411,7 +411,7 @@ test("composes a partially upgradable row from a newly degraded candidate", asyn
   // arrange
   const composeInstalledListRow = await loadComposeInstalledListRow();
   const environment = await installedEnvironment(testContext);
-  await mkdir(path.join(environment.marketplaceRoot, "alpha"), { recursive: true });
+  await mkdir(path.join(environment.marketplaceRoot, "alpha", "skills"), { recursive: true });
   const entry = manifestEntry({ version: "2.0.0", lspServers: { alpha: {} } });
 
   // act
@@ -555,7 +555,7 @@ test("flags binaries on an upgrade candidate of an official marketplace", async 
   // arrange
   const composeInstalledListRow = await loadComposeInstalledListRow();
   const environment = await installedEnvironment(testContext);
-  await mkdir(path.join(environment.marketplaceRoot, "alpha"), { recursive: true });
+  await mkdir(path.join(environment.marketplaceRoot, "alpha", "skills"), { recursive: true });
   const entry = manifestEntry({ version: "2.0.0", binaries: { tool: "https://example.com/tool" } });
 
   // act
