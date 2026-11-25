@@ -7,6 +7,7 @@
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { gitHubOverrideHost } from "../shared/github-base-url.ts";
+import { preferHttps } from "../shared/upstream-flag.ts";
 
 import type {
   TransportAttempt,
@@ -39,14 +40,23 @@ export function createGitHubCloneNotes(): GitHubCloneNotes {
 }
 
 /**
- * D-SG-21, OQ-2: what forces every GitHub clone of this command onto one
- * HTTPS attempt, or undefined when nothing does. The GitHub base override
- * forces it, because every GitHub address reaches the base anyway and the
- * probe would contact the real github.com. The override is read from this
- * process's environment, as every request that the override rewrites reads
- * it.
+ * D-SG-24, D-SG-21, OQ-2: what forces every GitHub clone of this command onto
+ * one HTTPS attempt, or undefined when nothing does. Claude Code's
+ * `PREFER_HTTPS_VARIABLE` in `env` forces it first. The GitHub base override
+ * forces it next, because every GitHub address reaches the base anyway and the
+ * probe would contact the real github.com; the override is read from this
+ * process's environment, as every request that it rewrites reads it.
+ *
+ * D-SG-24: Claude Code's remote-session variable is not read. It tells Claude
+ * Code that a git proxy of its remote sessions carries the session's git, and
+ * Pi has no such proxy, so the variable describes the session around Pi, not
+ * a transport Pi can use (a capability gap).
  */
-export function transportForce(_env: NodeJS.ProcessEnv): TransportForce | undefined {
+export function transportForce(env: NodeJS.ProcessEnv): TransportForce | undefined {
+  if (preferHttps(env)) {
+    return "prefer-https";
+  }
+
   return gitHubOverrideHost() === undefined ? undefined : "base-override";
 }
 

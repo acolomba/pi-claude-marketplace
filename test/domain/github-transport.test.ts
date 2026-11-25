@@ -69,34 +69,39 @@ for (const { raw, repo, url } of [
   });
 }
 
-test("SG-SSH-02: puts https first with the ssh-not-configured note when the probe finds no configured ssh", async () => {
-  // arrange
-  const { probe } = probeAnswering("not-configured");
+for (const answer of ["not-configured", "unknown"] as const) {
+  test(`SG-SSH-02: puts https first with the ssh-not-configured note when the probe answers ${answer}`, async () => {
+    // arrange
+    const { probe, calls } = probeAnswering(answer);
 
-  // act
-  const plan = await planMarketplaceClone({ source: OWNER_REPO, probe });
+    // act
+    const plan = await planMarketplaceClone({ source: OWNER_REPO, probe });
 
-  // assert
-  assert.deepStrictEqual(plan, {
-    first: { transport: "https", url: "https://github.com/acme/tools.git" },
-    note: "ssh-not-configured",
-  } satisfies TransportPlan);
-});
+    // assert
+    assert.deepStrictEqual(plan, {
+      first: { transport: "https", url: "https://github.com/acme/tools.git" },
+      note: "ssh-not-configured",
+    } satisfies TransportPlan);
+    assert.strictEqual(calls(), 1);
+  });
+}
 
-test("D-SG-21: plans one https attempt with the via-https note and runs no probe under the base override", async () => {
-  // arrange
-  const { probe, calls } = probeAnswering("configured");
+for (const force of ["prefer-https", "base-override"] as const) {
+  test(`D-SG-24, D-SG-21: plans one https attempt with the via-https note and runs no probe when ${force} forces it`, async () => {
+    // arrange
+    const { probe, calls } = probeAnswering("configured");
 
-  // act
-  const plan = await planMarketplaceClone({ source: OWNER_REPO, force: "base-override", probe });
+    // act
+    const plan = await planMarketplaceClone({ source: OWNER_REPO, force, probe });
 
-  // assert
-  assert.deepStrictEqual(plan, {
-    first: { transport: "https", url: "https://github.com/acme/tools.git" },
-    note: "via-https",
-  } satisfies TransportPlan);
-  assert.strictEqual(calls(), 0);
-});
+    // assert
+    assert.deepStrictEqual(plan, {
+      first: { transport: "https", url: "https://github.com/acme/tools.git" },
+      note: "via-https",
+    } satisfies TransportPlan);
+    assert.strictEqual(calls(), 0);
+  });
+}
 
 for (const raw of ["https://github.com/acme/tools", "http://github.com/acme/tools.git"]) {
   test(`OQ-1: clones the github URL source ${raw} over https with the via-https note and runs no probe`, async () => {
@@ -147,3 +152,22 @@ for (const { raw, url, transport } of [
     assert.strictEqual(calls(), 0);
   });
 }
+
+test("D-SG-24: keeps a non-GitHub ssh url source as written when prefer-https forces GitHub clones", async () => {
+  // arrange
+  const source = {
+    kind: "url",
+    raw: "git@127.0.0.1:acme/tools.git",
+    url: "git@127.0.0.1:acme/tools.git",
+  } satisfies UrlSource;
+  const { probe, calls } = probeAnswering("configured");
+
+  // act
+  const plan = await planMarketplaceClone({ source, force: "prefer-https", probe });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    first: { transport: "ssh", url: "git@127.0.0.1:acme/tools.git" },
+  } satisfies TransportPlan);
+  assert.strictEqual(calls(), 0);
+});

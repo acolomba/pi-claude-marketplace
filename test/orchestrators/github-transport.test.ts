@@ -42,6 +42,41 @@ describe("createGitHubCloneNotes", () => {
 });
 
 describe("transportForce", () => {
+  for (const value of ["1", "true", "yes", "on", " ON "]) {
+    test(`D-SG-24: forces https first for CLAUDE_CODE_PLUGIN_PREFER_HTTPS=${JSON.stringify(value)}, before the base override`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "https://mirror.example/git");
+
+      // act
+      const force = transportForce({ CLAUDE_CODE_PLUGIN_PREFER_HTTPS: value });
+
+      // assert
+      assert.strictEqual(force, "prefer-https");
+    });
+  }
+
+  test("D-SG-24: forces nothing for CLAUDE_CODE_PLUGIN_PREFER_HTTPS=0 with no base override", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, undefined);
+
+    // act
+    const force = transportForce({ CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "0" });
+
+    // assert
+    assert.strictEqual(force, undefined);
+  });
+
+  test("D-SG-24: does not read CLAUDE_CODE_REMOTE", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, undefined);
+
+    // act
+    const force = transportForce({ CLAUDE_CODE_REMOTE: "1" });
+
+    // assert
+    assert.strictEqual(force, undefined);
+  });
+
   test("D-SG-21: forces https while the GitHub base override is set", (t) => {
     // arrange
     setGitHubBaseUrl(t, "https://mirror.example/git");

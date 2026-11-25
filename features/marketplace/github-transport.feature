@@ -20,3 +20,30 @@ Feature: Marketplace github transport
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
     Then the git host receives no request
+
+  Scenario Outline: Adding a github marketplace when ssh is not configured clones it over https
+    Given the marketplace "tools" is published as a github source
+    Given the user's ssh <ssh state> for "github.com"
+    Given pi runs with github's requests routed to the git host
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the user's ssh receives these launches:
+      | argv                                                                                |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+    Examples:
+      | ssh state                  |
+      | is denied                  |
+      | does not know the host key |
+      | never answers              |
