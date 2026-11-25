@@ -307,7 +307,7 @@ async function syncMarketplaceBySwap(args: {
       liveDir,
       backupDir: await locations.sourceBackupDir(mpName),
       stagingDir: await locations.sourceSwapStagingDir(mpName),
-      ...marketplaceRefreshPlans(source, args.gitHubSsh),
+      ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
       surface: "marketplace",
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,

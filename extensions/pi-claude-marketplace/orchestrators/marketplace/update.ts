@@ -571,7 +571,7 @@ async function refreshGitSource(
       liveDir,
       backupDir: await locations.sourceBackupDir(name),
       stagingDir: await locations.sourceSwapStagingDir(name),
-      ...marketplaceRefreshPlans(source, args.gitHubSsh),
+      ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
       surface: "marketplace",
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,

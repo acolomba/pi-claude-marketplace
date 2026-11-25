@@ -15,7 +15,8 @@
 // transport plan, as Claude Code's refresh lists and clones a source's URLs in
 // order. A marketplace refresh plans from the declared source with the
 // marketplace probe rule; the checkout's recorded `origin` picks no URL
-// (CONTEXT [Identity], OQ-5).
+// (CONTEXT [Identity], OQ-5), except for a url record an earlier version wrote
+// under a URL that names no git repository (D-PL5-04).
 //
 // The same swap refreshes a marketplace checkout and a plugin mirror. A
 // marketplace swap writes the MA-12 ownership marker into staging; a mirror
@@ -30,6 +31,7 @@ import { mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 
 import { addressTransport, planMarketplaceClone } from "../../domain/github-transport.ts";
+import { parsePluginSource } from "../../domain/source.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -86,27 +88,73 @@ export const MARKETPLACE_MANIFEST_MARKER = path.join(".claude-plugin", "marketpl
 /** The two plans of a refresh: the freshness check's and the re-clone's. */
 export type RefreshPlans = Pick<CloneSwapArgs, "freshness" | "reclone">;
 
+/** The live checkout of a marketplace refresh, as `legacyCloneUrl` reads it. */
+export interface RefreshCheckout {
+  readonly liveDir: string;
+  readonly gitOps: GitOps;
+}
+
+/**
+ * OQ-5, D-PL5-04: the URL the checkout of a url record that names no git URL
+ * was cloned from. An earlier version recorded a url marketplace under an
+ * https URL ending in `.json`, which now reads as a hosted catalog, so only
+ * the checkout's recorded `origin` says where its repository lives. Any other
+ * source, and such a record whose checkout records no origin, gives undefined.
+ */
+async function legacyCloneUrl(
+  source: GitHubSource | UrlSource,
+  checkout: RefreshCheckout,
+): Promise<string | undefined> {
+  if (source.kind !== "url" || parsePluginSource(source.raw).kind !== "hosted") {
+    return undefined;
+  }
+
+  const remotes = await checkout.gitOps.listRemotes({ dir: checkout.liveDir });
+  if (remotes.kind !== "origin") {
+    return undefined;
+  }
+
+  return remotes.url;
+}
+
 /**
  * SG-SSH-02, CONTEXT [Identity], OQ-5: the plans of a marketplace refresh of
  * `source`, which `marketplace update`, the autoupdate pass, and `plugin
  * update`'s marketplace sync (PUP-2) share. Each plan is the declared source's
  * (`planMarketplaceClone`), so an `owner/repo` source probes once for the
  * freshness list and once more for a re-clone, as Claude Code's refresh does
- * (CONTEXT [Probe]), and a url source lists and clones its clone URL alone.
- * Only a github source reads what forces HTTPS, so a url refresh never reads
- * the GitHub base (GHB-02).
+ * (CONTEXT [Probe]), and a url source lists and clones its clone URL alone;
+ * the checkout's recorded origin picks no URL, except for the legacy url
+ * record `legacyCloneUrl` names. Only a github source reads what forces HTTPS,
+ * so a url refresh never reads the GitHub base (GHB-02).
  */
 export function marketplaceRefreshPlans(
   source: GitHubSource | UrlSource,
   gitHubSsh: GitHubSshOps,
+  checkout: RefreshCheckout,
 ): RefreshPlans {
-  const plan = (): Promise<TransportPlan> =>
-    planMarketplaceClone({
+  const plan = async (): Promise<TransportPlan> => {
+    const legacy = await legacyCloneUrl(source, checkout);
+    if (legacy !== undefined) {
+      return oneAttemptPlan(legacy);
+    }
+
+    return planMarketplaceClone({
       source,
       force: source.kind === "github" ? transportForce(process.env) : undefined,
       probe: () => gitHubSsh.probe(),
     });
+  };
+
   return { freshness: plan, reclone: plan };
+}
+
+/** One attempt of `url`, with no note, over the transport git uses for it. */
+function oneAttemptPlan(url: string): TransportPlan {
+  return {
+    first: { transport: addressTransport(url), url },
+    after: () => Promise.resolve(undefined),
+  };
 }
 
 /**
@@ -115,11 +163,7 @@ export function marketplaceRefreshPlans(
  * transport refreshes with them.
  */
 export function oneAttemptPlans(url: string): RefreshPlans {
-  const plan = (): Promise<TransportPlan> =>
-    Promise.resolve({
-      first: { transport: addressTransport(url), url },
-      after: () => Promise.resolve(undefined),
-    });
+  const plan = (): Promise<TransportPlan> => Promise.resolve(oneAttemptPlan(url));
   return { freshness: plan, reclone: plan };
 }
 

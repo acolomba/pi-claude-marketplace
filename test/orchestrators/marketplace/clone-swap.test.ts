@@ -1491,15 +1491,77 @@ test("OQ-4: one attempt over an scp address carries no auth bundle", async (t) =
   ]);
 });
 
+/** CONTEXT [Identity]: an origin a checkout recorded under a URL its source no longer declares. */
+const EARLIER_ORIGIN = "https://git.example/acme/earlier-name.git";
+
+/** A live checkout whose `origin` is `origin`, or that records none when it is undefined. */
+function checkoutRecording(origin: string | undefined): {
+  readonly liveDir: string;
+  readonly gitOps: GitOps;
+} {
+  const git = createGitOpsFake({
+    boundary: "memory",
+    listRemotesResult:
+      origin === undefined ? { kind: "not-a-repo" } : { kind: "origin", url: origin },
+  });
+  return { liveDir: path.join(os.tmpdir(), "scope", "sources", "tools"), gitOps: git.gitOps };
+}
+
+/** D-PL5-04: a url record an earlier version wrote for a URL that now reads as a hosted catalog. */
+const LEGACY_JSON_SOURCE: UrlSource = {
+  kind: "url",
+  raw: "https://git.example/acme/tools.json",
+  url: "https://git.example/acme/tools.json",
+};
+
+test("OQ-5, D-PL5-04: a url record whose URL now reads as a hosted catalog refreshes once from its checkout's origin", async () => {
+  // arrange
+  const plans = marketplaceRefreshPlans(
+    LEGACY_JSON_SOURCE,
+    { probe: () => Promise.reject(new Error("a url refresh asks no probe")) },
+    checkoutRecording(REMOTE_URL),
+  );
+
+  // act
+  const plan = await plans.freshness();
+
+  // assert
+  assert.deepStrictEqual(plan.first, { transport: "https", url: REMOTE_URL });
+  assert.strictEqual(plan.note, undefined);
+  assert.strictEqual(await plan.after(sshFailure("ls-remote"), plan.first), undefined);
+});
+
+test("OQ-5, D-PL5-04: a legacy url record whose checkout records no origin refreshes from what it declares", async () => {
+  // arrange
+  const plans = marketplaceRefreshPlans(
+    LEGACY_JSON_SOURCE,
+    { probe: () => Promise.reject(new Error("a url refresh asks no probe")) },
+    checkoutRecording(undefined),
+  );
+
+  // act
+  const plan = await plans.reclone();
+
+  // assert
+  assert.deepStrictEqual(plan.first, {
+    transport: "https",
+    url: "https://git.example/acme/tools.json",
+  });
+});
+
 test("CONTEXT [Identity], CONTEXT [Probe]: each plan of an owner/repo marketplace refresh asks the probe once", async () => {
   // arrange
   let probes = 0;
-  const plans = marketplaceRefreshPlans(githubSource("acme/tools"), {
-    probe: () => {
-      probes += 1;
-      return Promise.resolve("configured");
+  const plans = marketplaceRefreshPlans(
+    githubSource("acme/tools"),
+    {
+      probe: () => {
+        probes += 1;
+        return Promise.resolve("configured");
+      },
     },
-  });
+    checkoutRecording(EARLIER_ORIGIN),
+  );
 
   // act
   const freshness = await plans.freshness();
@@ -1524,12 +1586,16 @@ test("OQ-5: a url marketplace refresh lists and clones its clone URL alone and a
   // arrange
   const source = parsePluginSource(REMOTE_URL) as UrlSource;
   let probes = 0;
-  const plans = marketplaceRefreshPlans(source, {
-    probe: () => {
-      probes += 1;
-      return Promise.resolve("configured");
+  const plans = marketplaceRefreshPlans(
+    source,
+    {
+      probe: () => {
+        probes += 1;
+        return Promise.resolve("configured");
+      },
     },
-  });
+    checkoutRecording(EARLIER_ORIGIN),
+  );
 
   // act
   const plan = await plans.reclone();
