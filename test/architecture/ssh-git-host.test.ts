@@ -598,6 +598,40 @@ describe("SshGitHost answers to a transport launch", () => {
     });
   });
 
+  for (const { name, probe, stderr } of [
+    {
+      name: "denied.test",
+      probe: { kind: "denied" },
+      stderr: "git@denied.test: Permission denied (publickey).\n",
+    },
+    {
+      name: "host-key.test",
+      probe: { kind: "host-key" },
+      stderr: "Host key verification failed.\n",
+    },
+  ] as const) {
+    test(`refuses a git-upload-pack launch to ${name} with its probe's answer and exit 255`, async (t) => {
+      const { host } = await startHost(t);
+      await host.register(name, { probe });
+      const probed = await runSsh(host, [...PROBE_OPTIONS, `git@${name}`]);
+
+      const run = await runSsh(host, [`git@${name}`, UPLOAD_PACK]);
+
+      assert.deepStrictEqual(run, { exitCode: 255, stdout: "", stderr });
+      assert.deepStrictEqual(run, probed);
+    });
+  }
+
+  test("serves a clone from a host that holds only its probes", async (t) => {
+    const { host, tip } = await startHost(t);
+    await host.register("hold.test", { probe: { kind: "hold" } });
+    const client = await sshClient(t, host);
+
+    await runSystemGit(client.call, "clone", "-q", "git@hold.test:acme/tools.git", "tools");
+
+    assert.strictEqual(await runSystemGit(client.inClone("tools"), "rev-parse", "HEAD"), tip);
+  });
+
   test("fails a system git clone from a host without repository access", async (t) => {
     const { host } = await startHost(t);
     await host.register("no-repository.test", { probe: { kind: "no-repository", user: "acme" } });

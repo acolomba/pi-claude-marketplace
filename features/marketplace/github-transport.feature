@@ -69,3 +69,50 @@ Feature: Marketplace github transport
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+  Scenario: Adding a github marketplace whose https clone fails retries over ssh
+    Given the marketplace "tools" is published as a github source
+    Given the git host answers 404 for the marketplace "tools"
+    Given the user's ssh never answers for "github.com"
+    Given pi runs with github's requests routed to the git host
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
+
+  Scenario: Adding a github marketplace that fails over both transports reports both attempts
+    Given the marketplace "tools" is published as a github source
+    Given the git host answers 404 for the marketplace "tools"
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                         | cause truncated |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: repository-not-found, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the user scope holds no marketplace record
+    Then the user scope holds no marketplace checkout
+    Then the user scope holds no git clones

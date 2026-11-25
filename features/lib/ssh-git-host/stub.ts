@@ -181,7 +181,7 @@ async function answer(directory: string, argv: readonly string[]): Promise<void>
 
   const requested = uploadPackPath(launch.command);
   if (requested !== undefined) {
-    const refused = transportRefusal(arm.probe);
+    const refused = transportRefusal(arm.probe, launch.destination);
     if (refused === undefined) {
       await serveUploadPack(directory, hosts, requested);
     } else {

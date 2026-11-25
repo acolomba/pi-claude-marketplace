@@ -13,9 +13,12 @@
 // A plan with two attempts gives the other one once after the first fails,
 // as Claude Code's marketplace clone retries on any error. Pi gives none
 // after git is missing or the command was aborted: no transport can clone
-// without git, and an abort stops the command.
+// without git, and an abort stops the command. Nor after print mode refused
+// the Device Flow sign-in (MODE-04): that refusal is about the mode, not the
+// transport, and print mode shows no failed row, so a retry that failed too
+// would hide the refusal's remedy.
 
-import { GitCommandError } from "../shared/errors.ts";
+import { DeviceFlowUnavailableError, GitCommandError } from "../shared/errors.ts";
 import { GITHUB_HOST } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
@@ -53,7 +56,8 @@ export interface TransportPlan {
    * The attempt to run after `failed` threw `failure`, or undefined when the
    * clone stops there. A two-attempt plan gives its other attempt once, and
    * nothing after a `GitCommandError` whose kind is `git-missing` or
-   * `aborted`. A one-attempt plan gives nothing.
+   * `aborted`, or after a `DeviceFlowUnavailableError`. A one-attempt plan
+   * gives nothing.
    */
   readonly after: (
     failure: unknown,
@@ -91,9 +95,13 @@ function noRetry(): Promise<undefined> {
   return Promise.resolve(undefined);
 }
 
-// Whether `failure` stops the clone with no other attempt: git is missing, or
-// the command was aborted.
+// Whether `failure` stops the clone with no other attempt: git is missing,
+// the command was aborted, or print mode refused the sign-in.
 function stopsTheClone(failure: unknown): boolean {
+  if (failure instanceof DeviceFlowUnavailableError) {
+    return true;
+  }
+
   return (
     failure instanceof GitCommandError &&
     (failure.kind === "git-missing" || failure.kind === "aborted")

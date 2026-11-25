@@ -39,6 +39,7 @@ import {
   CleanupLeakError,
   FetchedUrlCause,
   GitCommandError,
+  GitHubTransportsFailedError,
   HostedManifestFetchError,
   HostedManifestHttpError,
   InvalidGitHubBaseUrlError,
@@ -685,6 +686,88 @@ test("SG-SSH-02: removes the staging directory and clones over https after the s
     assert.deepStrictEqual(
       await readdir(path.join(locations.extensionRoot, "sources-staging")),
       [],
+    );
+  });
+});
+
+/** SG-SSH-02: git ops whose https clone fails with `https` and whose ssh clone fails with `ssh`. */
+function failingOverBoth(https: Error, ssh: Error): GitOps {
+  const { gitOps } = createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") });
+  return {
+    ...gitOps,
+    clone: (options) => Promise.reject(options.url.startsWith("https:") ? https : ssh),
+  };
+}
+
+const SSH_PUBLICKEY_FAILURE = new GitCommandError(
+  { kind: "ssh-auth", detail: "publickey" },
+  { operation: "clone --depth", exitCode: 128 },
+);
+
+test("D-SG-22, OQ-8: fails as the last attempt's reason, with both attempts in the error, when both transports fail", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run } = makeCtx();
+    const httpsFailure = httpError(404);
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps: failingOverBoth(httpsFailure, SSH_PUBLICKEY_FAILURE),
+      gitHubSsh: userSsh("not-configured"),
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.ok(outcome?.status === "failed");
+    assert.strictEqual(outcome.reason, "authentication required");
+    assert.ok(outcome.error instanceof GitHubTransportsFailedError);
+    assert.deepStrictEqual(
+      outcome.error.attempts.map(({ transport, url, error }) => ({ transport, url, error })),
+      [
+        { transport: "https", url: "https://github.com/acme/mp.git", error: httpsFailure },
+        { transport: "ssh", url: "git@github.com:acme/mp.git", error: SSH_PUBLICKEY_FAILURE },
+      ],
+    );
+    assert.deepStrictEqual(
+      Object.keys((await loadState(locations.extensionRoot)).marketplaces),
+      [],
+    );
+  });
+});
+
+test("D-SG-22, OQ-8: shows both attempts in the cause of the failed row when both transports fail", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps: failingOverBoth(httpError(404), SSH_PUBLICKEY_FAILURE),
+      gitHubSsh: userSsh("not-configured"),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map(({ severity }) => severity),
+      ["error"],
+    );
+    const message = notifications[0]?.message ?? "";
+    assert.ok(message.includes("(failed) {authentication required}"), message);
+    assert.ok(
+      message.includes(
+        "Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/mp.git): git clone failed: repository-not-found, exit code 128",
+      ),
+      message,
     );
   });
 });

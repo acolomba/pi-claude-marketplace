@@ -6,6 +6,7 @@ import {
   createGitHubCloneNotes,
   transportForce,
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
+import { GitHubTransportsFailedError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
@@ -332,5 +333,139 @@ describe("cloneOverGitHubTransports", () => {
     assert.deepStrictEqual(logged, [
       "[git] SSH clone failed for marketplace acme/tools (clone of https://***@github.com/acme/tools.git into x failed), falling back to HTTPS",
     ]);
+  });
+
+  test("SG-SSH-02: clones over ssh after the https attempt fails", async () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    const attempts: TransportAttempt[] = [];
+
+    // act
+    const cloned = await cloneOverGitHubTransports({
+      plan: planOf(HTTPS_ATTEMPT, "ssh-not-configured", SSH_ATTEMPT),
+      notes,
+      subject: "acme/tools",
+      surface: "marketplace",
+      attempt: (attempt) => {
+        attempts.push(attempt);
+        return attempt.transport === "https"
+          ? Promise.reject(new Error("authentication required"))
+          : Promise.resolve(`cloned ${attempt.url}`);
+      },
+    });
+
+    // assert
+    assert.strictEqual(cloned, "cloned git@github.com:acme/tools.git");
+    assert.deepStrictEqual(attempts, [HTTPS_ATTEMPT, SSH_ATTEMPT]);
+    assert.deepStrictEqual(notes.noteFor("acme/tools"), {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/tools.git",
+      retries: ["git@github.com:acme/tools.git"],
+    });
+  });
+
+  test("D-SG-22, OQ-8: throws one error that names both attempts when both fail with different messages", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const httpsFailure = new Error("authentication required");
+    const sshFailure = new Error("Permission denied (publickey).");
+
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan: planOf(HTTPS_ATTEMPT, undefined, SSH_ATTEMPT),
+        notes: createGitHubCloneNotes(),
+        subject: "acme/tools",
+        surface: "marketplace",
+        attempt: (attempt) =>
+          Promise.reject(attempt.transport === "https" ? httpsFailure : sshFailure),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubTransportsFailedError);
+        assert.strictEqual(error.surface, "marketplace");
+        assert.deepStrictEqual(error.attempts, [
+          { ...HTTPS_ATTEMPT, error: httpsFailure },
+          { ...SSH_ATTEMPT, error: sshFailure },
+        ]);
+        assert.strictEqual(
+          error.message,
+          "Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): authentication required\n\nSSH (git@github.com:acme/tools.git): Permission denied (publickey).",
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(logged, [
+      "[git] HTTPS clone failed for marketplace acme/tools (authentication required), falling back to SSH",
+      "[git] SSH clone fallback also failed for marketplace acme/tools: Permission denied (publickey).",
+    ]);
+  });
+
+  test("wqo: throws the second error unchanged when a marketplace clone fails over both with the same message", async () => {
+    // arrange
+    const sshFailure = new Error("network unreachable");
+    const httpsFailure = new Error("network unreachable");
+
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan: planOf(SSH_ATTEMPT, "via-ssh", HTTPS_ATTEMPT),
+        notes: createGitHubCloneNotes(),
+        subject: "acme/tools",
+        surface: "marketplace",
+        attempt: (attempt) =>
+          Promise.reject(attempt.transport === "ssh" ? sshFailure : httpsFailure),
+      }),
+      (error: unknown) => {
+        assert.strictEqual(error, httpsFailure);
+        return true;
+      },
+    );
+  });
+
+  test("throws one error that names both attempts when a plugin clone fails over both with the same message", async () => {
+    // arrange
+    const failure = new Error("network unreachable");
+
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan: planOf(HTTPS_ATTEMPT, undefined, SSH_ATTEMPT),
+        notes: createGitHubCloneNotes(),
+        subject: "tools@acme",
+        surface: "plugin",
+        attempt: () => Promise.reject(failure),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubTransportsFailedError);
+        assert.strictEqual(error.surface, "plugin");
+        return true;
+      },
+    );
+  });
+
+  test("D-SG-22: holds a rejection that is not an Error as an Error with its text", async () => {
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan: planOf(HTTPS_ATTEMPT, undefined, SSH_ATTEMPT),
+        notes: createGitHubCloneNotes(),
+        subject: "acme/tools",
+        surface: "marketplace",
+        attempt: (attempt) =>
+          // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the case pins a rejection that is not an Error
+          Promise.reject(attempt.transport === "https" ? "refused" : new Error("denied")),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof GitHubTransportsFailedError);
+        assert.deepStrictEqual(
+          error.attempts.map((attempt) => [attempt.transport, attempt.error.message]),
+          [
+            ["https", "refused"],
+            ["ssh", "denied"],
+          ],
+        );
+        return true;
+      },
+    );
   });
 });
