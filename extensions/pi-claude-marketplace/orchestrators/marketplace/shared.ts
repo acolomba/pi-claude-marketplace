@@ -8,6 +8,9 @@
 //     a plugin mirror refresh by D-SG-10's freshness check, re-clone, and swap
 //     (`clone-swap.ts`), never by a fetch and checkout in place.
 //
+//   - GitHubSshOps + DEFAULT_GITHUB_SSH_OPS (SG-SSH-02): the ssh probe that
+//     orders a GitHub clone's transports.
+//
 //   - lacksStoredCredential (GAUTH-04): whether an auth failure gains the
 //     line that names how to store a credential.
 //
@@ -67,7 +70,7 @@ import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { GitAuthBundle } from "../../platform/git-credential.ts";
-import type { ListRemotesResult } from "../../platform/git.ts";
+import type { ListRemotesResult, SshProbeResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type {
@@ -230,6 +233,24 @@ export const DEFAULT_GIT_OPS: GitOps = {
   resolveRef: defaultGit.resolveRef,
   resolveRemoteRef: defaultGit.resolveRemoteRef,
   listRemotes: defaultGit.listRemotes,
+};
+
+/**
+ * SG-SSH-02: the user's ssh as the GitHub transport choice reads it. A port
+ * of its own, beside `GitOps`, so a test of a GitHub clone states the probe's
+ * answer and no test runs the machine's ssh.
+ */
+export interface GitHubSshOps {
+  /** Claude Code's probe of whether the user's ssh authenticates to GitHub. */
+  readonly probe: () => Promise<SshProbeResult>;
+}
+
+/**
+ * SG-SSH-02: the default port, on the system ssh through `platform/git.ts`.
+ * NFR-5: only a `NETWORK_SEAMS` module may name it (BLOCK F).
+ */
+export const DEFAULT_GITHUB_SSH_OPS: GitHubSshOps = {
+  probe: () => defaultGit.probeGitHubSsh(),
 };
 
 /**

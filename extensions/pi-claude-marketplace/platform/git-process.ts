@@ -92,12 +92,22 @@
 // module reads `git version` once and writes it to the debug log. The read
 // stops when the request's signal aborts.
 //
-// D-SG-01, D-PL9-11: this module is the extension's sanctioned git spawn site,
-// and the ssh one once the SSH probe lands. It may import Node's child-process
-// module, for its own spawn binding; the rule pack's child-process-chokepoint
-// rule and test/architecture/no-shell-out.test.ts name every module that may.
-// Only platform/git.ts and platform/git-credential.ts may import this module
-// (the GIT_PROCESS_IMPORTERS zone of BLOCK C in eslint.config.js).
+// SG-SSH-02: the module also runs the user's own ssh for a closed set of
+// launches, each with a fixed argument list and a fixed limit. ssh is looked
+// up in the absolute entries of PATH only, as git is, and on Windows only
+// ssh.exe runs. A miss starts nothing and is never kept. A launch runs in the
+// neutral directory (Claude Code runs it in the home directory; the result is
+// the same), with the base environment unchanged, so the user's agent socket
+// reaches ssh, and with stdin closed. Its timeout stops the whole process
+// tree. No debug log names the command, because a user's ssh arguments can
+// name key files.
+//
+// D-SG-01, D-PL9-11: this module is the extension's sanctioned git and ssh
+// spawn site. It may import Node's child-process module, for its own spawn
+// binding; the rule pack's child-process-chokepoint rule and
+// test/architecture/no-shell-out.test.ts name every module that may. Only
+// platform/git.ts and platform/git-credential.ts may import this module (the
+// GIT_PROCESS_IMPORTERS zone of BLOCK C in eslint.config.js).
 
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
@@ -107,6 +117,7 @@ import { performance } from "node:perf_hooks";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { GitCommandError } from "../shared/errors.ts";
+import { GITHUB_HOST } from "../shared/github-base-url.ts";
 
 import { classifyGitExit } from "./git-failure-kind.ts";
 import { createNeutralDirectory } from "./git-neutral-directory.ts";
@@ -208,6 +219,34 @@ export interface GitProcess {
   readonly locate: () => Promise<string>;
   /** Resolves with the run; rejects with a GitCommandError when it failed. */
   readonly run: (request: GitRequest) => Promise<GitResult>;
+}
+
+/**
+ * SG-SSH-02: the ssh launches the module runs. `github-probe` is Claude Code's
+ * check of whether the user's ssh authenticates to GitHub.
+ */
+export type SshLaunch = "github-probe";
+
+/**
+ * What one ssh launch did. `output` is stdout, a newline, and stderr, as
+ * Claude Code reads it. `missing` means no ssh was found, so nothing started.
+ */
+export type SshRun =
+  | {
+      readonly kind: "ran";
+      readonly exitCode: number | null;
+      readonly output: string;
+      readonly timedOut: boolean;
+    }
+  | { readonly kind: "missing" };
+
+/** The git process plus the ssh launches of the same spawn site. */
+export interface SystemGitProcess extends GitProcess {
+  /**
+   * Runs `launch` with the user's ssh. Rejects when ssh was found but could
+   * not start, or when the neutral directory cannot be made.
+   */
+  readonly ssh: (launch: SshLaunch) => Promise<SshRun>;
 }
 
 const HOOK_NAMES = [
@@ -626,6 +665,32 @@ const STDOUT_CUT = `git wrote more than ${STDOUT_CAPTURE.limit} characters to st
 
 const WINDOWS_LOOKUP_EXTENSIONS = [".exe", ".cmd", ".bat"] as const;
 
+// SG-SSH-02: an ssh launch's argument list and limit, verbatim from Claude
+// Code. The probe's limit is fixed and does not follow the git limit.
+interface SshLaunchSpec {
+  readonly args: readonly string[];
+  readonly timeoutMs: number;
+}
+
+const SSH_LAUNCHES: Readonly<Record<SshLaunch, SshLaunchSpec>> = {
+  "github-probe": {
+    args: [
+      "-T",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "ConnectTimeout=2",
+      "-o",
+      "StrictHostKeyChecking=yes",
+      `git@${GITHUB_HOST}`,
+    ],
+    timeoutMs: 3_000,
+  },
+};
+
+// The answer of a probe is a line or two; the tail keeps ssh's last words.
+const SSH_CAPTURE: OutputCapture = { limit: 65_536, keep: "tail" };
+
 // D-SG-04: the xcrun shim, and the developer directories that hold a real git
 // behind it.
 const MACOS_SHIM = "/usr/bin/git";
@@ -781,19 +846,33 @@ function gitMissing(
   return new GitCommandError({ kind: "git-missing", detail }, { operation: "lookup" });
 }
 
-async function findGitOnPosix(
+// D-SG-04: the first executable `command` in `directories`, in PATH order.
+async function findOnPosixPath(
+  command: string,
   directories: readonly string[],
   host: GitProcessHost,
-): Promise<string> {
+): Promise<string | undefined> {
   for (const directory of directories) {
-    const candidate = path.posix.join(directory, "git");
-    // eslint-disable-next-line no-await-in-loop -- PATH order decides which git runs
+    const candidate = path.posix.join(directory, command);
+    // eslint-disable-next-line no-await-in-loop -- PATH order decides which program runs
     if (await host.isExecutable(candidate)) {
       return candidate;
     }
   }
 
-  throw gitMissing("not-found");
+  return undefined;
+}
+
+async function findGitOnPosix(
+  directories: readonly string[],
+  host: GitProcessHost,
+): Promise<string> {
+  const git = await findOnPosixPath("git", directories, host);
+  if (git === undefined) {
+    throw gitMissing("not-found");
+  }
+
+  return git;
 }
 
 // Whether `directory` is `parent` or lies below it, ignoring case.
@@ -808,15 +887,18 @@ function realpathOrUndefined(host: GitProcessHost, file: string): Promise<string
   return host.realpath(file).catch(() => undefined);
 }
 
-async function findGitOnWindows(env: NodeJS.ProcessEnv, host: GitProcessHost): Promise<string> {
+// D-SG-04: the Windows candidate filter. Claude Code skips a match inside the
+// working directory and keeps looking. WR-03: so is a match whose directory
+// has no readable real path.
+async function outsideWorkingDirectory(
+  host: GitProcessHost,
+): Promise<(candidate: string) => Promise<boolean>> {
   const cwd = host.cwd();
   // WR-03: a working directory that no longer exists holds no candidate, so
   // its path as given is enough.
   const realCwd = await realpathOrUndefined(host, cwd);
   const workingDirectories = realCwd === undefined ? [cwd] : [cwd, realCwd];
-  // Claude Code skips a match inside the working directory and keeps looking.
-  // WR-03: so is a match whose directory has no readable real path.
-  const accept = async (candidate: string): Promise<boolean> => {
+  return async (candidate) => {
     const directory = path.win32.dirname(candidate);
     const realDirectory = await realpathOrUndefined(host, directory);
     return (
@@ -826,10 +908,12 @@ async function findGitOnWindows(env: NodeJS.ProcessEnv, host: GitProcessHost): P
       )
     );
   };
+}
 
+async function findGitOnWindows(env: NodeJS.ProcessEnv, host: GitProcessHost): Promise<string> {
   const found = await findOnWindowsPath("git", env, host, {
     extensions: WINDOWS_LOOKUP_EXTENSIONS,
-    accept,
+    accept: await outsideWorkingDirectory(host),
   });
   if (found === undefined) {
     throw gitMissing("not-found");
@@ -887,6 +971,19 @@ async function findGit(
   }
 
   return git;
+}
+
+// SG-SSH-02, D-SG-04: the user's ssh, from the absolute entries of PATH only;
+// on Windows only ssh.exe. Undefined when there is none.
+async function findSsh(env: NodeJS.ProcessEnv, host: GitProcessHost): Promise<string | undefined> {
+  if (host.platform === "win32") {
+    return findOnWindowsPath("ssh", env, host, {
+      extensions: [".exe"],
+      accept: await outsideWorkingDirectory(host),
+    });
+  }
+
+  return findOnPosixPath("ssh", searchPath(env, POSIX_RULES).directories, host);
 }
 
 // D-SG-04: a start error whose git file is gone. The working directory exists
@@ -966,7 +1063,7 @@ function firstLine(text: string): string {
  * Construction does no I/O; the instance owns the cache of found gits.
  */
 // fallow-ignore-next-line unused-export -- NODE_GIT_PROCESS below composes it in production, and the module test composes it with a fake launcher and host.
-export function createGitProcess(options: GitProcessOptions): GitProcess {
+export function createGitProcess(options: GitProcessOptions): SystemGitProcess {
   const { host } = options;
   const found = new Map<string, string>();
 
@@ -1134,7 +1231,42 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
     }
   }
 
-  return { locate, run };
+  // SG-SSH-02: one ssh launch in the neutral directory, with the base
+  // environment as it is and stdin closed. A lookup miss starts nothing.
+  async function ssh(launch: SshLaunch): Promise<SshRun> {
+    const command = await findSsh(options.env, host);
+    if (command === undefined) {
+      return { kind: "missing" };
+    }
+
+    const spec = SSH_LAUNCHES[launch];
+    const processRun = await runProcess(
+      { spawn: options.spawn, host },
+      {
+        command,
+        args: spec.args,
+        cwd: await host.neutralDirectory(),
+        env: options.env,
+        timeoutMs: spec.timeoutMs,
+        killGraceMs: options.killGraceMs,
+        stdout: SSH_CAPTURE,
+        stderr: SSH_CAPTURE,
+        windowsHide: true,
+      },
+    );
+    if (processRun.error !== undefined) {
+      throw processRun.error;
+    }
+
+    return {
+      kind: "ran",
+      exitCode: processRun.code,
+      output: `${processRun.stdout}\n${processRun.stderr}`,
+      timedOut: processRun.timedOut,
+    };
+  }
+
+  return { locate, run, ssh };
 }
 
 async function isExecutableFile(file: string): Promise<boolean> {
@@ -1182,7 +1314,7 @@ const KILL_GRACE_MS = 1_000;
  * environment, so a found git is looked up once per PATH and working
  * directory.
  */
-export const NODE_GIT_PROCESS: GitProcess = createGitProcess({
+export const NODE_GIT_PROCESS: SystemGitProcess = createGitProcess({
   spawn: NODE_GIT_SPAWN,
   host: NODE_GIT_HOST,
   env: process.env,

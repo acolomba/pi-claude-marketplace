@@ -84,6 +84,32 @@ for (const { address, host } of [
   });
 }
 
+test("routes a git request to the git host when the config names no sign-in stand-in", () => {
+  // arrange
+  const url = new URL("https://github.com/acme/tools.git/info/refs?service=git-upload-pack");
+
+  // act
+  const route = routeRequest(url, { gitHost: "127.0.0.1:1111" });
+
+  // assert
+  assert.deepStrictEqual(route, {
+    decision: "routed",
+    target: "git host",
+    url: "https://127.0.0.1:1111/acme/tools.git/info/refs?service=git-upload-pack",
+  });
+});
+
+test("refuses a sign-in request when the config names no sign-in stand-in", () => {
+  // arrange
+  const url = new URL("https://github.com/login/device/code");
+
+  // act
+  const route = routeRequest(url, { gitHost: "127.0.0.1:1111" });
+
+  // assert
+  assert.deepStrictEqual(route, { decision: "refused", host: "github.com" });
+});
+
 test("refuses a request for github.com when the redirect has no config", () => {
   // arrange
   const url = new URL("https://github.com/acme/tools.git/info/refs?service=git-upload-pack");

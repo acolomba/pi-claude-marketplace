@@ -102,11 +102,11 @@ const NETWORK_SEAMS = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts",
 ];
 
-// NFR-5 / D-PL5-07: the names of the git seam and of the hosted catalog
-// download. A network-free module reaches neither through a name the gate
-// does not match.
+// NFR-5 / D-PL5-07: the names of the git seam, of the default ssh probe
+// (SG-SSH-02), and of the hosted catalog download. A network-free module
+// reaches none of them through a name the gate does not match.
 const NETWORK_SEAM_NAMES =
-  "gitOps|DEFAULT_GIT_OPS|refreshCloneBySwap|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
+  "gitOps|DEFAULT_GIT_OPS|DEFAULT_GITHUB_SSH_OPS|refreshCloneBySwap|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
 
 const NETWORK_FREE_SYNTAX_SELECTORS = [
   {
