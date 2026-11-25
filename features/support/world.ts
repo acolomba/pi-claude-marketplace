@@ -191,6 +191,13 @@ export interface PiProfile {
    */
   readonly httpsProxy?: string;
   /**
+   * Upstream's transport variables of a profile Pi without the GitHub base
+   * override and of its terminal session (D-SG-24). The run's shared Pi
+   * never sets them. `usePiWithProfile()` refuses them on a profile that
+   * keeps the override, whose GitHub clones never probe.
+   */
+  readonly variables?: ProfilePiVariables;
+  /**
    * The profile Pi saves its session in the sandbox's sessions folder instead
    * of starting with `--no-session`, so a restart can start a new session or
    * continue, open, or fork a saved one (D-PG6-16). The scenario's release
@@ -257,6 +264,16 @@ type ScenarioPiVariables = Pick<
   | "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS"
   | "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS"
   | "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE"
+>;
+
+/**
+ * The variables a profile Pi without the GitHub base override may add to the
+ * run's git environment: upstream's switch to https and its remote-session
+ * marker (D-SG-24).
+ */
+export type ProfilePiVariables = Pick<
+  RpcGitEnvironment,
+  "CLAUDE_CODE_PLUGIN_PREFER_HTTPS" | "CLAUDE_CODE_REMOTE"
 >;
 
 // What a profile Pi starts with: its profile, whether it starts with
@@ -877,6 +894,10 @@ export class ScenarioWorld extends World {
       this.keepTerminalSessionLocal(profile);
     } else if (profile.httpsProxy !== undefined) {
       throw new Error("only a profile Pi without the GitHub base override takes a proxy");
+    } else if (profile.variables !== undefined) {
+      throw new Error(
+        "only a profile Pi without the GitHub base override takes upstream's transport variables",
+      );
     }
 
     const harness = harnessDirectory(currentRun().sandbox.home);
@@ -1413,17 +1434,18 @@ async function savedPayloads(pi: PiProcess): Promise<readonly NotificationPayloa
 }
 
 // The run's git environment for a profile Pi, without the GitHub base
-// override and with the profile's proxy when the profile asks for that
-// (D-BG-01, D-SG-14).
+// override and with the profile's proxy and upstream variables when the
+// profile asks for that (D-BG-01, D-SG-14, D-SG-24).
 function profileGitEnvironment(
-  profile: Pick<PiProfile, "withoutGitHubBaseOverride" | "httpsProxy">,
+  profile: Pick<PiProfile, "withoutGitHubBaseOverride" | "httpsProxy" | "variables">,
 ): RpcGitEnvironment {
   const { piEnvironment } = currentRun();
   if (profile.withoutGitHubBaseOverride !== true) {
     return piEnvironment;
   }
 
-  const { PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: _override, ...environment } = piEnvironment;
+  const { PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: _override, ...base } = piEnvironment;
+  const environment = { ...base, ...profile.variables };
   return profile.httpsProxy === undefined
     ? environment
     : { ...environment, https_proxy: profile.httpsProxy, no_proxy: "127.0.0.1" };
