@@ -100,30 +100,10 @@ export type GitBackedSource = UrlSource | GitSubdirSource | GitHubSource;
 const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/...";
 
 /**
- * D-76-01: reject message for non-https URL schemes. Only `https://` URLs and
- * local paths are accepted; `http://`, `ssh://`, and `git@host:` scp-form each
- * name themselves so the diagnostic tells the user which scheme was rejected.
+ * D-SG-20 / upstream `KHi`: the GitHub `owner/repo` shorthand a git-subdir
+ * `url` may hold in place of a git address.
  */
-function unsupportedUrlReason(raw: string): string {
-  const scheme = rejectedScheme(raw);
-  return `${raw} is not supported; ${scheme} URLs are rejected -- only https:// URLs and local paths are accepted`;
-}
-
-function rejectedScheme(raw: string): string {
-  if (raw.startsWith("git@")) {
-    return "git@host: scp-form";
-  }
-
-  if (raw.startsWith("http://")) {
-    return "http://";
-  }
-
-  if (raw.startsWith("ssh://")) {
-    return "ssh://";
-  }
-
-  return "this URL scheme";
-}
+const GIT_SUBDIR_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 /** MM-4: non-relative string sources -- the "fallthrough" reason. */
 function nonRelativeReason(raw: string): string {
@@ -220,10 +200,10 @@ function unknownObjectSource(obj: Record<string, unknown>, reason: string): Unkn
 }
 
 /**
- * D-76-01: put one field of a manifest-supplied url object through the same
- * syntactic gate the string form uses, so `http://`, `ssh://`, `git@host:`, a
- * relative path and a github browser URL are rejected whichever field carries
- * them. `PLUGIN_ENTRY_SCHEMA` types an entry's source as `unknown`, so a
+ * D-SG-17: put one field of a manifest-supplied url object through the same
+ * syntactic gate the string form uses, so an address Claude Code's git
+ * validator refuses, a relative path, and a github browser URL are rejected
+ * whichever field carries them. `PLUGIN_ENTRY_SCHEMA` types an entry's source as `unknown`, so a
  * third-party marketplace manifest controls every field of the object, and the
  * two fields `urlObjectSource` reads reach different consumers: `url` becomes
  * the cache identity `canonicalCloneUrl` returns, and `raw` becomes the wire url
@@ -289,11 +269,25 @@ function urlObjectSource(obj: Record<string, unknown>): ParsedSource {
   return withOptionalSourceFields({ ...identity, raw }, obj);
 }
 
+/**
+ * D-SG-17 (closes F-2): a git-subdir `url` is an `owner/repo` shorthand or a
+ * git address that Claude Code's validator accepts, as upstream's `KHi` reads
+ * it, so `ext::` and a `file:` URL with a host are refused before git runs.
+ * The validator reads the wire form `networkCloneUrl` sends, without the
+ * `#<ref>` and trailing slashes. The shorthand keeps its `url` as written.
+ */
 function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
   const url = optionalString(obj, "url");
   const subPath = optionalString(obj, "path");
   if (url === undefined || subPath === undefined) {
     return unknownObjectSource(obj, "git-subdir source is missing url or path");
+  }
+
+  const refusal = GIT_SUBDIR_SHORTHAND.test(url)
+    ? undefined
+    : gitUrlRefusal(stripSlashAndFragment(url).base);
+  if (refusal !== undefined) {
+    return unknownObjectSource(obj, refusal);
   }
 
   return withOptionalSourceFields({ kind: "git-subdir", raw: url, url, path: subPath }, obj);
@@ -450,11 +444,12 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
  * never this arm, so a plugin entry's `{ source: "url" }` stays a git source.
  */
 function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSource | undefined {
-  if (!raw.startsWith("https://") || gitHubUrlPath(raw) !== undefined) {
+  const scheme = ["https://", "http://"].find((prefix) => raw.startsWith(prefix));
+  if (scheme === undefined || gitHubUrlPath(raw) !== undefined) {
     return undefined;
   }
 
-  const afterScheme = raw.slice("https://".length);
+  const afterScheme = raw.slice(scheme.length);
   const pathStart = afterScheme.search(/[/?#]/);
   if (pathStart === -1 || afterScheme[pathStart] !== "/") {
     return undefined;
@@ -465,6 +460,15 @@ function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSou
   const urlPath = pathEnd === -1 ? pathAndRest : pathAndRest.slice(0, pathEnd);
   if (!urlPath.toLowerCase().endsWith(".json")) {
     return undefined;
+  }
+
+  // D-PL5-36: D-SG-17 accepts http:// for git sources only; a catalog stays https.
+  if (scheme === "http://") {
+    return {
+      kind: "unknown",
+      raw,
+      reason: `${raw} is not supported; a marketplace.json catalog URL must use https://`,
+    };
   }
 
   if (pathStart === 0 || !URL.canParse(raw)) {
@@ -485,9 +489,12 @@ function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSou
  * `https://GitHub.com/o/r`, `https://www.github.com/o/r` and
  * `https://github.com:443/o/r` name the same repo as `https://github.com/o/r`.
  *
- * D-76-01: `http://`, `ssh://` and the `git@host:` scp form stay rejected.
- * Only `https://` URLs and local paths are accepted, so the reject must sit
- * AFTER both https arms.
+ * D-SG-17: every other address with a scheme, the scp form, and any other
+ * `git@` string go through Claude Code's git validator, which accepts
+ * `https`, `http`, `ssh`, `git+ssh`, `ssh+git`, scp, and a host-less `file:`
+ * URL and refuses `git://` and every other scheme with its own message. A
+ * `file:` address with no `//` reaches it too, so its spelling is refused
+ * rather than read as a shorthand.
  */
 function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSource | undefined {
   const gitHubPath = gitHubUrlPath(raw);
@@ -495,19 +502,16 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
     return parseGitHubUrl(raw, gitHubPath);
   }
 
-  // MURL-01 / D-76-01: any other https host is a generic `url` source.
-  if (raw.startsWith("https://")) {
-    return parseUrlSource(raw);
-  }
-
-  // D-SG-17: an scp address clones as written, so even a `git@github.com:`
-  // address stays a `url` source; only the `owner/repo` spelling is `github`.
-  if (isScpGitAddress(raw)) {
+  // MURL-01 / D-SG-17: any other git address is a generic `url` source. An
+  // scp address clones as written, so even a `git@github.com:` address stays
+  // a `url` source; only the `owner/repo` spelling is `github`.
+  if (
+    raw.includes("://") ||
+    raw.startsWith("git@") ||
+    raw.toLowerCase().startsWith("file:") ||
+    isScpGitAddress(raw)
+  ) {
     return gatedGitUrlSource(raw);
-  }
-
-  if (raw.startsWith("git@") || raw.includes("://")) {
-    return { kind: "unknown", raw, reason: unsupportedUrlReason(raw) };
   }
 
   return undefined;
@@ -705,7 +709,7 @@ export function ensureGitSuffix(url: string): string {
 }
 
 /**
- * MURL-01 / D-76-01: parse a generic non-github `https://` source into a
+ * MURL-01 / D-76-01: parse a generic non-github git address into a
  * `UrlSource`. Splits off an optional `#<ref>` fragment (empty fragment
  * dropped), strips the path's trailing slashes, then strips a single trailing
  * `.git`. Normalizing the `.git` suffix at parse time is the identity rule that

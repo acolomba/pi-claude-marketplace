@@ -28,3 +28,7 @@ Then(
     assert.deepStrictEqual([["argv"], ...rows], table.raw());
   },
 );
+
+Then("the user's ssh receives no launch", async function (this: ScenarioWorld): Promise<void> {
+  assert.deepStrictEqual(await this.sshLaunchesOfLastCommand(), []);
+});

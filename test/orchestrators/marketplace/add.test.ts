@@ -1874,7 +1874,7 @@ test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}
       run,
       scope: "project",
       cwd,
-      rawSource: "git@github.com:foo/bar.git",
+      rawSource: "git://github.com/foo/bar.git",
       gitOps,
     });
 
@@ -1884,7 +1884,7 @@ test("MA-10 / ATTR-07: unknown source kind renders (failed) {unsupported source}
     assert.equal(
       note.message,
       "A marketplace operation has failed.\n\n" +
-        "⊘ git@github.com:foo/bar.git [project] (failed) {unsupported source}",
+        "⊘ git://github.com/foo/bar.git [project] (failed) {unsupported source}",
     );
     assert.equal(note.severity, "error");
 
@@ -3254,7 +3254,7 @@ test("RECON-03 orchestrated mode -- unsupported source returns { status: 'failed
       run,
       scope: "project",
       cwd,
-      rawSource: "git@github.com:foo/bar.git",
+      rawSource: "git://github.com/foo/bar.git",
       gitOps,
       notifications: { mode: "orchestrated" },
     });
