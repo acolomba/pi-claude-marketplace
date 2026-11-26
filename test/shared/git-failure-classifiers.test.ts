@@ -6,6 +6,7 @@ import {
   GitCommandError,
   GitHubTransportsFailedError,
   HostedManifestHttpError,
+  InvalidGitHubRepositoryError,
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -103,6 +104,26 @@ describe("classifyGitFailure", () => {
       remoteUrl: REMOTE_URL,
       expected: { reason: "source missing" },
     },
+    ...[
+      { label: "the plugin-clone rule", rule: PLUGIN_CLONE_RULE },
+      { label: "the fetch rule", rule: UNKNOWN_RULE },
+    ].flatMap(({ label, rule }) => [
+      {
+        title: `IN-A-01: classifies a refused github repository as unsupported source under ${label}`,
+        createFailure: () => new InvalidGitHubRepositoryError("evil:x/ghp"),
+        rule,
+        remoteUrl: REMOTE_URL,
+        expected: { reason: "unsupported source" },
+      },
+      {
+        title: `IN-A-01, INR-02: classifies a refused github repository behind a cleanup leak under ${label}`,
+        createFailure: () =>
+          appendLeakToError(new InvalidGitHubRepositoryError("evil:x/ghp"), "staging leaked"),
+        rule,
+        remoteUrl: undefined,
+        expected: { reason: "unsupported source" },
+      },
+    ]),
     {
       title: "INR-02: classifies and frames the host's answer behind a cleanup leak",
       createFailure: () =>
@@ -541,6 +562,17 @@ describe("classifyGitHostFailure", () => {
     // assert
     assert.strictEqual(reason, undefined);
   });
+
+  test("IN-A-01: classifies a refused github repository as unsupported source", () => {
+    // arrange
+    const failure = new InvalidGitHubRepositoryError("evil:x/ghp");
+
+    // act
+    const reason = classifyGitHostFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "unsupported source");
+  });
 });
 
 describe("classifyGitSourceAccessFailure", () => {
@@ -553,6 +585,17 @@ describe("classifyGitSourceAccessFailure", () => {
 
     // assert
     assert.strictEqual(reason, "source missing");
+  });
+
+  test("IN-A-01: classifies a refused github repository as unsupported source", () => {
+    // arrange
+    const failure = new InvalidGitHubRepositoryError("evil:x/ghp");
+
+    // act
+    const reason = classifyGitSourceAccessFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "unsupported source");
   });
 });
 

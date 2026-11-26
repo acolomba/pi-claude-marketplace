@@ -233,6 +233,31 @@ Feature: Plugin fetch
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 503    |
     Then the project scope holds no git clones
 
+  Scenario: Fetching a github plugin whose repository is not an owner/repo pair fails as unsupported source and sends no request
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" publishes this manifest:
+      """
+      {
+        "name": "gits",
+        "owner": { "name": "features" },
+        "plugins": [
+          { "name": "ghp", "source": { "source": "github", "repo": "evil:x/ghp" }, "version": "1.0.0" }
+        ]
+      }
+      """
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin fetch ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons            | scope   | cause chain                                                               | cause truncated | leaks | rollback partial | version |
+      | gits             | project           | ghp@gits | ghp  | failed | unsupported source | project | Invalid GitHub repository format: evil:x/ghp. Expected format: owner/repo | false           |       |                  | 1.0.0   |
+    Then the git host receives no request
+    Then the project scope holds no git clones
+
   Scenario: A bare fetch continues through every marketplace after one plugin fails
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

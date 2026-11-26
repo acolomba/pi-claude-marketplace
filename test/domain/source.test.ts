@@ -5,6 +5,7 @@ import {
   ensureGitSuffix,
   gitHubRepositoryOf,
   githubSource,
+  isGitHubRepositoryFormat,
   parsePluginSource,
   pathSource,
   samePlannedSource,
@@ -2071,6 +2072,28 @@ describe("gitHubRepositoryOf", () => {
 
       // assert
       assert.strictEqual(repository, expectedRepository);
+    });
+  }
+});
+
+describe("isGitHubRepositoryFormat", () => {
+  for (const { repository, expected } of [
+    { repository: "acme/tools", expected: true },
+    { repository: "Acme_1/tools.v2", expected: true },
+    { repository: "a-b/c.d", expected: true },
+    { repository: "evil:x/y", expected: false },
+    { repository: "a b/c", expected: false },
+    { repository: "a/b/c", expected: false },
+    { repository: "\u00e4/b", expected: false },
+    { repository: "/tools", expected: false },
+    { repository: "acme/", expected: false },
+  ] as const) {
+    test(`IN-A-01, upstream zHi: reads ${JSON.stringify(repository)} as ${expected ? "an" : "no"} owner/repo pair`, () => {
+      // act
+      const matches = isGitHubRepositoryFormat(repository);
+
+      // assert
+      assert.strictEqual(matches, expected);
     });
   }
 });

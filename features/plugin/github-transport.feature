@@ -196,6 +196,33 @@ Feature: Plugin github transport
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
 
+  Scenario: A github plugin whose repository is not an owner/repo pair is refused before any probe or clone
+    Given the marketplace "gits" publishes this manifest:
+      """
+      {
+        "name": "gits",
+        "owner": { "name": "features" },
+        "plugins": [
+          { "name": "ghp", "source": { "source": "github", "repo": "evil:x/ghp" }, "version": "1.0.0" }
+        ]
+      }
+      """
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons            | scope   | leaks | rollback partial | cause chain                                                              | cause truncated |
+      | gits             | project           | ghp@gits | ghp  | failed | unsupported source | project |       |                  | Invalid GitHub repository format: evil:x/ghp. Expected format: owner/repo | false           |
+    Then the user's ssh receives no launch
+    Then the git host receives no request
+    Then the project scope has no installed plugins
+
   Scenario: Installing a github plugin with a github dependency probes once
     Given the git repository "ghd" holds these plugins:
       | name | version | path |

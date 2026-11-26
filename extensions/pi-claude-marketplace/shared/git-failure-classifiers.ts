@@ -16,13 +16,16 @@
 // from the pinned fetch, `StoredCredentialRejectedError` from the GAUTH-04
 // refusal in `platform/git.ts`, and `HostedManifestHttpError` from the hosted
 // catalog download (D-PL5-07). A `GitHubTransportsFailedError` from a GitHub
-// clone that failed over both transports takes its last attempt's rung (OQ-8).
-// Any other error reaches only the `rule.unknown` fallback.
+// clone that failed over both transports takes its last attempt's rung (OQ-8),
+// and an `InvalidGitHubRepositoryError` from a plugin clone plan that refused
+// a `github` repository is `unsupported source` (IN-A-01). Any other error
+// reaches only the `rule.unknown` fallback.
 
 import {
   GitCommandError,
   GitHubTransportsFailedError,
   HostedManifestHttpError,
+  InvalidGitHubRepositoryError,
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
   withoutCleanupLeaks,
@@ -52,6 +55,9 @@ const SOURCE_MISSING_HTTP_STATUSES = new Set([404, 410]);
  * D-PL7-01: classify a git clone, fetch, or materialize throw into the closed
  * reason set. The ladder:
  *
+ *   - an `InvalidGitHubRepositoryError`, a plugin clone plan that refused a
+ *     `github` repository that is not `owner/repo` -> `unsupported source`,
+ *     the reason of a source address Claude Code refuses (IN-A-01, D-SG-17);
  *   - a `GitHubTransportsFailedError`, a GitHub clone that failed over both
  *     transports -> the classification of its last attempt, with that
  *     attempt's URL as `remoteUrl` when the caller passes one (OQ-8);
@@ -91,13 +97,18 @@ export function classifyGitFailure(
         | "authentication required"
         | "source missing"
         | "network error"
-        | "git missing";
+        | "git missing"
+        | "unsupported source";
       readonly frame?: string;
     }
   | undefined {
   const error = withoutCleanupLeaks(thrown);
   if (!(error instanceof Error)) {
     return undefined;
+  }
+
+  if (error instanceof InvalidGitHubRepositoryError) {
+    return { reason: "unsupported source" };
   }
 
   if (error instanceof GitHubTransportsFailedError) {
@@ -281,6 +292,7 @@ export function classifyGitHostFailure(
   | "source missing"
   | "network error"
   | "git missing"
+  | "unsupported source"
   | undefined {
   return classifyGitFailure(error, { notFound: "source missing" })?.reason;
 }
@@ -298,6 +310,7 @@ export function classifyGitSourceAccessFailure(
   | "source missing"
   | "network error"
   | "git missing"
+  | "unsupported source"
   | undefined {
   return classifyGitFailure(error, { notFound: "source missing", missingRef: "source missing" })
     ?.reason;

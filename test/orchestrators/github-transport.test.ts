@@ -16,6 +16,7 @@ import {
   DeviceFlowUnavailableError,
   GitCommandError,
   GitHubTransportsFailedError,
+  InvalidGitHubRepositoryError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
@@ -1043,6 +1044,59 @@ describe("pluginCloneTransport", () => {
         { first: plan.first, note: plan.note, calls: port.calls },
         { first: { transport: "https", url }, note: undefined, calls: [] },
       );
+    });
+  }
+
+  for (const { label, env, base, platform } of [
+    { label: "no force", env: {}, base: undefined, platform: "linux" },
+    {
+      label: "CLAUDE_CODE_PLUGIN_PREFER_HTTPS",
+      env: { CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" },
+      base: undefined,
+      platform: "linux",
+    },
+    { label: "the base override", env: {}, base: "https://mirror.example/git", platform: "linux" },
+    {
+      label: "an invalid base override",
+      env: {},
+      base: "http://mirror.example",
+      platform: "linux",
+    },
+    { label: "Windows", env: {}, base: undefined, platform: "win32" },
+  ] satisfies ReadonlyArray<{
+    readonly label: string;
+    readonly env: NodeJS.ProcessEnv;
+    readonly base: string | undefined;
+    readonly platform: NodeJS.Platform;
+  }>) {
+    test(`IN-A-01, upstream zHi: refuses a github repository that is not owner/repo before any check, with ${label}`, async (t) => {
+      // arrange
+      setGitHubBaseUrl(t, base);
+      const port = countingPort({});
+      const context = createPluginTransportContext({ env, ssh: port.ssh, platform });
+      const source = {
+        kind: "github",
+        raw: "evil:x/ghp",
+        owner: "evil:x",
+        repo: "ghp",
+      } satisfies GitBackedSource;
+
+      // act
+      const planned = pluginCloneTransport(context, source, "ghp@gits").plan();
+
+      // assert
+      await assert.rejects(planned, (error: unknown) => {
+        assert.ok(error instanceof InvalidGitHubRepositoryError);
+        assert.deepStrictEqual(
+          {
+            repository: error.repository,
+            calls: port.calls,
+            note: context.notes.noteFor("ghp@gits"),
+          },
+          { repository: "evil:x/ghp", calls: [], note: undefined },
+        );
+        return true;
+      });
     });
   }
 

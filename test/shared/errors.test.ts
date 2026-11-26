@@ -27,6 +27,7 @@ import {
   HostedManifestFetchError,
   HostedManifestHttpError,
   InvalidGitHubBaseUrlError,
+  InvalidGitHubRepositoryError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   isErrnoException,
@@ -681,6 +682,29 @@ describe("DirectoryPinUnsatisfiedError", () => {
         undefined,
         [],
       ],
+    );
+  });
+});
+
+describe("InvalidGitHubRepositoryError", () => {
+  test("IN-A-01, upstream zHi: names the repository in Claude Code's words", () => {
+    // act
+    const error = new InvalidGitHubRepositoryError("evil:x/ghp");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        isError: error instanceof Error,
+        name: error.name,
+        message: error.message,
+        repository: error.repository,
+      },
+      {
+        isError: true,
+        name: "InvalidGitHubRepositoryError",
+        message: "Invalid GitHub repository format: evil:x/ghp. Expected format: owner/repo",
+        repository: "evil:x/ghp",
+      },
     );
   });
 });
