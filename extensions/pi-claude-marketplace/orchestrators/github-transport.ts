@@ -8,6 +8,7 @@
 // the port, so it stays outside NETWORK_SEAMS (NFR-5).
 
 import { planPluginClone } from "../domain/github-plugin-transport.ts";
+import { isGitSubdirShorthand } from "../domain/source.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage, GitHubTransportsFailedError } from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost } from "../shared/github-base-url.ts";
@@ -322,10 +323,23 @@ export interface CloneTransport {
 }
 
 /**
+ * GHB-04: whether a plugin clone of `source` can be a GitHub clone whose
+ * transport a force decides: a GitHub source, or a git-subdir `owner/repo`
+ * shorthand. Any other source clones as written and never reads the GitHub
+ * base, so an invalid base cannot fail it.
+ */
+function forceApplies(source: GitBackedSource): boolean {
+  return (
+    source.kind === "github" || (source.kind === "git-subdir" && isGitSubdirShorthand(source.url))
+  );
+}
+
+/**
  * D-SG-18, D-SG-19: the clone transport of one plugin `source` under a
  * command's `context`. The plan reads the context's force, checks, and
  * platform only when a clone step asks for it, and the clone's note goes to
- * the context's notes under `subject`, `<plugin>@<marketplace>`.
+ * the context's notes under `subject`, `<plugin>@<marketplace>`. The force is
+ * read only for a source it applies to (GHB-04).
  */
 export function pluginCloneTransport(
   context: PluginTransportContext,
@@ -336,7 +350,7 @@ export function pluginCloneTransport(
     plan: () =>
       planPluginClone({
         source,
-        force: context.force,
+        force: forceApplies(source) ? context.force : undefined,
         checks: context.checks,
         platform: context.platform,
       }),

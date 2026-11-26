@@ -36,6 +36,30 @@ Feature: Plugin git source
       | url                | urlp   | urlp       |              |
       | git-subdir         | subp   | mono       | plugins/subp |
 
+  Scenario: Installing a plugin from a url source outside github ignores an invalid github base address
+    Given pi runs with the github base address "http://example.invalid"
+    Given the git repository "urlp" holds these plugins:
+      | name | version | path |
+      | urlp | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | urlp | url         | urlp       | false  |
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install urlp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | gits             | project           | urlp@gits | urlp | installed |         | project | 1.0.0   |
+    Then the git host receives these requests:
+      | method | path                                             | status |
+      | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+
   Scenario: Installing a plugin from a github source clones its repository from the git host and names its clone transport
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

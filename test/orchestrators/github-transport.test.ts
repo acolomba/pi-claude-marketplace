@@ -19,6 +19,7 @@ import type {
   TransportAttempt,
   TransportPlan,
 } from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
+import type { GitBackedSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
   PluginSshOps,
   PluginTransportContext,
@@ -900,6 +901,72 @@ describe("pluginCloneTransport", () => {
       { first: { transport: "https", url: "https://github.com/acme/ghp.git" }, calls: [] },
     );
   });
+
+  test("D-SG-20: plans a git-subdir shorthand over HTTPS when the context's environment forces it", async () => {
+    // arrange
+    const context = createPluginTransportContext({
+      env: { CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1" },
+      ssh: countingPort({}).ssh,
+      platform: "linux",
+    });
+    const source = {
+      kind: "git-subdir",
+      raw: "acme/mono",
+      url: "acme/mono",
+      path: "plugins/ghp",
+    } satisfies GitBackedSource;
+
+    // act
+    const plan = await pluginCloneTransport(context, source, "ghp@gits").plan();
+
+    // assert
+    assert.deepStrictEqual(plan.first, {
+      transport: "https",
+      url: "https://github.com/acme/mono.git",
+    });
+  });
+
+  for (const { kind, source, url } of [
+    {
+      kind: "url",
+      source: {
+        kind: "url",
+        raw: "https://gitlab.example/acme/ghp.git",
+        url: "https://gitlab.example/acme/ghp.git",
+      },
+      url: "https://gitlab.example/acme/ghp.git",
+    },
+    {
+      kind: "git-subdir",
+      source: {
+        kind: "git-subdir",
+        raw: "https://gitlab.example/acme/mono.git",
+        url: "https://gitlab.example/acme/mono.git",
+        path: "plugins/ghp",
+      },
+      url: "https://gitlab.example/acme/mono.git",
+    },
+  ] satisfies ReadonlyArray<{
+    readonly kind: string;
+    readonly source: GitBackedSource;
+    readonly url: string;
+  }>) {
+    test(`GHB-04: plans a ${kind} clone outside GitHub without reading an invalid base`, async (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const port = countingPort({});
+      const context = createPluginTransportContext({ env: {}, ssh: port.ssh, platform: "linux" });
+
+      // act
+      const plan = await pluginCloneTransport(context, source, "ghp@gits").plan();
+
+      // assert
+      assert.deepStrictEqual(
+        { first: plan.first, note: plan.note, calls: port.calls },
+        { first: { transport: "https", url }, note: undefined, calls: [] },
+      );
+    });
+  }
 
   test("SG-SSH-05: plans SSH first on the context's Windows platform", async () => {
     // arrange

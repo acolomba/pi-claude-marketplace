@@ -1025,9 +1025,11 @@ function gitStagingSteps(
   });
   return {
     async stage(stagingDir) {
+      // GHB-04: a url source never reads the GitHub base, so an invalid base
+      // cannot fail the add of a marketplace outside GitHub.
       const plan = await planMarketplaceClone({
         source,
-        force: transportForce(process.env),
+        force: source.kind === "github" ? transportForce(process.env) : undefined,
         probe: () => gitHubSsh.probe(),
       });
       await cloneOverGitHubTransports({

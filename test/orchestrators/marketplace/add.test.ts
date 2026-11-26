@@ -6603,6 +6603,34 @@ test("GHB-03: an orchestrated GitHub add rethrows an invalid base instead of ret
   });
 });
 
+test("GHB-04: adding a url marketplace outside GitHub ignores an invalid base", async (t) => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(
+      state.cloneCalls.map(({ url }) => url),
+      ["https://gitlab.example.com/team/mp"],
+    );
+  });
+});
+
 test("GHB-01: a GitHub add failing under the override names the fetched URL on a failed child row", async (t) => {
   await createHermeticEnvironment(t, "mp-add-fetched-url-home-");
   await withTmpScope(async ({ cwd, locations }) => {
