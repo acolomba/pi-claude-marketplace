@@ -331,7 +331,7 @@ Plans:
   2. For an `owner/repo` marketplace source the user sees upstream's progress lines: SSH first only when the probe reports SSH configured, HTTPS first otherwise, a retry with the other transport on failure, and upstream's error when both fail; with `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` no probe runs and every GitHub clone uses HTTPS, and `CLAUDE_CODE_REMOTE` changes nothing; cucumber scenarios pin each path (SG-SSH-02, SG-SSH-03).
   3. A `github` plugin source on install, update, and dependency install follows the probe, fallback, and skip rules of the upstream surface discuss chose (Q7), with cucumber scenarios for each, and on Windows a plugin install retries an SSH failure over HTTPS as upstream does (SG-SSH-04, SG-SSH-05).
   4. A marketplace or plugin cloned over SSH is the same source as its HTTPS form: a later update, reinstall, or install never refuses it as a stale clone, and its `plugin-clones/<key>/` directory does not move (SG-SSH-06).
-**Plans**: 25/26 plans executed in 11 waves; 8 gap-closure plans (04-19 to 04-26) planned in 4 waves
+**Plans**: 26/26 plans executed in 11 waves; 8 gap-closure plans (04-19 to 04-26) planned in 4 waves
 
 Plans:
 **Wave 1**
@@ -390,7 +390,7 @@ Plans:
 - [x] 04-25-PLAN.md — Enable notes: the failing cascade member's labelled clone line on the root's failed row, and the failure after the ledger with its harness fault (WINDOWS #136, #137)
 
 **Gap wave 4** *(blocked on 04-19 and 04-21 to 04-25)*
-- [ ] 04-26-PLAN.md — Records: WINDOWS #127 and #130 to #138 resolved, the D-SG-22 outcome, the verification gap closed, the catalog placement text, and `npm run check`
+- [x] 04-26-PLAN.md — Records: WINDOWS #127 and #130 to #138 resolved, the D-SG-22 outcome, the verification gap closed, the catalog placement text, and `npm run check`
 
 **Cross-cutting constraints:** <!-- gsd:generated -->
 - Every re-baselined scenario differs only by clone columns or clone lines (04-08's rule)
@@ -458,7 +458,7 @@ Plans:
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
-| 4. SSH Sources and Transport Selection | 25/26 | In Progress | - |
+| 4. SSH Sources and Transport Selection | 26/26 | In Progress | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |
