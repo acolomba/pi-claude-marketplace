@@ -26,6 +26,7 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyCaller, DependencyTarget } from "./dependency-bindings.ts";
@@ -146,6 +147,8 @@ interface InstallPlanningLedgerPort {
     readonly cascadeFailure: PlanningFailureSink;
     readonly orchestrated: boolean;
     readonly moved?: readonly MovedDependency[];
+    /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
+    readonly notes?: GitHubCloneNotes | undefined;
   }) => InstallPluginOutcome;
   readonly projectFailedMoves: (args: {
     readonly opts: InstallPluginOptions;
@@ -154,6 +157,8 @@ interface InstallPlanningLedgerPort {
     readonly cause: Error;
     readonly orchestrated: boolean;
     readonly unmaterialized: readonly string[];
+    /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
+    readonly notes?: GitHubCloneNotes | undefined;
   }) => InstallPluginOutcome;
 }
 
@@ -187,6 +192,10 @@ type InstallPlanResult =
  * again over exactly the closure the plan left for it. Whatever happens, the
  * clones the operation left unreferenced are removed, and clones that were
  * there before stay.
+ *
+ * D-SG-22: the preview may clone the plugin the user named before the plan
+ * refuses or a move fails, so both failure reports read the command's clone
+ * notes, as the install's other failures do.
  */
 async function installAfterMoves(
   ledger: InstallPlanningLedgerPort,
@@ -235,6 +244,7 @@ async function installAfterMoves(
     carried,
     writesConfig: !orchestrated,
   };
+  const notes = opts.transportContext?.notes;
   const failure = {
     ctx: opts.ctx,
     run: opts.run,
@@ -244,6 +254,7 @@ async function installAfterMoves(
     rootKey: root.key,
     capture: { rollbackPartials: [], version: undefined },
     orchestrated,
+    notes,
   };
   try {
     const plan = await planInstallMoves({
@@ -271,6 +282,7 @@ async function installAfterMoves(
         cause: ran.cause,
         orchestrated,
         unmaterialized: resolvedMembers.filter((key) => !reported.has(key)),
+        notes,
       });
     }
 

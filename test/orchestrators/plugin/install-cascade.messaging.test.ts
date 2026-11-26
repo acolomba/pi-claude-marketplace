@@ -2005,4 +2005,40 @@ describe("D-SG-22: clone notes on the cascade's rows", () => {
       ],
     );
   });
+
+  test("the requesting plugin's dependency-failed row names the clone it made before its dependency failed", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record(ROOT_KEY, { note: "via-https", url: "https://github.com/acme/helper.git" });
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: { ok: false, reason: "not-found", key: "formatter@tools", requiredBy: ROOT_KEY },
+    };
+
+    // act
+    const rows = composeCascadeFailureMessage({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootName: "helper",
+      subject,
+      notes,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      rows.map((row) => ({
+        name: row.name,
+        reasons: row.reasons,
+        clone: "clone" in row ? row.clone : undefined,
+      })),
+      [
+        { name: "formatter@tools", reasons: ["not in manifest"], clone: undefined },
+        {
+          name: "helper",
+          reasons: ["dependency failed"],
+          clone: { note: "via-https", url: "https://github.com/acme/helper.git" },
+        },
+      ],
+    );
+  });
 });

@@ -40,6 +40,7 @@ import {
 import { collectInstallPostCommitWarnings, hydrateInstalledHooks } from "./install-flow-ledger.ts";
 import {
   handleCaughtInstallFailure,
+  marketplaceBlockClone,
   movedMember,
   movedRows,
   writeReEnabledCascadeMemberConfigEntries,
@@ -49,7 +50,7 @@ import {
   ledgerDegradationSignals,
   previewInstall,
 } from "./install-outcome.ts";
-import { formatOrchestratedCause } from "./install.messaging.ts";
+import { formatOrchestratedCause, withCloneNote } from "./install.messaging.ts";
 import {
   collectInstallReachableMarketplaces,
   resolveInstallMarketplaceSource,
@@ -61,13 +62,13 @@ import type { ClosureLookup, ClosureSubject } from "../../domain/dependency-clos
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { McpConfigNotice, PluginFailedMessage } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { PluginTransportContext } from "../github-transport.ts";
+import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyCaller, DependencyTarget } from "./dependency-bindings.ts";
@@ -704,7 +705,13 @@ export function projectCaughtInstallDependencyPlanFailure(
   return handleCaughtInstallFailure(args);
 }
 
-/** Reports the plan steps that landed before one dependency move failed. */
+/**
+ * Reports the plan steps that landed before one dependency move failed.
+ *
+ * D-SG-22: the requesting row and its block read the command's clone notes,
+ * as the install's other failures do; each moved row keeps the note the update
+ * runner gave it.
+ */
 export function projectFailedInstallDependencyPlanMoves(args: {
   readonly opts: InstallPluginOptions;
   readonly mcpConfigNotices: readonly McpConfigNotice[];
@@ -712,8 +719,11 @@ export function projectFailedInstallDependencyPlanMoves(args: {
   readonly cause: Error;
   readonly orchestrated: boolean;
   readonly unmaterialized: readonly string[];
+  /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
+  readonly notes?: GitHubCloneNotes | undefined;
 }): InstallPluginOutcome {
   const { opts } = args;
+  const rootKey = `${opts.plugin}@${opts.marketplace}`;
   if (!args.orchestrated) {
     notifyWithContext(
       opts.ctx,
@@ -723,16 +733,21 @@ export function projectFailedInstallDependencyPlanMoves(args: {
         {
           name: opts.marketplace,
           scope: opts.scope,
+          ...marketplaceBlockClone(args.notes, opts.marketplace),
           plugins: [
-            {
-              status: "failed",
-              name: opts.plugin,
-              reasons: ["dependency failed"],
-              severity: "error",
-            },
+            withCloneNote<PluginFailedMessage>(
+              {
+                status: "failed",
+                name: opts.plugin,
+                reasons: ["dependency failed"],
+                severity: "error",
+              },
+              args.notes,
+              rootKey,
+            ),
             ...movedRows(args.moved),
             ...composeUnmaterializedRows(args.unmaterialized, [
-              `${opts.plugin}@${opts.marketplace}`,
+              rootKey,
               ...args.moved.map((entry) => entry.key),
             ]),
           ],

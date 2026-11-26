@@ -700,7 +700,9 @@ function rootRowName(subject: CascadeFailureSubject, rootName: string): string {
  * each one names gets no second, `{dependency failed}` row (D-PL3-15).
  *
  * D-SG-22: the failing subject's row carries the note `notes` keeps for its
- * key, so a clone that failed names each attempt it made beside the cause.
+ * key, so a clone that failed names each attempt it made beside the cause. The
+ * requesting plugin's `{dependency failed}` row reads its own key's note, so a
+ * clone it made before the dependency failed is named there.
  */
 export function composeCascadeFailureMessage(args: {
   readonly scope: Scope;
@@ -741,12 +743,16 @@ export function composeCascadeFailureMessage(args: {
     return sortRows([failed, ...members], args.scope);
   }
 
-  const root: PluginFailedMessage = {
-    status: "failed",
-    name: args.rootName,
-    reasons: ["dependency failed"],
-    severity: "error",
-    needsReload: false,
-  };
+  const root = withCloneNote<PluginFailedMessage>(
+    {
+      status: "failed",
+      name: args.rootName,
+      reasons: ["dependency failed"],
+      severity: "error",
+      needsReload: false,
+    },
+    args.notes,
+    args.rootKey,
+  );
   return sortRows([failed, root, ...members], args.scope);
 }

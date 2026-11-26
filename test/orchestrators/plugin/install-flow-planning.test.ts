@@ -376,6 +376,98 @@ test("removes a ruled-out clone after resolver backtracking", async (t) => {
   });
 });
 
+/**
+ * Installs the url-source `app@mp` from `repository`, whose mirror step records
+ * the clone note of its subject as the clone runner does, and returns the
+ * notification lines.
+ */
+async function installNotingRootClone(
+  owner: InstallTestOwner,
+  cwd: string,
+  repository: string,
+): Promise<readonly string[] | undefined> {
+  const inner = seamWith(
+    createGitOps({
+      fixtureSourceDir: repository,
+      head: INSTALL_HOST_HEAD,
+      localRefs: { "refs/heads/main": INSTALL_HOST_HEAD },
+      remoteRefs: { "refs/remotes/origin/main": INSTALL_HOST_HEAD },
+    }).gitOps,
+  );
+  const { ctx, run, notifications } = makeCtx();
+  const outcome = await owner.installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "app",
+    cloneCacheSeam: {
+      ...inner,
+      materializeOrRefreshPluginMirror: (args) => {
+        args.transport?.notes.record(args.transport.subject, {
+          note: "ssh-not-configured",
+          url: "https://github.com/acme/app.git",
+        });
+        return inner.materializeOrRefreshPluginMirror(args);
+      },
+    },
+  });
+  assert.strictEqual(outcome.status, "failed");
+  return notifications[0]?.message.split("\n");
+}
+
+test("D-SG-22: an install whose plan refuses after its preview cloned names the clone on the failed row", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+      lib: { version: "1.2.0" },
+    });
+    await installed(owner, cwd, "lib");
+    const repository = await offerGitPlugin(marketplaceRoot, "app", ["lib@^2.0.0"]);
+
+    // act
+    const lines = await installNotingRootClone(owner, cwd, repository);
+
+    // assert
+    assert.deepStrictEqual(lines?.slice(2, 6), [
+      "● mp [project]",
+      "  ⊘ app (failed) {dependency failed}",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/app.git",
+      "  ⊘ lib@mp v1.2.0 (failed) {already installed, version conflict}",
+    ]);
+  });
+});
+
+test("D-SG-22: an install whose dependency move fails after it cloned names the clone on its row", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {
+      lib: { version: "1.2.0", mcp: true },
+    });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, {
+      lib: { version: "2.0.0", mcp: true },
+      zzz: { version: "1.0.0" },
+    });
+    const repository = await offerGitPlugin(marketplaceRoot, "app", ["lib@^2.0.0", "zzz"]);
+    const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+    await rm(adapterPath, { force: true });
+    await mkdir(adapterPath, { recursive: true });
+
+    // act
+    const lines = await installNotingRootClone(owner, cwd, repository);
+
+    // assert
+    assert.deepStrictEqual(lines?.slice(2, 6), [
+      "● mp [project]",
+      "  ⊘ app (failed) {dependency failed}",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/app.git",
+      "  ⊘ lib@mp v1.2.0 (failed)",
+    ]);
+  });
+});
+
 for (const orchestrated of [false, true]) {
   test(`UPD-DEP-D1: a dependency move that fails fails the ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
     await withHermeticHome(async (owner) => {
