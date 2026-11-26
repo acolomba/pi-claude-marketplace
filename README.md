@@ -257,6 +257,14 @@ Pin a GitHub marketplace to a branch, tag, or commit with a `#ref` suffix.
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
+Add a marketplace over SSH with an scp-style address. Your own `ssh` and its keys make the connection. As in Claude Code, the command line does not accept `ssh://` URLs.
+
+```text
+/claude:plugin marketplace add git@github.com:upstash/context7-marketplace.git
+```
+
+An `owner/repo` shorthand clones over SSH when your ssh signs in to github.com, and over HTTPS otherwise. To always use HTTPS, set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`.
+
 Add a marketplace from another `https://` git host, such as GitLab.
 
 ```text
