@@ -124,6 +124,14 @@ describe("gitHubWireUrl", () => {
       url: "git@ssh.github.com:/acme/tools.GIT",
       expectedWireUrl: "https://mirror.example/acme/tools.GIT",
     },
+    {
+      url: "ssh+git://git@github.com/acme/tools",
+      expectedWireUrl: "https://mirror.example/acme/tools",
+    },
+    {
+      url: "SSH+Git://git@ssh.github.com:443/acme/tools.git",
+      expectedWireUrl: "https://mirror.example/acme/tools.git",
+    },
   ]) {
     test(`D-SG-21: sends the GitHub spelling ${url} to ${expectedWireUrl}`, (t) => {
       // arrange
@@ -143,7 +151,7 @@ describe("gitHubWireUrl", () => {
     "https://gitlab.com/acme/tools.git",
     "https://github.com",
     "https://mirror.example/acme/tools.git",
-    "ssh+git://git@github.com/acme/tools",
+    "ssh+git://git@gitlab.example/acme/tools",
     "git@gitlab.example:acme/tools.git",
   ]) {
     test(`returns ${url} unchanged because it is no GitHub address`, (t) => {
@@ -288,6 +296,10 @@ describe("gitHubInsteadOfPairs", () => {
     {
       url: "https://www.github.com/acme/ghp",
       expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=https://www.github.com/",
+    },
+    {
+      url: "ssh+git://git@github.com/acme/ghp.git",
+      expectedPair: "url.https://127.0.0.1:4443/base/.insteadOf=ssh+git://git@github.com/",
     },
   ]) {
     test(`D-SG-21: rewrites the prefix of ${url} to the base as its own pair`, (t) => {

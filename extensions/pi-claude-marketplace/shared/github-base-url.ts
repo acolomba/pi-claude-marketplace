@@ -18,7 +18,8 @@
 // real github.com. That is why `=` is refused.
 //
 // D-SG-21: the base also covers every other spelling of a GitHub repository,
-// SSH forms included. Such an address gets its own pair, whose prefix is the
+// SSH forms included, and git's `ssh+git://` alias, which the identity fold
+// below leaves out. Such an address gets its own pair, whose prefix is the
 // address's text before `owner/repo`, because git's insteadOf is a
 // case-sensitive prefix match.
 //
@@ -271,14 +272,43 @@ export function gitHubAddressOf(
   return { prefix: address.slice(0, span.start), repository: path.toLowerCase() };
 }
 
+/** git's `ssh+git:` alias of `ssh:`, which Claude Code's fold leaves out. */
+const SSH_GIT_ALIAS = /^ssh\+git:/i;
+
+const SSH_PROTOCOL = "ssh:";
+
+/**
+ * D-SG-21: the rewrite prefix of an `ssh+git://` address of a GitHub
+ * repository. git reaches it over ssh, as it reaches the `ssh://` address
+ * that the same text with `ssh:` names, so it reaches the base too. The
+ * identity fold keeps `ssh+git:` out at parity with Claude Code; only the
+ * rewrite reads it.
+ */
+function sshGitAliasPrefix(url: string): string | undefined {
+  const alias = SSH_GIT_ALIAS.exec(url)?.[0];
+  if (alias === undefined) {
+    return undefined;
+  }
+
+  const folded = gitHubAddressOf(`${SSH_PROTOCOL}${url.slice(alias.length)}`);
+  return folded === undefined
+    ? undefined
+    : url.slice(0, folded.prefix.length - SSH_PROTOCOL.length + alias.length);
+}
+
 /**
  * The text a base rewrite replaces in `url`: the exact prefix
- * `https://github.com/`, or the prefix of any other GitHub spelling that
- * `gitHubAddressOf` folds. Undefined for every other URL.
+ * `https://github.com/`, the prefix of any other GitHub spelling that
+ * `gitHubAddressOf` folds, or that of an `ssh+git://` GitHub address
+ * (D-SG-21). Undefined for every other URL.
  */
 function gitHubRewritePrefix(url: string): string | undefined {
   const canonicalPrefix = `${GITHUB_ORIGIN}/`;
-  return url.startsWith(canonicalPrefix) ? canonicalPrefix : gitHubAddressOf(url)?.prefix;
+  if (url.startsWith(canonicalPrefix)) {
+    return canonicalPrefix;
+  }
+
+  return gitHubAddressOf(url)?.prefix ?? sshGitAliasPrefix(url);
 }
 
 /**
