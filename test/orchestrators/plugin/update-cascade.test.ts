@@ -965,3 +965,123 @@ test("D-SG-22: a target that carries its own notes reads them in place of the co
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
   boundary.verifyBoundary();
 });
+
+/** An `unchanged` outcome of `name` in `mp` of the project scope. */
+function unchanged(name: string): UpdateCascadeOutcome {
+  return {
+    target: { marketplace: "mp", scope: "project" },
+    outcome: {
+      partition: "unchanged",
+      name,
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      declaresAgents: false,
+      declaresMcp: false,
+      constraint: undefined,
+      declaresWorkflows: false,
+    },
+  };
+}
+
+test("D-SG-22: a bulk update that changed nothing keeps the block of the sync that re-cloned its marketplace", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const expectedMessage = [
+    "● mp [project]",
+    "  Cloning via SSH: git@github.com:acme/mp.git",
+    "",
+    "Plugin update: nothing to update",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(
+    boundary.ctx,
+    runWithNothingLoaded(),
+    [unchanged("hello")],
+    "plural",
+    false,
+    {
+      plugins: createGitHubCloneNotes(),
+      marketplace: (scope, name) =>
+        scope === "project" && name === "mp"
+          ? { note: "via-ssh", url: "git@github.com:acme/mp.git" }
+          : undefined,
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("D-SG-22: a bulk update keeps the up-to-date row of a plugin its update cloned and drops the others", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const plugins = createGitHubCloneNotes();
+  plugins.record("hello@mp", {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/hello.git",
+  });
+  const expectedMessage = [
+    "● mp [project]",
+    "  ⊘ hello (skipped) {up-to-date}",
+    "    SSH not configured, cloning via HTTPS: https://github.com/acme/hello.git",
+    "",
+    "Plugin update: nothing to update",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(
+    boundary.ctx,
+    runWithNothingLoaded(),
+    [unchanged("hello"), unchanged("quiet")],
+    "plural",
+    false,
+    { plugins, marketplace: () => undefined },
+  );
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("D-SG-22, OQ-3: a bulk update that cloned nothing renders only the no-op headline", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+
+  // act
+  composeUpdateCascade(
+    boundary.ctx,
+    runWithNothingLoaded(),
+    [unchanged("hello"), unchanged("quiet")],
+    "plural",
+    false,
+    { plugins: createGitHubCloneNotes(), marketplace: () => undefined },
+  );
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: "Plugin update: nothing to update" }]);
+  boundary.verifyBoundary();
+});
+
+test("D-SG-22: after a separately reported failure, a bulk update still names an up-to-date plugin's clone", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const plugins = createGitHubCloneNotes();
+  plugins.record("hello@mp", { note: "via-https", url: "https://github.com/acme/hello.git" });
+  const expectedMessage = [
+    "● mp [project]",
+    "  ⊘ hello (skipped) {up-to-date}",
+    "    Cloning via HTTPS: https://github.com/acme/hello.git",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), [unchanged("hello")], "plural", true, {
+    plugins,
+    marketplace: () => undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});

@@ -167,6 +167,43 @@ Feature: Plugin github transport update
       | tools            | project           | via-ssh                | git@github.com:acme/tools.git | app@tools | app  | updated |         | project | 1.0.0 | 1.1.0 |
     Then the git host receives no request
 
+  Scenario: Updating every plugin when only the github marketplace moved names the marketplace's re-clone
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   |              |
+    Given the user's ssh authenticates to "github.com" as "acme"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" has the description "Tools after the move"
+    When the user runs "/claude:plugin update"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+      | no op        | true    |
+    Then the result lists these marketplaces:
+      | name  | scope   | clone note | clone url                     |
+      | tools | project | via-ssh    | git@github.com:acme/tools.git |
+    Then the git host receives no request
+
+  Scenario: Updating every plugin re-clones a github plugin's gone clone at the same commit and names that clone
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    When the user runs "/claude:plugin update"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+      | no op        | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status  | reasons    | scope   | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | skipped | up-to-date | project | ssh-not-configured | https://github.com/acme/ghp.git |
+
   Scenario: Reinstalling a github plugin with no ssh setting clones it over https first
     Given the user's ssh is denied for "github.com"
     Given pi runs with github's requests routed to the git host
