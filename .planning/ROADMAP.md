@@ -331,7 +331,7 @@ Plans:
   2. For an `owner/repo` marketplace source the user sees upstream's progress lines: SSH first only when the probe reports SSH configured, HTTPS first otherwise, a retry with the other transport on failure, and upstream's error when both fail; with `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` no probe runs and every GitHub clone uses HTTPS, and `CLAUDE_CODE_REMOTE` changes nothing; cucumber scenarios pin each path (SG-SSH-02, SG-SSH-03).
   3. A `github` plugin source on install, update, and dependency install follows the probe, fallback, and skip rules of the upstream surface discuss chose (Q7), with cucumber scenarios for each, and on Windows a plugin install retries an SSH failure over HTTPS as upstream does (SG-SSH-04, SG-SSH-05).
   4. A marketplace or plugin cloned over SSH is the same source as its HTTPS form: a later update, reinstall, or install never refuses it as a stale clone, and its `plugin-clones/<key>/` directory does not move (SG-SSH-06).
-**Plans**: 18/18 plans executed in 11 waves
+**Plans**: 18/24 plans executed in 11 waves; 6 gap-closure plans (04-19 to 04-24) planned in 4 waves
 
 Plans:
 **Wave 1**
@@ -373,6 +373,22 @@ Plans:
 
 **Wave 11** *(blocked on Wave 10 completion)*
 - [x] 04-18-PLAN.md — Records: NFR-5 amended in PROJECT.md and AGENTS.md, the D-SG-17..24 outcomes, the codebase maps, and the user docs (wave 11)
+
+**Gap closure** (04-VERIFICATION.md truth 5, D-SG-22; review IN-A-01 and IN-A-02, maintainer decisions 2026-11-26)
+
+**Gap wave 1**
+- [ ] 04-19-PLAN.md — The `via-http` clone note (IN-A-02) end to end, the clone member on the skipped, partially-upgradable, manual-recovery, disabled, and remote rows, and Claude Code's `zHi` refusal of a github repository that is not owner/repo (IN-A-01)
+
+**Gap wave 2** *(blocked on gap wave 1)*
+- [ ] 04-20-PLAN.md — Install notes: the disabled install row, the dependency planning failure, and the D-MF-04 add of a dependency's marketplace (WINDOWS #130, #131, #132)
+- [ ] 04-21-PLAN.md — Update-family notes: skipped, partially-upgradable, and manual-recovery rows, the bulk update that changed nothing, and the autoupdate cascade (WINDOWS #133, #134, #135)
+- [ ] 04-22-PLAN.md — Apply, import, and bootstrap notes: apply's disabled row, the dependency rollback row, and the bootstrap add failure (WINDOWS #130, #138, #127)
+
+**Gap wave 3** *(blocked on 04-21)*
+- [ ] 04-23-PLAN.md — Enable and fetch notes: the failing cascade member's row, the failure after the ledger, and the fetch remote row (WINDOWS #136, #137)
+
+**Gap wave 4** *(blocked on gap waves 1-3)*
+- [ ] 04-24-PLAN.md — Records: WINDOWS #127 and #130 to #138 resolved and the fetch remote entry added and resolved, the D-SG-22 and D-SG-18 outcomes, the verification gap closed, the catalog placement text, and `npm run check`
 
 **Cross-cutting constraints:** <!-- gsd:generated -->
 - Every re-baselined scenario differs only by clone columns or clone lines (04-08's rule)
