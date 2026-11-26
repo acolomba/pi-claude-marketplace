@@ -60,15 +60,16 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Clone transport lines
 
-A marketplace block or a plugin row whose command cloned a GitHub repository names the transport of that clone, as Claude Code's progress lines do (D-SG-22). The first line is one of three:
+A marketplace block or a plugin row whose command cloned a GitHub repository names the transport of that clone, as Claude Code's progress lines do (D-SG-22). The first line is one of four:
 
 ```text
 Cloning via SSH: <url>
 Cloning via HTTPS: <url>
+Cloning via HTTP: <url>
 SSH not configured, cloning via HTTPS: <url>
 ```
 
-`Cloning via SSH` means the clone ran over SSH. `SSH not configured, cloning via HTTPS` means the ssh probe found that the user's ssh does not sign in to github.com. `Cloning via HTTPS` means the clone ran over HTTPS with no such choice: the source was a GitHub https URL, or a transport was forced. Each retry adds one more line:
+`Cloning via SSH` means the clone ran over SSH. `SSH not configured, cloning via HTTPS` means the ssh probe found that the user's ssh does not sign in to github.com. `Cloning via HTTPS` means the clone ran over HTTPS with no such choice: the source was a GitHub https URL, or a transport was forced. `Cloning via HTTP` names a GitHub address written with `http://` and cloned as written (IN-A-02). Claude Code has no such line. Each retry adds one more line:
 
 ```text
 <T1> clone failed, retrying with <T2>: <url>

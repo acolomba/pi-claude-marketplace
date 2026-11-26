@@ -164,9 +164,14 @@ export function addressTransport(url: string): GitHubTransport {
  * over `transport`. An address that folds to a GitHub repository
  * (`gitHubAddressOf`) is noted by its scheme: `via-ssh` for an scp address or
  * an ssh scheme, `via-https` for `https:`, and `via-http` for `http:`
- * (IN-A-02). Any other scheme, and any other host, has none.
+ * (IN-A-02). Any other scheme, and any other host, has none. The marketplace
+ * plan and the plugin plan both read it, so they cannot name one address two
+ * ways.
  */
-function writtenAddressNote(url: string, transport: GitHubTransport): CloneNoteKind | undefined {
+export function writtenAddressNote(
+  url: string,
+  transport: GitHubTransport,
+): CloneNoteKind | undefined {
   if (gitHubAddressOf(url) === undefined) {
     return undefined;
   }

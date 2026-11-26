@@ -33,9 +33,13 @@ import type {
 import type {
   MarketplaceInfoMessage,
   MarketplaceStatus,
+  PluginDisabledMessage,
   PluginInfoMessage,
+  PluginManualRecoveryMessage,
   PluginNotificationMessage,
+  PluginPartiallyUpgradableMessage,
   PluginStatus,
+  PluginUpdateSkippedMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -1368,6 +1372,64 @@ test("D-SG-22: copies the clone retries so the payload shares no array with the 
   });
   assert.notStrictEqual(clone?.retries, retries);
 });
+
+const FOLLOWING_ROW_CLONE = {
+  note: "ssh-not-configured",
+  url: "https://github.com/acme/ghp.git",
+  retries: ["git@github.com:acme/ghp.git"],
+} as const;
+
+for (const row of [
+  {
+    status: "skipped",
+    name: "ghp",
+    reasons: ["dependents constrain"],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginUpdateSkippedMessage>,
+  {
+    status: "partially-upgradable",
+    name: "ghp",
+    reasons: ["lsp"],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginPartiallyUpgradableMessage>,
+  {
+    status: "manual recovery",
+    name: "ghp",
+    reasons: ["rollback partial"],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginManualRecoveryMessage>,
+  {
+    status: "disabled",
+    severity: "info",
+    needsReload: true,
+    name: "ghp",
+    reasons: [],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginDisabledMessage>,
+]) {
+  test(`D-SG-22: carries the clone note of a ${row.status} row, and no clone member without one`, () => {
+    // arrange
+    const { clone: _clone, ...withoutNote } = row;
+    const origin = { kind: "command", commandId: "plugin", invocationId: "test-run" } as const;
+    const blockOf = (plugin: ResolvedRow): ResolvedMarketplace => ({
+      name: "tools",
+      scope: "user",
+      plugins: [plugin],
+    });
+
+    // act
+    const payload = toWirePayload(presentationOf([blockOf(row)]), origin);
+    const bare = toWirePayload(presentationOf([blockOf(withoutNote)]), origin);
+
+    // assert
+    assert.ok("marketplaces" in payload && "marketplaces" in bare);
+    assert.deepStrictEqual(payload.marketplaces[0]?.plugins[0]?.clone, FOLLOWING_ROW_CLONE);
+    assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
+    const bareRow = bare.marketplaces[0]?.plugins[0];
+    assert.ok(bareRow !== undefined);
+    assert.strictEqual("clone" in bareRow, false);
+  });
+}
 
 test("IN-A-02: carries the via-http clone note of a block unchanged", () => {
   // arrange

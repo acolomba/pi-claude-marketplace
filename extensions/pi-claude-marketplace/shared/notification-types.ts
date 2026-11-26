@@ -564,6 +564,8 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
 export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly status: "disabled";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
@@ -656,6 +658,8 @@ export interface PluginPartiallyInstalledMessage extends MessageBase, RevisionMo
 export interface PluginPartiallyUpgradableMessage extends MessageBase {
   readonly status: "partially-upgradable";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
@@ -728,6 +732,11 @@ export interface PluginSkippedMessage extends MessageBase {
 export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
   /**
+   * D-SG-22: the transport note of the GitHub clone that produced this row.
+   * The base `PluginSkippedMessage` follows no clone and has none.
+   */
+  readonly clone?: CloneTransportNote;
+  /**
    * D-PL5-12 / D-SG-10: the row stands for the marketplace whose checkout a
    * `marketplace update` kept, so its JSON id is its name alone, as on the
    * failed row of a refresh.
@@ -749,6 +758,8 @@ export interface PluginUninstallSkippedMessage extends PluginSkippedMessage {
 export interface PluginManualRecoveryMessage extends MessageBase {
   readonly status: "manual recovery";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
