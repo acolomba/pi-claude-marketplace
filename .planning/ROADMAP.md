@@ -331,7 +331,7 @@ Plans:
   2. For an `owner/repo` marketplace source the user sees upstream's progress lines: SSH first only when the probe reports SSH configured, HTTPS first otherwise, a retry with the other transport on failure, and upstream's error when both fail; with `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` no probe runs and every GitHub clone uses HTTPS, and `CLAUDE_CODE_REMOTE` changes nothing; cucumber scenarios pin each path (SG-SSH-02, SG-SSH-03).
   3. A `github` plugin source on install, update, and dependency install follows the probe, fallback, and skip rules of the upstream surface discuss chose (Q7), with cucumber scenarios for each, and on Windows a plugin install retries an SSH failure over HTTPS as upstream does (SG-SSH-04, SG-SSH-05).
   4. A marketplace or plugin cloned over SSH is the same source as its HTTPS form: a later update, reinstall, or install never refuses it as a stale clone, and its `plugin-clones/<key>/` directory does not move (SG-SSH-06).
-**Plans**: 17/18 plans executed in 11 waves
+**Plans**: 18/18 plans executed in 11 waves
 
 Plans:
 **Wave 1**
@@ -372,7 +372,7 @@ Plans:
 - [x] 04-17-PLAN.md — One transport context per `apply` and `import` run, shared by their installs, enables, and moves, their notes, and their scenarios re-baselined (wave 10)
 
 **Wave 11** *(blocked on Wave 10 completion)*
-- [ ] 04-18-PLAN.md — Records: NFR-5 amended in PROJECT.md and AGENTS.md, the D-SG-17..24 outcomes, the codebase maps, and the user docs (wave 11)
+- [x] 04-18-PLAN.md — Records: NFR-5 amended in PROJECT.md and AGENTS.md, the D-SG-17..24 outcomes, the codebase maps, and the user docs (wave 11)
 
 **Cross-cutting constraints:** <!-- gsd:generated -->
 - Every re-baselined scenario differs only by clone columns or clone lines (04-08's rule)
@@ -440,7 +440,7 @@ Plans:
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
-| 4. SSH Sources and Transport Selection | 17/18 | In Progress | - |
+| 4. SSH Sources and Transport Selection | 18/18 | In Progress | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |
