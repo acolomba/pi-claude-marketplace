@@ -23,6 +23,20 @@ Feature: Marketplace url source
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
+  Scenario: Adding a github url marketplace whose url holds a token shows the url redacted in its clone line
+    Given the marketplace "tools" is published as a github source
+    When the user runs "/claude:plugin marketplace add https://x-access-token:tok123secret@github.com/acme/tools.git --scope project" in pi's terminal
+    Then pi's terminal shows this result of the command:
+      """
+      ● tools [project] (added)
+        Cloning via HTTPS: https://***@github.com/acme/tools.git
+      """
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
   Scenario: A url source is cloned at exactly the url typed
     Given the marketplace "tools" is published as a url source
     When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools --scope project"

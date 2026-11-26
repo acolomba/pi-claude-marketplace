@@ -19,6 +19,7 @@ import type {
   BackgroundUpdatePlugin,
   BackgroundUpdateSurface,
   CascadeNotificationMessage,
+  CloneTransportNote,
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
   McpConfigNotice,
@@ -385,7 +386,8 @@ type WritableRowSeverity = { -readonly [K in "severity"]?: PluginNotificationMes
  * add` names its block after the source the user typed, URL userinfo included.
  * Every plugin row name is redacted too, because a hand-edited `enabledPlugins`
  * key names a pending or failed row after whatever precedes its last `@` (see
- * `redactRowName`).
+ * `redactRowName`). The clone note of a block and of a row is redacted too
+ * (`redactCloneNote`), because its URL is the source as written (T-04-06).
  */
 export function resolveRows(
   marketplaces: readonly MarketplaceNotificationMessage[],
@@ -393,7 +395,7 @@ export function resolveRows(
   rowPolicies: RowPolicyMap,
 ): readonly ResolvedMarketplace[] {
   return marketplaces.map((mp) => ({
-    ...mp,
+    ...(mp.clone === undefined ? mp : { ...mp, clone: redactCloneNote(mp.clone) }),
     name: redactCredentials(mp.name),
     plugins: mp.plugins.map((row) => {
       const policy = Object.hasOwn(rowPolicies, row.status) ? rowPolicies[row.status] : undefined;
@@ -410,11 +412,28 @@ export function resolveRows(
       );
       // An out-of-band row can arrive without a string `name`; it keeps that shape.
       const name: unknown = resolved.name;
-      const redacted =
+      const named =
         typeof name === "string" ? { ...resolved, name: redactRowName(name) } : resolved;
+      const redacted = "clone" in named ? { ...named, clone: redactCloneNote(named.clone) } : named;
       return policy === undefined ? { ...redacted, missingPolicy: true } : redacted;
     }),
   }));
+}
+
+/**
+ * PMOD-04 / T-04-06: `clone` with the userinfo of its first URL and of each
+ * retry URL redacted. A url source can carry a credential in its userinfo,
+ * and the D-SG-22 note quotes the URL it cloned, so both strategies read the
+ * redacted form.
+ */
+export function redactCloneNote(clone: CloneTransportNote): CloneTransportNote {
+  return {
+    note: clone.note,
+    url: redactCredentials(clone.url),
+    ...(clone.retries !== undefined && {
+      retries: clone.retries.map((url) => redactCredentials(url)),
+    }),
+  };
 }
 
 /**

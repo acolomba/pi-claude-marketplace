@@ -1263,6 +1263,59 @@ describe("resolveRows", () => {
     ] satisfies readonly ResolvedMarketplace[]);
   });
 
+  test("PMOD-04, T-04-06: redacts the userinfo of every clone note url of a block and a row", () => {
+    // arrange
+    const marketplaces: readonly MarketplaceNotificationMessage[] = [
+      {
+        name: "tools",
+        scope: "user",
+        status: "added",
+        clone: { note: "via-https", url: "https://alice:s3cret@github.com/acme/tools.git" },
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "ghp",
+            dependencies: [],
+            clone: {
+              note: "via-https",
+              url: "https://x-access-token:tok123secret@github.com/acme/ghp.git",
+              retries: ["https://alice:s3cret@github.com/acme/ghp.git"],
+            },
+          },
+        ],
+      },
+    ];
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved, [
+      {
+        name: "tools",
+        scope: "user",
+        status: "added",
+        clone: { note: "via-https", url: "https://***@github.com/acme/tools.git" },
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "ghp",
+            reasons: [],
+            clone: {
+              note: "via-https",
+              url: "https://***@github.com/acme/ghp.git",
+              retries: ["https://***@github.com/acme/ghp.git"],
+            },
+          },
+        ],
+      },
+    ] satisfies readonly ResolvedMarketplace[]);
+  });
+
   test("copies a non-failure row without a failure or dependencies key", () => {
     // arrange
     const marketplaces = marketplaceWith([

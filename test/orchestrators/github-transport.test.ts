@@ -210,6 +210,36 @@ describe("cloneOverGitHubTransports", () => {
     assert.deepStrictEqual(logged, []);
   });
 
+  test("T-04-06: records each url of the note with its userinfo redacted", async () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    const first = {
+      transport: "https",
+      url: "https://x-access-token:tok123secret@github.com/acme/tools.git",
+    } satisfies TransportAttempt;
+    const retry = {
+      transport: "https",
+      url: "https://alice:s3cret@github.com/acme/tools.git",
+    } satisfies TransportAttempt;
+
+    // act
+    await cloneOverGitHubTransports({
+      plan: planOf(first, "via-https", retry),
+      notes,
+      subject: "tools@acme",
+      surface: "plugin",
+      attempt: (attempt) =>
+        attempt === first ? Promise.reject(new Error("refused")) : Promise.resolve(),
+    });
+
+    // assert
+    assert.deepStrictEqual(notes.noteFor("tools@acme"), {
+      note: "via-https",
+      url: "https://***@github.com/acme/tools.git",
+      retries: ["https://***@github.com/acme/tools.git"],
+    });
+  });
+
   test("records nothing for a plan without a note", async () => {
     // arrange
     const notes = createGitHubCloneNotes();

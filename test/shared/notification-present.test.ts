@@ -799,6 +799,63 @@ describe("presentNotification", () => {
     assert.strictEqual(presentation.message, message);
   });
 
+  test("PMOD-04, T-04-06: redacts the userinfo of every plugin-info clone note url", () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      ...pluginInfo(),
+      plugin: {
+        ...pluginInfo().plugin,
+        clone: {
+          note: "via-https",
+          url: "https://alice:s3cret@github.com/acme/alpha.git",
+          retries: ["https://x-access-token:tok123secret@github.com/acme/alpha.git"],
+        },
+      },
+    };
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.deepStrictEqual(presentation, {
+      kind: "plugin-info",
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+      message: {
+        ...message,
+        plugin: {
+          ...pluginInfo().plugin,
+          clone: {
+            note: "via-https",
+            url: "https://***@github.com/acme/alpha.git",
+            retries: ["https://***@github.com/acme/alpha.git"],
+          },
+        },
+      },
+    });
+  });
+
+  test("preserves a plugin-info message whose clone note needs no redaction", () => {
+    // arrange
+    const message: PluginInfoMessage = {
+      ...pluginInfo(),
+      plugin: {
+        ...pluginInfo().plugin,
+        clone: {
+          note: "ssh-not-configured",
+          url: "https://github.com/acme/alpha.git",
+          retries: ["git@github.com:acme/alpha.git"],
+        },
+      },
+    };
+
+    // act
+    const presentation = presentNotification(runWithAllLoaded(), message);
+
+    // assert
+    assert.ok(presentation.kind === "plugin-info");
+    assert.strictEqual(presentation.message, message);
+  });
+
   test("PMOD-04 / D-07 redacts the plugin-info notes of a plugin-info cascade", () => {
     // arrange
     const notesFreeBlock = pluginInfo();

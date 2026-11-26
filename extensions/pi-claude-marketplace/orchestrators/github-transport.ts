@@ -118,14 +118,16 @@ const CHOICE_LINES: Readonly<Partial<Record<CloneNoteKind, string>>> = {
 const TRANSPORT_LABELS = { ssh: "SSH", https: "HTTPS" } as const;
 
 // Keeps the plan's note for the run's subject, with the URLs of the retries
-// that ran after its first attempt.
+// that ran after its first attempt. T-04-06: a url source can carry a
+// credential in its userinfo, so each URL is kept redacted and every renderer
+// and the wire read the safe form.
 function recordNote(run: GitHubCloneRun<unknown>, retries: readonly string[]): void {
   const { plan } = run;
   if (plan.note !== undefined) {
     run.notes.record(run.subject, {
       note: plan.note,
-      url: plan.first.url,
-      ...(retries.length > 0 && { retries }),
+      url: redactCredentials(plan.first.url),
+      ...(retries.length > 0 && { retries: retries.map((url) => redactCredentials(url)) }),
     });
   }
 }

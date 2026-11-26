@@ -1,6 +1,9 @@
+import { isDeepStrictEqual } from "node:util";
+
 import { serializeCauseChain } from "./errors.ts";
 import {
   CENTRAL_ROW_POLICY,
+  redactCloneNote,
   resolveEnvelope,
   resolveNotAddedReason,
   resolveRows,
@@ -215,9 +218,10 @@ function redactMarketplaceInfo(message: MarketplaceInfoMessage): MarketplaceInfo
 }
 
 /**
- * PMOD-04: names can carry stored credentials, and notes can quote a thrown
- * message. Redact both before either renderer reads them. Keep the original
- * message when no field changes.
+ * PMOD-04: names can carry stored credentials, notes can quote a thrown
+ * message, and the clone note quotes the URL it cloned (T-04-06). Redact each
+ * before either renderer reads them. Keep the original message when no field
+ * changes.
  */
 function redactPluginInfo(message: PluginInfoMessage): PluginInfoMessage {
   const { plugin } = message;
@@ -225,7 +229,13 @@ function redactPluginInfo(message: PluginInfoMessage): PluginInfoMessage {
   const name = redactCredentials(plugin.name);
   const notesUnchanged =
     plugin.notes === undefined || plugin.notes.every((note) => redactCredentials(note) === note);
-  if (marketplaceName === message.marketplaceName && name === plugin.name && notesUnchanged) {
+  const clone = plugin.clone === undefined ? undefined : redactCloneNote(plugin.clone);
+  if (
+    marketplaceName === message.marketplaceName &&
+    name === plugin.name &&
+    notesUnchanged &&
+    isDeepStrictEqual(clone, plugin.clone)
+  ) {
     return message;
   }
 
@@ -236,6 +246,7 @@ function redactPluginInfo(message: PluginInfoMessage): PluginInfoMessage {
       ...plugin,
       name,
       ...(plugin.notes === undefined ? {} : { notes: redactLines(plugin.notes) }),
+      ...(clone === undefined ? {} : { clone }),
     },
   };
 }

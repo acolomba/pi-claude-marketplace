@@ -1038,6 +1038,54 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
       }),
   },
   {
+    site: "a marketplace block's clone note",
+    planted: USERINFO,
+    probe: () =>
+      probePresentation({
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            status: "added",
+            clone: { note: "via-https", url: USERINFO_URL, retries: [USERINFO_URL] },
+            plugins: [],
+          },
+        ],
+      }),
+  },
+  {
+    site: "a plugin row's clone note",
+    planted: USERINFO,
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "installed",
+          severity: "info",
+          needsReload: true,
+          dependencies: [],
+          clone: { note: "via-https", url: USERINFO_URL, retries: [USERINFO_URL] },
+        }),
+      ),
+  },
+  {
+    site: "a plugin-info clone note",
+    planted: USERINFO,
+    probe: () =>
+      probePresentation({
+        kind: "plugin-info",
+        marketplaceName: "mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "available",
+          name: "alpha",
+          componentsResolved: false,
+          clone: { note: "via-https", url: USERINFO_URL, retries: [USERINFO_URL] },
+        },
+      }),
+  },
+  {
     site: "the block name of a failed marketplace add",
     planted: USERINFO,
     probe: () =>
