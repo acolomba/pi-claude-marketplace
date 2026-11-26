@@ -1059,8 +1059,9 @@ function gitStagingSteps(
  * second transport runs, through the add's removal ops, so the retry starts
  * where the first attempt did, with no directory, and a failed add leaves
  * nothing behind. git removes what a failed clone made (03-06 A10); the
- * directory is removed anyway. A removal that fails throws, and the add's own
- * cleanup then runs.
+ * directory is removed anyway. A removal that fails throws; the clone run
+ * then throws the first attempt's failure with the removal's added, and the
+ * add's own cleanup runs.
  */
 async function clearStagingDir(removalOps: RemovalOps, stagingDir: string): Promise<void> {
   await removalOps.rm(stagingDir, { recursive: true, force: true });

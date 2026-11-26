@@ -12,6 +12,7 @@ import {
   withOwnCloneNotes,
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
+  CleanupLeakError,
   DeviceFlowUnavailableError,
   GitCommandError,
   GitHubTransportsFailedError,
@@ -330,6 +331,40 @@ describe("cloneOverGitHubTransports", () => {
       "[git] SSH configured for GitHub, using SSH for acme/tools",
       "[git] SSH clone failed for marketplace acme/tools (Repository not found.), falling back to HTTPS",
     ]);
+  });
+
+  test("keeps the first failure, with the clearing failure added, when the clear before the retry fails", async () => {
+    // arrange
+    const sshFailure = new Error("Repository not found.");
+    const attempts: TransportAttempt[] = [];
+
+    // act & assert
+    await assert.rejects(
+      cloneOverGitHubTransports({
+        plan: planOf(SSH_ATTEMPT, "via-ssh", HTTPS_ATTEMPT),
+        notes: createGitHubCloneNotes(),
+        subject: "acme/tools",
+        surface: "marketplace",
+        beforeRetry: () => Promise.reject(new Error("EACCES: staging not removed")),
+        attempt: (attempt) => {
+          attempts.push(attempt);
+          return Promise.reject(sshFailure);
+        },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof CleanupLeakError);
+        assert.deepStrictEqual(
+          { message: error.message, cause: error.cause },
+          {
+            message:
+              "Repository not found. (additionally: could not clear the failed SSH clone for the HTTPS retry: EACCES: staging not removed)",
+            cause: sshFailure,
+          },
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(attempts, [SSH_ATTEMPT]);
   });
 
   test("SG-SSH-02: retries a run with no beforeRetry", async () => {

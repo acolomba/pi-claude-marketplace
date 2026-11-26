@@ -12,6 +12,7 @@ import { stopsTheClone } from "../domain/github-transport.ts";
 import { isGitSubdirShorthand } from "../domain/source.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import {
+  appendLeakToError,
   errorMessage,
   GITHUB_TRANSPORT_LABELS,
   GitHubTransportsFailedError,
@@ -178,6 +179,29 @@ function attemptFailure(failed: FailedAttempt): GitHubTransportAttemptFailure {
 }
 
 /**
+ * Runs `run.beforeRetry` before `next`. When clearing fails, the failure of
+ * `failed` is thrown with the clearing failure added to it, so the clone's
+ * own failure stays the one the user reads, as Claude Code reports a
+ * directory it could not clear for the retry.
+ */
+async function clearBeforeRetry(
+  run: GitHubCloneRun<unknown>,
+  failed: FailedAttempt,
+  next: TransportAttempt,
+): Promise<void> {
+  try {
+    await run.beforeRetry?.();
+  } catch (error: unknown) {
+    const from = GITHUB_TRANSPORT_LABELS[failed.attempt.transport];
+    const to = GITHUB_TRANSPORT_LABELS[next.transport];
+    throw appendLeakToError(
+      failed.error,
+      `could not clear the failed ${from} clone for the ${to} retry: ${errorMessage(error)}`,
+    );
+  }
+}
+
+/**
  * Runs the attempt the plan gives after `failed`, once each attempt before it
  * failed. `earlier` is the failure before `failed`, when there was one, and
  * `retries` the URLs of the retries that ran. With no attempt to give, a
@@ -214,7 +238,7 @@ async function runAfter<T>(
     `${label} clone failed for ${run.surface} ${run.subject} (${debugMessage(failed.error)}), falling back to ${GITHUB_TRANSPORT_LABELS[next.transport]}`,
     "git",
   );
-  await run.beforeRetry?.();
+  await clearBeforeRetry(run, failed, next);
   const ran = [...retries, next.url];
   recordNote(run, ran);
   try {
