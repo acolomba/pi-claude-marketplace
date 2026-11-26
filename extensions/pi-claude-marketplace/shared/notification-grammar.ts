@@ -1133,18 +1133,21 @@ function cloneTransport(url: string): "SSH" | "HTTPS" | "HTTP" {
  * D-SG-22: the lines of a clone note, each after `indent`: Claude Code's line
  * for the first attempt, then one `<T1> clone failed, retrying with <T2>:
  * <url>` line per later attempt, where `<T1>` is the transport of the attempt
- * before it. A row or block without a note has no lines.
+ * before it. A note that names the plugin whose clone it reports starts each
+ * line with `<plugin>: ` after the indent. A row or block without a note has
+ * no lines.
  */
 function composeCloneNoteLines(clone: CloneTransportNote | undefined, indent: string): string[] {
   if (clone === undefined) {
     return [];
   }
 
-  const lines = [`${indent}${CLONE_NOTE_LEADS[clone.note]}: ${clone.url}`];
+  const start = clone.plugin === undefined ? indent : `${indent}${clone.plugin}: `;
+  const lines = [`${start}${CLONE_NOTE_LEADS[clone.note]}: ${clone.url}`];
   let previous = clone.url;
   for (const url of clone.retries ?? []) {
     const retry = `${cloneTransport(previous)} clone failed, retrying with ${cloneTransport(url)}`;
-    lines.push(`${indent}${retry}: ${url}`);
+    lines.push(`${start}${retry}: ${url}`);
     previous = url;
   }
 

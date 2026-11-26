@@ -158,16 +158,18 @@ for (const { note, url } of [
   { note: "via-http", url: "http://github.com/acme/ghp.git" },
   { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
 ]) {
-  test(`D-SG-22, IN-A-02: accepts a clone note of kind ${note}`, () => {
+  test(`D-SG-22, IN-A-02: accepts a clone note of kind ${note}, with or without the plugin it names`, () => {
     // arrange
-    const row = { ...failedRow(), clone: { note, url } };
-    const payload = cascadePayloadWith(row);
+    const payload = cascadePayloadWith({ ...failedRow(), clone: { note, url } });
+    const labelled = cascadePayloadWith({ ...failedRow(), clone: { note, url, plugin: "dep@mp" } });
 
     // act
     const errors = leafErrors(CASCADE_MEMBER, payload);
+    const labelledErrors = leafErrors(CASCADE_MEMBER, labelled);
 
     // assert
     assert.deepStrictEqual(errors, []);
+    assert.deepStrictEqual(labelledErrors, []);
   });
 }
 
@@ -225,6 +227,13 @@ for (const { title, mutate, expectedErrors } of [
       row.clone = { note: "via-https", url: "https://github.com/acme/ghp.git", retries: [1] };
     },
     expectedErrors: [{ keyword: "type", instancePath: `${ROW}/clone/retries/0` }],
+  },
+  {
+    title: "D-SG-22: rejects a clone note whose plugin is not a string",
+    mutate: (row: Record<string, unknown>, _payload: Record<string, unknown>): void => {
+      row.clone = { note: "via-https", url: "https://github.com/acme/dep.git", plugin: 1 };
+    },
+    expectedErrors: [{ keyword: "type", instancePath: `${ROW}/clone/plugin` }],
   },
   {
     title: "D-SG-22: rejects a clone note without its URL",

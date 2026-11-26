@@ -587,6 +587,38 @@ test("IN-A-02: renders the via-http note of a plugin row and names an http attem
   ]);
 });
 
+test("D-SG-22: starts each line of a labelled clone note with the plugin it names", () => {
+  // arrange
+  const plugin = {
+    status: "failed",
+    severity: "error",
+    name: "app",
+    reasons: ["dependency failed"],
+    clone: {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/dep.git",
+      retries: ["git@github.com:acme/dep.git"],
+      plugin: "dep@gits",
+    },
+    failure: {
+      cause: { causeChain: ["both failed"], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } satisfies ResolvedRow<PluginFailedMessage>;
+
+  // act
+  const lines = composePluginLines(plugin, "user");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ⊘ app (failed) {dependency failed}",
+    "    dep@gits: SSH not configured, cloning via HTTPS: https://github.com/acme/dep.git",
+    "    dep@gits: HTTPS clone failed, retrying with SSH: git@github.com:acme/dep.git",
+    "    cause: both failed",
+  ]);
+});
+
 const ROW_CLONE = { note: "via-ssh", url: "git@github.com:acme/ghp.git" } as const;
 
 /** The resolved failure of a row whose only failure detail is the cause `text`. */

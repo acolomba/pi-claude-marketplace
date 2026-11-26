@@ -441,6 +441,14 @@ export interface CloneTransportNote {
   readonly note: CloneNoteKind;
   readonly url: string;
   readonly retries?: readonly string[];
+  /**
+   * The `<plugin>@<marketplace>` whose clone the note reports, when the row
+   * reports another plugin: a failed enable's row names the clone of the
+   * cascade member whose phase failed (WINDOWS #136, maintainer decision
+   * 2026-11-26). The enable failure keeps its shape, and only this labelled
+   * line is new. The text strategy starts each of the note's lines with it.
+   */
+  readonly plugin?: string;
 }
 
 /** Installed plugin row. */

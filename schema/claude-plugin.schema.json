@@ -243,7 +243,8 @@
                           "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
                         },
                         "url": { "type": "string" },
-                        "retries": { "type": "array", "items": { "type": "string" } }
+                        "retries": { "type": "array", "items": { "type": "string" } },
+                        "plugin": { "type": "string" }
                       },
                       "additionalProperties": false
                     }
@@ -368,7 +369,8 @@
                 "properties": {
                   "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                   "url": { "type": "string" },
-                  "retries": { "type": "array", "items": { "type": "string" } }
+                  "retries": { "type": "array", "items": { "type": "string" } },
+                  "plugin": { "type": "string" }
                 },
                 "additionalProperties": false
               }
@@ -630,7 +632,8 @@
                           "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
                         },
                         "url": { "type": "string" },
-                        "retries": { "type": "array", "items": { "type": "string" } }
+                        "retries": { "type": "array", "items": { "type": "string" } },
+                        "plugin": { "type": "string" }
                       },
                       "additionalProperties": false
                     }
@@ -755,7 +758,8 @@
                 "properties": {
                   "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                   "url": { "type": "string" },
-                  "retries": { "type": "array", "items": { "type": "string" } }
+                  "retries": { "type": "array", "items": { "type": "string" } },
+                  "plugin": { "type": "string" }
                 },
                 "additionalProperties": false
               }
@@ -1037,7 +1041,8 @@
                   "properties": {
                     "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                     "url": { "type": "string" },
-                    "retries": { "type": "array", "items": { "type": "string" } }
+                    "retries": { "type": "array", "items": { "type": "string" } },
+                    "plugin": { "type": "string" }
                   },
                   "additionalProperties": false
                 },
@@ -1250,7 +1255,8 @@
                   "properties": {
                     "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                     "url": { "type": "string" },
-                    "retries": { "type": "array", "items": { "type": "string" } }
+                    "retries": { "type": "array", "items": { "type": "string" } },
+                    "plugin": { "type": "string" }
                   },
                   "additionalProperties": false
                 },
@@ -1540,7 +1546,8 @@
                             "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
                           },
                           "url": { "type": "string" },
-                          "retries": { "type": "array", "items": { "type": "string" } }
+                          "retries": { "type": "array", "items": { "type": "string" } },
+                          "plugin": { "type": "string" }
                         },
                         "additionalProperties": false
                       },
@@ -1761,7 +1768,8 @@
                             "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
                           },
                           "url": { "type": "string" },
-                          "retries": { "type": "array", "items": { "type": "string" } }
+                          "retries": { "type": "array", "items": { "type": "string" } },
+                          "plugin": { "type": "string" }
                         },
                         "additionalProperties": false
                       },

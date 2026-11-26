@@ -1431,6 +1431,46 @@ for (const row of [
   });
 }
 
+test("D-SG-22: carries the plugin a row's clone note names as clone.plugin", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "gits",
+      scope: "user",
+      plugins: [
+        {
+          status: "failed",
+          severity: "error",
+          name: "app",
+          reasons: ["dependency failed"],
+          clone: {
+            note: "ssh-not-configured",
+            url: "https://github.com/acme/dep.git",
+            plugin: "dep@gits",
+          },
+          failure: { leaks: [], rollbackPartial: [] },
+        },
+      ],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.ok("marketplaces" in payload);
+  assert.deepStrictEqual(payload.marketplaces[0]?.plugins[0]?.clone, {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/dep.git",
+    plugin: "dep@gits",
+  });
+  assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
+});
+
 test("IN-A-02: carries the via-http clone note of a block unchanged", () => {
   // arrange
   const presentation = presentationOf([

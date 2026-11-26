@@ -75,7 +75,7 @@ SSH not configured, cloning via HTTPS: <url>
 <T1> clone failed, retrying with <T2>: <url>
 ```
 
-`<T1>` is the transport of the attempt before it, and `<T2>` and `<url>` are those of the retry. A failed block or row keeps the lines of every attempt it made, and a clone that failed over both transports shows both attempts in its cause. The lines sit 2 spaces under a marketplace header, and 4 spaces under a plugin row, after its description and before its hint and cause lines. JSON carries the same note as `clone.note`, `clone.url`, and `clone.retries` (`docs/json-output.md`). A command that cloned nothing (a warm or current clone, a path source, a hosted catalog, a host that is not GitHub) shows no such line.
+`<T1>` is the transport of the attempt before it, and `<T2>` and `<url>` are those of the retry. A failed block or row keeps the lines of every attempt it made, and a clone that failed over both transports shows both attempts in its cause. The lines sit 2 spaces under a marketplace header, and 4 spaces under a plugin row, after its description and before its hint and cause lines. JSON carries the same note as `clone.note`, `clone.url`, and `clone.retries` (`docs/json-output.md`). A line that names another plugin's clone starts with that plugin's `<plugin>@<marketplace>` and a colon, such as `dep@gits: Cloning via SSH: <url>`, and JSON carries that name as `clone.plugin`. A command that cloned nothing (a warm or current clone, a path source, a hosted catalog, a host that is not GitHub) shows no such line.
 
 ### Reasons rendering
 

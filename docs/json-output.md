@@ -919,11 +919,12 @@ A GitHub clone names the transport it used first. `retries` names each later att
 
 <!-- fields: clone-note -->
 
-| Field path | Type          | Presence | Meaning                                                           |
-| ---------- | ------------- | -------- | ----------------------------------------------------------------- |
-| `note`     | CloneNoteKind | required | How the first attempt chose its transport.                        |
-| `url`      | string        | required | URL of the first attempt, in github.com terms.                    |
-| `retries`  | string[]      | optional | URL of each later attempt, in order. Absent when one attempt ran. |
+| Field path | Type          | Presence | Meaning                                                                                     |
+| ---------- | ------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `note`     | CloneNoteKind | required | How the first attempt chose its transport.                                                  |
+| `url`      | string        | required | URL of the first attempt, in github.com terms.                                              |
+| `retries`  | string[]      | optional | URL of each later attempt, in order. Absent when one attempt ran.                           |
+| `plugin`   | string        | optional | `<plugin>@<marketplace>` whose clone the note reports, when the row reports another plugin. |
 
 <!-- /fields -->
 
