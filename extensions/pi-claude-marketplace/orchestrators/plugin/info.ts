@@ -115,7 +115,7 @@ import {
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
-import { pluginCloneTransport } from "../github-transport.ts";
+import { pluginCloneTransport, withOwnCloneNotes } from "../github-transport.ts";
 import {
   crossScopeFlag,
   defaultPluginTransportContext,
@@ -138,7 +138,11 @@ import {
 import { workflowAgentNotes } from "./discover-names.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { withMcpServerStatus } from "./info-mcp-status.ts";
-import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
+import {
+  PLUGIN_INFO_CONTEXT,
+  type PluginInfoCascadeMsg,
+  withInfoCloneNote,
+} from "./info.messaging.ts";
 import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
 import { mcpDependencyOf, recordMcpDependency } from "./mcp-verdict.ts";
 import { resolveDeclaredPluginVersion } from "./shared.ts";
@@ -3668,6 +3672,54 @@ async function readProjectInstallRecord(
   }
 }
 
+/**
+ * Builds the block of one scope the info fan-out found, with its companion
+ * requirements and its MCP server states. D-SG-22: under `--fetch` the scope
+ * clones over its own view of the command's notes, so its row names the
+ * GitHub clone this scope ran and never the other scope's.
+ */
+async function buildScopeBlock(args: {
+  readonly reader: PluginInfoReader;
+  readonly env: ClaudeEnv;
+  readonly opts: GetPluginInfoOptions;
+  readonly scoped: ScopedMarketplaceRecord;
+  readonly fetchCtx: InfoFetchContext | undefined;
+  readonly projectRecord: PluginInstallRecord | undefined;
+}): Promise<InfoBlock> {
+  const { reader, env, opts, scoped, fetchCtx, projectRecord } = args;
+  const scopeFetch =
+    fetchCtx === undefined
+      ? undefined
+      : { ...fetchCtx, transportContext: withOwnCloneNotes(fetchCtx.transportContext) };
+  const scopeBlock = await buildBlock({
+    reader,
+    env,
+    marketplace: opts.marketplace,
+    pluginName: opts.plugin,
+    scope: scoped.scope,
+    mpRecord: scoped.record,
+    autoupdate: scoped.autoupdate,
+    declaredEnabled: scoped.declaredEnabled,
+    cwd: opts.cwd,
+    mcpImplementation: opts.run.softDeps.mcpImplementation,
+    ...(scopeFetch !== undefined && { fetchCtx: scopeFetch }),
+  });
+  const noted: InfoBlock = {
+    ...scopeBlock,
+    block: withInfoCloneNote(
+      scopeBlock.block,
+      scopeFetch?.transportContext.notes,
+      `${opts.plugin}@${opts.marketplace}`,
+    ),
+  };
+  return withServerStatus(
+    withCompanionRequirements(noted, opts.run.softDeps),
+    scoped,
+    opts,
+    projectRecord,
+  );
+}
+
 async function getPluginInfoWithReader(
   reader: PluginInfoReader,
   env: ClaudeEnv,
@@ -3735,27 +3787,11 @@ async function getPluginInfoWithReader(
   // Destructure to make the branch choice unambiguous and avoid the
   // silent fall-through hazard `if (found.length === 1) / if (sole !==
   // undefined)` has under `noUncheckedIndexedAccess`.
+  const buildScope = (scoped: ScopedMarketplaceRecord): Promise<InfoBlock> =>
+    buildScopeBlock({ reader, env, opts, scoped, fetchCtx, projectRecord });
   const [sole, ...rest] = found;
   if (sole !== undefined && rest.length === 0) {
-    const soleBlock = await buildBlock({
-      reader,
-      env,
-      marketplace: opts.marketplace,
-      pluginName: opts.plugin,
-      scope: sole.scope,
-      mpRecord: sole.record,
-      autoupdate: sole.autoupdate,
-      declaredEnabled: sole.declaredEnabled,
-      cwd: opts.cwd,
-      mcpImplementation: opts.run.softDeps.mcpImplementation,
-      ...(fetchCtx !== undefined && { fetchCtx }),
-    });
-    const built = await withServerStatus(
-      withCompanionRequirements(soleBlock, opts.run.softDeps),
-      sole,
-      opts,
-      projectRecord,
-    );
+    const built = await buildScope(sole);
     notify(opts.ctx, opts.run, built.block);
     emitFetchSkip(opts, scopes, [built]);
     return;
@@ -3776,29 +3812,7 @@ async function getPluginInfoWithReader(
   // rule on the partial-failure path so a failure in one scope cannot hide
   // behind a healthy other-scope render; callers wanting strict IL-2 must pass
   // `--scope`. Block order follows the project-first scope iteration (MSG-GR-3).
-  const built = await Promise.all(
-    found.map(async (f) => {
-      const scopeBlock = await buildBlock({
-        reader,
-        env,
-        marketplace: opts.marketplace,
-        pluginName: opts.plugin,
-        scope: f.scope,
-        mpRecord: f.record,
-        autoupdate: f.autoupdate,
-        declaredEnabled: f.declaredEnabled,
-        cwd: opts.cwd,
-        mcpImplementation: opts.run.softDeps.mcpImplementation,
-        ...(fetchCtx !== undefined && { fetchCtx }),
-      });
-      return withServerStatus(
-        withCompanionRequirements(scopeBlock, opts.run.softDeps),
-        f,
-        opts,
-        projectRecord,
-      );
-    }),
-  );
+  const built = await Promise.all(found.map(buildScope));
   const blocks = built.map((b) => b.block);
   const infoBlocks = blocks.filter((b) => b.plugin.status !== "failed");
   const failedBlocks = blocks.filter((b) => b.plugin.status === "failed");

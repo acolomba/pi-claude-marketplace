@@ -22,6 +22,7 @@ import {
   type NotificationMessage,
   type PluginAvailableMessage,
   type PluginFailedMessage,
+  type PluginInfoRow,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginPartiallyInstalledMessage,
@@ -398,6 +399,13 @@ void ({
   name: "ghp",
   clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
 } satisfies PluginAvailableMessage);
+// D-SG-22: an info row carries the note of the clone an info --fetch ran.
+void ({
+  status: "remote",
+  name: "ghp",
+  componentsResolved: false,
+  clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginInfoRow);
 void ({
   ...skippedMessage,
   // @ts-expect-error D-SG-22: a skipped row ran no clone, so it carries no clone note

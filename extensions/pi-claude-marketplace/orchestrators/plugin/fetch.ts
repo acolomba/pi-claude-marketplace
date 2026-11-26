@@ -60,7 +60,7 @@ import {
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
-import { pluginCloneTransport } from "../github-transport.ts";
+import { pluginCloneTransport, withOwnCloneNotes } from "../github-transport.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import {
@@ -70,7 +70,7 @@ import {
   networkCloneUrl,
   resolvePluginPin,
 } from "./clone-cache.ts";
-import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
+import { FETCH_CONTEXT, type FetchMsg, withFetchCloneNote } from "./fetch.messaging.ts";
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
@@ -379,6 +379,10 @@ interface FetchOneDeps {
  *
  * Every row that shows a version takes it from the same list rule: the
  * version of the warm or path tree, else the entry's (D-PL7-09, D-PL7-17).
+ *
+ * D-SG-22: the fetched or failed row names the transport of the clone this
+ * target ran. The target clones over its own view of the command's notes, so
+ * the same plugin fetched in the other scope never lends its row a note.
  */
 async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<FetchMsg> {
   const { entry, locations } = target;
@@ -400,17 +404,15 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
   }
 
   const gitSource: GitBackedSource = source;
+  const subject = `${entry.name}@${target.marketplace}`;
+  const transportContext = withOwnCloneNotes(deps.transportContext);
   let rowRead = false;
   const fetchAndRead = async (): Promise<FetchMsg> => {
-    const transport = pluginCloneTransport(
-      deps.transportContext,
-      gitSource,
-      `${entry.name}@${target.marketplace}`,
-    );
+    const transport = pluginCloneTransport(transportContext, gitSource, subject);
     await materializeThroughSeam(gitSource, deps, locations, transport);
     const row = freshRow(entry, await readCandidate(), deps.run.softDeps.mcpImplementation);
     rowRead = true;
-    return row;
+    return withFetchCloneNote(row, transportContext.notes, subject);
   };
 
   try {
@@ -433,7 +435,11 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     return await withExistingScopeLock(locations, fetchAndRead);
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
-    return failedRow(entry, err, networkCloneUrl(gitSource), rowRead);
+    return withFetchCloneNote(
+      failedRow(entry, err, networkCloneUrl(gitSource), rowRead),
+      transportContext.notes,
+      subject,
+    );
   }
 }
 

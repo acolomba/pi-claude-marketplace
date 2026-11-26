@@ -105,6 +105,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { CloneTransportNote } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TestContext } from "node:test";
 
@@ -269,6 +271,7 @@ const ALLOWED_INFO_REMOTES = [
   "https://example.com/repo",
   "https://example.com/repo.git",
   "https://example.com/warmdecl",
+  "https://github.com/acme/alpha.git",
   "https://github.com/owner/gh-mp.git",
 ] as const;
 
@@ -12413,6 +12416,20 @@ interface SeenTransport {
 }
 
 /**
+ * D-SG-22: whether a note `transport` records reaches the command's own
+ * collector in `context`. The note goes under a subject no row reads, so it
+ * changes no row.
+ */
+function reachesCommandNotes(
+  transport: CloneTransport,
+  context: PluginTransportContext | undefined,
+): boolean {
+  const note: CloneTransportNote = { note: "via-https", url: "https://github.com/probe.git" };
+  transport.notes.record("seam-probe", note);
+  return context?.notes.noteFor("seam-probe") === note;
+}
+
+/**
  * OQ-7: a seam that clones nothing. Each call records the transport it got
  * and makes its plan, as a clone step would, so the context's checks run.
  */
@@ -12425,7 +12442,7 @@ function transportRecordingSeam(
     seen.push({
       call,
       subject: transport?.subject,
-      sharesNotes: transport !== undefined && transport.notes === contexts[0]?.notes,
+      sharesNotes: transport !== undefined && reachesCommandNotes(transport, contexts[0]),
       first: transport === undefined ? undefined : (await transport.plan()).first.url,
     });
   };
@@ -12617,5 +12634,192 @@ test("NFR-5: info without --fetch makes no transport context", async () => {
 
     // assert
     assert.deepStrictEqual({ made, seen }, { made: 0, seen: [] });
+  });
+});
+
+// ─── D-SG-22: an info --fetch row names the transport of its own clone ──────
+
+/** D-SG-22: a plugin tree named `alpha` at 1.0.0 with one skill, the clone fixture. */
+async function writeAlphaFixture(cwd: string): Promise<string> {
+  const fixture = path.join(cwd, "alpha-fixture");
+  await mkdir(path.join(fixture, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(fixture, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "alpha", version: "1.0.0" }),
+  );
+  await mkdir(path.join(fixture, "skills", "fetched-skill"), { recursive: true });
+  await writeFile(
+    path.join(fixture, "skills", "fetched-skill", "SKILL.md"),
+    "---\nname: fetched-skill\n---\n\nHello.\n",
+  );
+  return fixture;
+}
+
+/** D-SG-22: the marketplace `mp` of `scope` offering github `acme/alpha` pinned at `pin`. */
+async function seedPinnedGitHubAlpha(
+  home: string,
+  cwd: string,
+  scope: Scope,
+  pin: string,
+): Promise<void> {
+  await seedPathMarketplace({
+    scope,
+    scopeRoot: scope === "user" ? path.join(home, ".pi", "agent") : path.join(cwd, ".pi"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [
+        {
+          name: "alpha",
+          source: { source: "github", repo: "acme/alpha", sha: pin },
+          version: "1.0.0",
+        },
+      ],
+    },
+  });
+}
+
+test("D-SG-22: info --fetch that clones a github plugin names the transport under its row", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPinnedGitHubAlpha(home, cwd, "user", "6".repeat(40));
+    const { gitOps } = createGitOps({ fixtureSourceDir: await writeAlphaFixture(cwd) });
+    const getInfo = withDefaultMcpStatus(
+      createGetPluginInfo(NODE_READER, process.env, () => httpsFirstContext({ count: 0 })),
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "alpha",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps: createCredentialOps().credOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ alpha v1.0.0 (available)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/alpha.git",
+          "    skills: fetched-skill",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: info --fetch over both scopes names each clone under its own scope's row only", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userPin = "7".repeat(40);
+    await seedPinnedGitHubAlpha(home, cwd, "project", "6".repeat(40));
+    await seedPinnedGitHubAlpha(home, cwd, "user", userPin);
+    const { gitOps } = createGitOps({ fixtureSourceDir: await writeAlphaFixture(cwd) });
+    const seam = fetchSeamWith(gitOps);
+    let projectCloned: () => void = () => undefined;
+    const cloned = new Promise<void>((resolve) => {
+      projectCloned = resolve;
+    });
+    const getInfo = withDefaultMcpStatus(
+      createGetPluginInfo(NODE_READER, process.env, () => httpsFirstContext({ count: 0 })),
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "alpha",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: {
+        ...seam,
+        // The user scope's clone fails only once the project scope's clone has
+        // noted its transport, so its row is read after that note exists.
+        async resolvePluginPin(args) {
+          if (args.source.sha === userPin) {
+            await cloned;
+            throw cloneFailure({ kind: "network", curlCode: 7 });
+          }
+
+          return seam.resolvePluginPin(args);
+        },
+        async materializePluginClone(args) {
+          const root = await seam.materializePluginClone(args);
+          projectCloned();
+          return root;
+        },
+      },
+      credentialOps: createCredentialOps().credOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [project] <no autoupdate>",
+          "  ○ alpha v1.0.0 (available)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/alpha.git",
+          "    skills: fetched-skill",
+          "",
+          "● mp [user] <no autoupdate>",
+          "  ◌ alpha v1.0.0 (remote) {network unreachable}",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-SG-22, OQ-3: info --fetch of a github plugin whose pinned clone is warm names no clone", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const pin = "6".repeat(40);
+    await seedPinnedGitHubAlpha(home, cwd, "user", pin);
+    const { gitOps } = createGitOps({ fixtureSourceDir: await writeAlphaFixture(cwd) });
+    const getInfo = withDefaultMcpStatus(
+      createGetPluginInfo(NODE_READER, process.env, () => httpsFirstContext({ count: 0 })),
+    );
+    const fetchOnce = async (): Promise<readonly NotifyRecord[]> => {
+      const { ctx, run, notifications } = makeCtx();
+      await getInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "alpha",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: fetchSeamWith(gitOps),
+        credentialOps: createCredentialOps().credOps,
+      });
+      return notifications;
+    };
+
+    await fetchOnce();
+
+    // act
+    const notifications = await fetchOnce();
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ alpha v1.0.0 (available)",
+          "    skills: fetched-skill",
+        ].join("\n"),
+      },
+    ]);
   });
 });

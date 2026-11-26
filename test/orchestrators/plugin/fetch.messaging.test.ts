@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   FETCH_CONTEXT,
   type FetchMsg,
+  withFetchCloneNote,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.messaging.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -194,4 +196,49 @@ test("FETCH_CONTEXT declares complete row policies", () => {
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
   });
+});
+
+test("D-SG-22: gives each row that can carry one the note of its own subject's clone", () => {
+  // arrange
+  const notes = createGitHubCloneNotes();
+  const clone = { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" } as const;
+  notes.record("ghp@gits", clone);
+  notes.record("other@gits", { note: "via-ssh", url: "git@github.com:acme/other.git" });
+  const rows: readonly FetchMsg[] = [
+    { status: "available", name: "ghp" },
+    { status: "partially-available", name: "ghp", reasons: ["lsp"] },
+    { status: "unavailable", name: "ghp", reasons: ["source missing"] },
+    { status: "failed", name: "ghp", reasons: ["network error"], severity: "error" },
+  ];
+
+  // act
+  const noted = rows.map((row) => withFetchCloneNote(row, notes, "ghp@gits"));
+
+  // assert
+  assert.deepStrictEqual(
+    noted,
+    rows.map((row) => ({ ...row, clone })),
+  );
+});
+
+test("D-SG-22: leaves a remote or skipped row, and a row whose subject cloned nothing, unchanged", () => {
+  // arrange
+  const notes = createGitHubCloneNotes();
+  notes.record("ghp@gits", { note: "via-ssh", url: "git@github.com:acme/ghp.git" });
+  const remote: FetchMsg = { status: "remote", name: "ghp" };
+  const skipped: FetchMsg = { status: "skipped", name: "ghp", reasons: ["up-to-date"] };
+  const available: FetchMsg = { status: "available", name: "quiet" };
+
+  // act
+  const noted = [
+    withFetchCloneNote(remote, notes, "ghp@gits"),
+    withFetchCloneNote(skipped, notes, "ghp@gits"),
+    withFetchCloneNote(available, notes, "quiet@gits"),
+  ];
+
+  // assert
+  assert.deepStrictEqual(
+    noted.map((row, index) => row === [remote, skipped, available][index]),
+    [true, true, true],
+  );
 });

@@ -2026,6 +2026,64 @@ test("masks stored names and URL credentials before a marketplace info cascade r
   );
 });
 
+test("D-SG-22: carries an info row's clone note and copies its retries", () => {
+  // arrange
+  const retries = ["git@github.com:acme/ghp.git"];
+  const presentation = {
+    kind: "plugin-info",
+    envelope: infoEnvelope(),
+    message: {
+      kind: "plugin-info",
+      marketplaceName: "gits",
+      marketplaceScope: "user",
+      marketplaceDetails: { autoupdate: false },
+      plugin: {
+        status: "remote",
+        name: "ghp",
+        reasons: ["network unreachable"],
+        componentsResolved: false,
+        clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git", retries },
+      },
+    },
+  } satisfies NotificationPresentation;
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    kind: "plugin-info",
+    severity: "info",
+    needsReload: false,
+    marketplaceName: "gits",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "remote",
+      name: "ghp",
+      id: "ghp@gits",
+      reasons: ["network unreachable"],
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/acme/ghp.git",
+        retries: ["git@github.com:acme/ghp.git"],
+      },
+      componentsResolved: false,
+    },
+  });
+  assert.strictEqual(
+    payload.kind === "plugin-info" && payload.plugin.clone?.retries === retries,
+    false,
+  );
+  assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
+});
+
 test("converts an unresolved catalogue plugin-info row with no scope and empty reasons", () => {
   // arrange
   const presentation = {

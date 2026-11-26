@@ -1183,6 +1183,11 @@ export interface PluginInfoRowBase {
    */
   readonly notes?: readonly string[];
   /**
+   * D-SG-22: the transport note of the GitHub clone an `info --fetch` ran for
+   * this row's scope; absent when it cloned nothing over GitHub.
+   */
+  readonly clone?: CloneTransportNote;
+  /**
    * ADD-10 / D-PL5-12: the row's subject is a marketplace (or the source a
    * failed `marketplace add` was typed with), not a plugin, as in a failed
    * `marketplace add`, `info`, `remove`, `update`, or autoupdate, so its JSON

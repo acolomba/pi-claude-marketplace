@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   PLUGIN_INFO_CONTEXT,
   type PluginInfoCascadeMsg,
+  withInfoCloneNote,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.messaging.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+import type { PluginInfoMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 void ({ status: "skipped", name: "alpha", reasons: [] } satisfies PluginInfoCascadeMsg);
 
@@ -122,4 +125,50 @@ test("PLUGIN_INFO_CONTEXT declares complete row policies", () => {
 
   // assert
   assert.deepStrictEqual(policies, { skipped: { markers: false, contentReasons: true } });
+});
+
+/** D-SG-22: the info message of `ghp@gits` in the user scope. */
+const GHP_INFO: PluginInfoMessage = {
+  kind: "plugin-info",
+  marketplaceName: "gits",
+  marketplaceScope: "user",
+  marketplaceDetails: { autoupdate: false },
+  plugin: {
+    status: "available",
+    name: "ghp",
+    componentsResolved: true,
+    components: { skills: ["greet"] },
+  },
+};
+
+test("D-SG-22: gives the info row the note of its own subject's clone", () => {
+  // arrange
+  const notes = createGitHubCloneNotes();
+  const clone = { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" } as const;
+  notes.record("ghp@gits", clone);
+  notes.record("other@gits", { note: "via-ssh", url: "git@github.com:acme/other.git" });
+
+  // act
+  const noted = withInfoCloneNote(GHP_INFO, notes, "ghp@gits");
+
+  // assert
+  assert.deepStrictEqual(noted, { ...GHP_INFO, plugin: { ...GHP_INFO.plugin, clone } });
+});
+
+test("D-SG-22: leaves the info message unchanged with no notes or with no note for its subject", () => {
+  // arrange
+  const notes = createGitHubCloneNotes();
+  notes.record("other@gits", { note: "via-ssh", url: "git@github.com:acme/other.git" });
+
+  // act
+  const noted = [
+    withInfoCloneNote(GHP_INFO, undefined, "ghp@gits"),
+    withInfoCloneNote(GHP_INFO, notes, "ghp@gits"),
+  ];
+
+  // assert
+  assert.deepStrictEqual(
+    noted.map((message) => message === GHP_INFO),
+    [true, true],
+  );
 });

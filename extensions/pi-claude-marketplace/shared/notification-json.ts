@@ -588,6 +588,7 @@ function wirePluginInfoRow(plugin: PluginInfoRow, message: PluginInfoMessage) {
     ...(plugin.description === undefined ? {} : { description: plugin.description }),
     ...(plugin.notes === undefined ? {} : { notes: [...plugin.notes] }),
     ...(plugin.dependencies === undefined ? {} : { dependencies: [...plugin.dependencies] }),
+    ...wireClone(plugin.clone),
   };
   return plugin.componentsResolved
     ? {

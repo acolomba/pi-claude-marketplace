@@ -863,6 +863,44 @@ for (const [status, glyph] of [
   });
 }
 
+test("D-SG-22: renders an info row's clone note and its retry after the description and before the components", () => {
+  // arrange
+  const message: PluginInfoMessage = {
+    kind: "plugin-info",
+    marketplaceName: "gits",
+    marketplaceScope: "user",
+    marketplaceDetails: { autoupdate: false },
+    plugin: {
+      status: "available",
+      name: "ghp",
+      description: "Greets.",
+      componentsResolved: true,
+      components: { skills: ["greet"] },
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/acme/ghp.git",
+        retries: ["git@github.com:acme/ghp.git"],
+      },
+    },
+  };
+
+  // act
+  const rendered = renderPluginInfo(message);
+
+  // assert
+  assert.equal(
+    rendered,
+    [
+      "● gits [user] <no autoupdate>",
+      "  ○ ghp (available)",
+      "    Greets.",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+      "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghp.git",
+      "    skills: greet",
+    ].join("\n"),
+  );
+});
+
 test("renders the entry-declared dependencies line after the unresolved marker (D-01-32)", () => {
   // arrange
   const message: PluginInfoMessage = {
