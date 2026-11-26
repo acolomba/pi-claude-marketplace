@@ -15,6 +15,7 @@ import type { McpDependency } from "../shared/concerns/soft-dep.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
 import type {
+  CloneTransportNote,
   McpConfigNotice,
   PluginFailedMessage,
   PluginInstalledMessage,
@@ -343,6 +344,14 @@ export interface PluginUpdateBase {
   readonly dependencyRows?: readonly UpdateDependencyRow[];
   /** D-PL10-16: dependency warnings retain their member identity through an update. */
   readonly dependencyStagingDiagnostics?: readonly DependencyStagingDiagnostic[];
+  /**
+   * D-SG-22: the transport note of the GitHub clone this update ran, which
+   * the autoupdate cascade's row shows under it. Only the autoupdate seam
+   * (`PluginUpdateFn`) sets it, from the target's own view of the run's
+   * notes; the direct update reads its own notes and leaves it unset. Absent
+   * when the update cloned nothing over GitHub (NREG-01, OQ-3).
+   */
+  readonly clone?: CloneTransportNote;
 }
 
 /** UPD-DEP-D1: a dependency a move changed, with the row that reports it. */

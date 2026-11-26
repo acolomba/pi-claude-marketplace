@@ -7,6 +7,7 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
+import { carriedClone } from "../github-transport.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 import {
   constraintCauseFor,
@@ -79,11 +80,21 @@ export const UPDATE_CONTEXT = {
  * `scope` is forwarded so the renderer's orphan-fold logic
  * (`renderScopeBracket(plugin.scope, mp.scope)`) can suppress the redundant
  * `[<scope>]` bracket when the plugin scope matches the marketplace scope.
+ *
+ * D-SG-22: every row copies the outcome's clone note, which the autoupdate
+ * seam sets from the target's own clone, so the row names the transport of
+ * the GitHub clone its update ran (WINDOWS #134). An outcome with no note
+ * gives a row with none (NREG-01).
  */
 export function outcomeToCascadePluginMessage(
   outcome: PluginUpdateOutcome,
   scope: Scope,
 ): UpdateRowMsg {
+  return { ...cascadeRowOf(outcome, scope), ...carriedClone(outcome) };
+}
+
+// The row of `outcome`'s partition, before its clone note.
+function cascadeRowOf(outcome: PluginUpdateOutcome, scope: Scope): UpdateRowMsg {
   // PluginUpdateOutcome is a discriminated union; the switch exhausts all 4
   // partitions with no default arm, so any future variant addition fails at
   // compile time.

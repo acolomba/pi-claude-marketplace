@@ -21,7 +21,10 @@ import type { MaterializationPolicy } from "../../../extensions/pi-claude-market
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
-import type { Severity } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type {
+  CloneTransportNote,
+  Severity,
+} from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /** `update`'s knobs on the shared runner (D-18-04). */
 const UPDATE_POLICY = {
@@ -1413,4 +1416,136 @@ test("D-PL1-25: a cascade shows a moved plugin whose only staging warning is a h
       severity: "warning",
     },
   ]);
+});
+
+// ─── D-SG-22: an autoupdate row names the clone its update ran ──────────────
+
+const AUTOUPDATE_CLONE = {
+  note: "via-https",
+  url: "https://github.com/acme/ghp.git",
+} as const satisfies CloneTransportNote;
+
+const NOTED_OUTCOMES: readonly (readonly [UpdateRowMsg["status"], PluginUpdateOutcome])[] = [
+  [
+    "updated",
+    {
+      partition: "updated",
+      resourcesChanged: true,
+      name: "ghp",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      constraint: undefined,
+      clone: AUTOUPDATE_CLONE,
+    },
+  ],
+  [
+    "partially-installed",
+    {
+      partition: "updated",
+      resourcesChanged: true,
+      name: "ghp",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+      constraint: undefined,
+      clone: AUTOUPDATE_CLONE,
+    },
+  ],
+  [
+    "skipped",
+    {
+      partition: "unchanged",
+      name: "ghp",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      constraint: undefined,
+      clone: AUTOUPDATE_CLONE,
+    },
+  ],
+  [
+    "skipped",
+    {
+      partition: "skipped",
+      name: "ghp",
+      fromVersion: "1.0.0",
+      notes: [],
+      reasons: ["no longer installable"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      clone: AUTOUPDATE_CLONE,
+    },
+  ],
+  [
+    "failed",
+    {
+      partition: "failed",
+      name: "ghp",
+      notes: [],
+      reasons: ["network error"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      clone: AUTOUPDATE_CLONE,
+    },
+  ],
+];
+
+for (const [status, outcome] of NOTED_OUTCOMES) {
+  test(`D-SG-22: the ${status} row of an autoupdate outcome in partition ${outcome.partition} carries its clone note`, () => {
+    // act
+    const message = outcomeToCascadePluginMessage(outcome, "project");
+
+    // assert
+    assert.deepStrictEqual(
+      { status: message.status, clone: message.clone },
+      { status, clone: AUTOUPDATE_CLONE },
+    );
+  });
+}
+
+test("D-SG-22: a failed autoupdate row names both attempts of a clone that failed over both transports", () => {
+  // arrange
+  const clone = {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/ghp.git",
+    retries: ["git@github.com:acme/ghp.git"],
+  } as const satisfies CloneTransportNote;
+  const outcome = {
+    partition: "failed",
+    name: "ghp",
+    notes: [],
+    reasons: ["network error"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    clone,
+  } as const satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "project");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "failed",
+    name: "ghp",
+    scope: "project",
+    reasons: ["network error"],
+    severity: "error",
+    needsReload: false,
+    clone,
+  });
 });

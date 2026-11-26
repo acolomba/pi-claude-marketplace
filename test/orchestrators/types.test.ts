@@ -140,6 +140,23 @@ const PLUGIN_UPDATE_BASE = {
   name: "alpha",
 } satisfies PluginUpdateBase;
 
+// D-SG-22: the autoupdate seam's outcome may carry the note of its own clone.
+void ({
+  ...PLUGIN_UPDATE_BASE,
+  clone: {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/alpha.git",
+    retries: ["git@github.com:acme/alpha.git"],
+  },
+  notes: [],
+  partition: "failed",
+} satisfies PluginUpdateOutcome);
+void ({
+  ...PLUGIN_UPDATE_BASE,
+  // @ts-expect-error a clone note names its kind and its first url
+  clone: { url: "https://github.com/acme/alpha.git" },
+} satisfies PluginUpdateBase);
+
 const PLUGIN_UPDATE_UPDATED_CLEAN = {
   constraint: undefined,
   declaresAgents: false,
