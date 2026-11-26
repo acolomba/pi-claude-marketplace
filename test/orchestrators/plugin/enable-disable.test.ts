@@ -10020,11 +10020,13 @@ test("D-SG-19: two enable commands make two transport contexts", async () => {
  * D-SG-22: a transaction whose install ledger, for each plugin `notes` names,
  * records that note into its options' transport context under the plugin's
  * `<plugin>@<marketplace>`, as a re-clone of its source does, then runs the
- * real ledger, or throws `fail` when it is given.
+ * real ledger, or throws `fail` when it is given: for the plugin
+ * `failingSubject` names, or for every plugin without it.
  */
 function cloningTransaction(
   notes: Readonly<Record<string, CloneTransportNote>>,
   fail?: Error,
+  failingSubject?: string,
 ): EnableDisableTransaction {
   return {
     ...REAL_ENABLE_DISABLE_TRANSACTION,
@@ -10035,9 +10037,10 @@ function cloningTransaction(
         options.transportContext?.notes.record(subject, note);
       }
 
-      return fail === undefined
-        ? REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture)
-        : Promise.reject(fail);
+      const fails = fail !== undefined && (failingSubject ?? subject) === subject;
+      return fails
+        ? Promise.reject(fail)
+        : REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture);
     },
   };
 }
@@ -10223,5 +10226,193 @@ test("D-SG-22: an enable given a transport context names the clones its collecto
         ],
       },
     );
+  });
+});
+
+test("D-SG-22: an enable whose re-enabled member's re-clone fails names that member's clone on the root's failed row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const enable = enableOver(
+      cloningTransaction(
+        {
+          "b@official": {
+            note: "ssh-not-configured",
+            url: "https://github.com/acme/b.git",
+            retries: ["git@github.com:acme/b.git"],
+          },
+        },
+        new Error("both clones failed"),
+        "b@official",
+      ),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a v1.0.0 (failed)",
+          "    b@official: SSH not configured, cloning via HTTPS: https://github.com/acme/b.git",
+          "    b@official: HTTPS clone failed, retrying with SSH: git@github.com:acme/b.git",
+          "    cause: both clones failed",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: an already-enabled plugin whose re-enabled member's re-clone fails names that member's clone on its failed row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: true },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const enable = enableOver(
+      cloningTransaction(
+        { "b@official": { note: "via-https", url: "https://github.com/acme/b.git" } },
+        new Error("clone failed"),
+        "b@official",
+      ),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a v1.0.0 (failed)",
+          "    b@official: Cloning via HTTPS: https://github.com/acme/b.git",
+          "    cause: clone failed",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: an enable whose own re-clone fails after its member's names only its own clone, unlabelled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const enable = enableOver(
+      cloningTransaction(
+        {
+          "a@official": { note: "ssh-not-configured", url: "https://github.com/acme/a.git" },
+          "b@official": { note: "via-ssh", url: "git@github.com:acme/b.git" },
+        },
+        new Error("clone failed"),
+        "a@official",
+      ),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a v1.0.0 (failed)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/a.git",
+          "    cause: clone failed",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: an enable whose config write fails after every re-clone names only the root's clone, unlabelled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const enable = enableOver({
+      ...cloningTransaction({
+        "a@official": { note: "via-https", url: "https://github.com/acme/a.git" },
+        "b@official": { note: "via-ssh", url: "git@github.com:acme/b.git" },
+      }),
+      writeConfigEntries() {
+        return rejectUnknown(new Error("config write denied"));
+      },
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a v1.0.0 (failed)",
+          "    Cloning via HTTPS: https://github.com/acme/a.git",
+          "    cause: config write denied",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
   });
 });

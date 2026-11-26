@@ -830,6 +830,62 @@ describe("composeEnableCascadeRows clone notes", () => {
     );
   });
 
+  test("D-SG-22: gives a failed root row the clone note of the cascade member that failed, labelled with its key", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    const memberClone = {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/formatter.git",
+      retries: ["git@github.com:acme/formatter.git"],
+    } as const;
+    notes.record("helper@official", { note: "via-ssh", url: "git@github.com:acme/helper.git" });
+    notes.record("formatter@tools", memberClone);
+    const rootRow: EnableMsg = {
+      status: "failed",
+      name: "helper",
+      reasons: [],
+      severity: "error",
+      needsReload: false,
+    };
+
+    // act
+    const rows = composeEnableCascadeRows({
+      scope: "user",
+      rootRow,
+      members: [],
+      clones: { notes, rootSubject: "helper@official", failingMember: "formatter@tools" },
+    });
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      { ...rootRow, clone: { ...memberClone, plugin: "formatter@tools" } },
+    ]);
+  });
+
+  test("D-SG-22: leaves a failed root row unchanged when the member that failed cloned nothing over GitHub", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record("helper@official", { note: "via-ssh", url: "git@github.com:acme/helper.git" });
+    const rootRow: EnableMsg = {
+      status: "failed",
+      name: "helper",
+      reasons: [],
+      severity: "error",
+      needsReload: false,
+    };
+
+    // act
+    const [row] = composeEnableCascadeRows({
+      scope: "user",
+      rootRow,
+      members: [],
+      clones: { notes, rootSubject: "helper@official", failingMember: "formatter@tools" },
+    });
+
+    // assert
+    assert.equal(row, rootRow);
+  });
+
   test("D-SG-22: leaves a skipped root row, and a root whose subject cloned nothing, unchanged", () => {
     // arrange
     const notes = createGitHubCloneNotes();

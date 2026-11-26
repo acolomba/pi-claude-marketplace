@@ -2,7 +2,7 @@ Feature: Plugin github transport update
 
   Updating or reinstalling a plugin whose source is a github owner/repo picks ssh or https the way installing it does, with one probe for the whole command, and the dependency moves of an update follow the same choice (D-SG-19).
   An ssh stand-in first on Pi's path answers the probe and serves the git host's repositories over ssh, and a CONNECT proxy tunnels git's github.com connections to the git host.
-  Each row names the transport of the clone its plugin ran, and the marketplace's block names the re-clone of the marketplace refresh an update runs first (D-SG-22). A fetch, an info with --fetch, and an enable name the clone they ran the same way.
+  Each row names the transport of the clone its plugin ran, and the marketplace's block names the re-clone of the marketplace refresh an update runs first (D-SG-22). A fetch, an info with --fetch, and an enable name the clone they ran the same way. When the clone of a dependency an enable re-enables fails, the enabled plugin's failed row names that clone, labelled with the dependency.
 
   Background:
     Given the git repository "ghp" holds these plugins:
@@ -363,3 +363,32 @@ Feature: Plugin github transport update
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: Enabling a plugin whose re-enabled github dependency cannot be cloned names that dependency's clone on the plugin's failed row
+    Given the marketplace "gits" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp          |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install app@gits --scope project"
+    Given the user has run "/claude:plugin disable app@gits --scope project"
+    Given the user has run "/claude:plugin disable ghp@gits --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    Given the git host answers 404 for the plugin "ghp"
+    When the user runs "/claude:plugin enable app@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons | scope   | version | cause chain                                                                                                                                                                                                                                                                                                                                                                                                                                     | cause truncated | leaks | rollback partial | clone note         | clone url                       | clone retries               | clone plugin |
+      | gits             | project           | app@gits | app  | failed |         | project | 1.0.0   | git clone --depth failed: repository-not-found, exit code 128\nThe retry over SSH failed too: git clone --depth failed: ssh-auth, exit code 128\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again., git clone --depth failed: ssh-auth, exit code 128 | false           |       |                  | ssh-not-configured | https://github.com/acme/ghp.git | git@github.com:acme/ghp.git | ghp@gits     |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version | enabled |
+      | app@gits | 1.0.0   | false   |
+      | ghp@gits | 1.0.0   | false   |
