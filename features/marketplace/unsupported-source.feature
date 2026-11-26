@@ -36,3 +36,4 @@ Feature: Marketplace unsupported source
       | github      | https://github.com/acme                 |
       | github      | tools                                   |
       | github      | acme/tools/extra                        |
+      | github      | acme/tools#feature:one                  |

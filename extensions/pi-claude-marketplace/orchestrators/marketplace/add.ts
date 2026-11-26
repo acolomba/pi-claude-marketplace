@@ -61,6 +61,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
+import { isScpGitAddress } from "../../domain/git-url.ts";
 import { planMarketplaceClone } from "../../domain/github-transport.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import { addedMarketplaceNameRefusal, isReservedRecordKey } from "../../domain/name.ts";
@@ -813,18 +814,32 @@ const INVALID_SOURCE_FORMAT =
 /** A URL whose `scheme://` prefix names its scheme. */
 const SCHEME_URL = /^[a-z][a-z0-9+.-]*:\/\//i;
 
+/** The spellings Claude Code's add parser reads as a local path. */
+const PATH_PREFIXES = ["./", "../", "/", "~"] as const;
+
 /**
  * D-SG-17 [Address forms]: whether the command line refuses `rawSource`
  * before it parses: a `scheme://` URL whose scheme is not `http` or `https`,
- * as `ssh://`, `git+ssh://`, `ssh+git://`, `git://`, and `file://` are.
- * Claude Code's add parser reads only `http://` and `https://` URLs, the scp
- * form, paths, and `owner/repo`, case-sensitively, and refuses the rest.
+ * as `ssh://`, `git+ssh://`, `ssh+git://`, `git://`, and `file://` are, and
+ * any other input that holds both `:` and `/` and is not the scp form or a
+ * path, as `file:/x` and `ssh:/h/x` are. Claude Code's add parser (`$Ce`)
+ * reads only `http://` and `https://` URLs, the scp form, paths, and
+ * `owner/repo`, case-sensitively, and refuses the rest.
  */
 function isCommandLineRefusal(rawSource: string): boolean {
+  if (rawSource.startsWith("http://") || rawSource.startsWith("https://")) {
+    return false;
+  }
+
+  if (SCHEME_URL.test(rawSource)) {
+    return true;
+  }
+
   return (
-    SCHEME_URL.test(rawSource) &&
-    !rawSource.startsWith("http://") &&
-    !rawSource.startsWith("https://")
+    rawSource.includes(":") &&
+    rawSource.includes("/") &&
+    !isScpGitAddress(rawSource) &&
+    !PATH_PREFIXES.some((prefix) => rawSource.startsWith(prefix))
   );
 }
 

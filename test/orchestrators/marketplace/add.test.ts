@@ -2563,6 +2563,9 @@ for (const rawSource of [
   "git://h.example/acme/tools.git",
   "file:///srv/tools.git",
   "HTTPS://h.example/acme/tools.git",
+  "file:/srv/tools.git",
+  "ssh:/h.example/acme/tools.git",
+  "acme/tools#feature:one",
 ]) {
   test(`D-SG-17: the command-line form refuses ${rawSource} with Claude Code's format text`, () => {
     // arrange
@@ -2622,6 +2625,10 @@ for (const { rawSource, source } of [
     },
   },
   { rawSource: "./tools", source: { kind: "path", raw: "./tools", logical: "./tools" } },
+  {
+    rawSource: "./tools:v1/mp",
+    source: { kind: "path", raw: "./tools:v1/mp", logical: "./tools:v1/mp" },
+  },
   {
     rawSource: "acme/tools",
     source: { kind: "github", raw: "acme/tools", owner: "acme", repo: "tools" },
