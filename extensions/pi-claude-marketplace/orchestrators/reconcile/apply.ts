@@ -800,6 +800,9 @@ async function applyPluginInstalls(
         enableHint: true,
         // The version slot every other reconcile `(disabled)` row fills.
         version: result.version,
+        // D-SG-22: the install cloned before its disable cascade ran, so the
+        // row names that clone, as the `(installed)` row below does.
+        ...clone,
         // S2 / PR #51: the post-commit warnings are collected on this path
         // exactly as on the install path -- none of the collection sites are
         // gated on the disabled verdict -- so drop them here and a permission

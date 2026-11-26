@@ -96,6 +96,10 @@ import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import {
+  createGitTestDirectory,
+  createGitTestRepository,
+} from "../../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
@@ -11498,6 +11502,44 @@ async function seedGitHubPluginScope(
   return { cwd, project };
 }
 
+/**
+ * D-SG-22: serves the GitHub repository `repo` from a local bare repository
+ * for one test. A plugin clone of `https://github.com/<repo>.git` reads it
+ * through the user git configuration Pi keeps (`url.<base>.insteadOf`), so the
+ * clone succeeds with no request leaving the machine.
+ */
+async function routeGitHubToLocalHost(t: TestContext, repo: string): Promise<void> {
+  const source = await createGitTestRepository(t, { boundary: "local" });
+  await source.commit(
+    [
+      {
+        filepath: ".claude-plugin/plugin.json",
+        contents: JSON.stringify({ name: path.basename(repo), version: "1.0.0" }),
+      },
+      { filepath: "skills/tool/SKILL.md", contents: "---\nname: tool\n---\n\nbody\n" },
+    ],
+    "plugin",
+  );
+  const host = await createGitTestDirectory(t, { boundary: "local" });
+  await source.cloneBare(path.join(host, `${repo}.git`));
+  const variables = {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: `url.file://${host}/.insteadOf`,
+    GIT_CONFIG_VALUE_0: "https://github.com/",
+  };
+  for (const [name, value] of Object.entries(variables)) {
+    const previous = process.env[name];
+    t.after(() => {
+      if (previous === undefined) {
+        Reflect.deleteProperty(process.env, name);
+      } else {
+        process.env[name] = previous;
+      }
+    });
+    process.env[name] = value;
+  }
+}
+
 describe("D-SG-18 / D-SG-22: apply's plugin transport context", () => {
   test("D-SG-18: an apply run gives every install one transport context, so it probes once", async (t) => {
     // arrange
@@ -11576,6 +11618,53 @@ describe("D-SG-18 / D-SG-22: apply's plugin transport context", () => {
       "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghq.git",
     ]);
     assert.equal(probes.count, 1);
+    verifyBoundary();
+  });
+
+  test("D-SG-22: an install whose entry installs it disabled names its clone on the disabled row", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, undefined);
+    const { cwd, project } = await seedGitHubPluginScope(t, "transport-disabled");
+    const manifestPath = path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json");
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          {
+            name: "ghp",
+            version: "1.0.0",
+            source: { source: "github", repo: "acme/ghp" },
+            defaultEnabled: false,
+          },
+        ],
+      }),
+    );
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+        plugins: { "ghp@mp": {} },
+      }),
+    );
+    await routeGitHubToLocalHost(t, "acme/ghp");
+    const probes = { count: 0 };
+    const apply = applyWithTransport(() =>
+      countingTransportContext(probes, () => Promise.resolve("not-configured")),
+    );
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await apply({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    const lines = (notifications[0]?.message ?? "").split("\n");
+    const at = lines.findIndex((line) => line.startsWith("  ◍ ghp v1.0.0 (disabled)"));
+    assert.deepStrictEqual(lines.slice(at, at + 2), [
+      "  ◍ ghp v1.0.0 (disabled) {installs disabled}",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+    ]);
+    assert.equal((await recordFor(project, "mp", "ghp"))?.enabled, false);
     verifyBoundary();
   });
 

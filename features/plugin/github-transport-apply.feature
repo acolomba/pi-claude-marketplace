@@ -115,6 +115,37 @@ Feature: Plugin github transport apply
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
       | -G git@github.com                                                                   |
 
+  Scenario: Applying a config that declares a github plugin whose entry installs it disabled names the clone on the disabled row
+    Given the marketplace "gits" publishes this manifest:
+      """
+      {"name":"gits","owner":{"name":"features"},"plugins":[{"name":"ghp","source":{"source":"github","repo":"acme/ghp"},"defaultEnabled":false}]}
+      """
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | gits        | ghp    |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status   | reasons           | hint   | scope   | version | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | disabled | installs disabled | enable | project | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version | enabled |
+      | ghp@gits | 1.0.0   | false   |
+    Then the user's ssh receives these launches:
+      | argv                                                                                |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
+      | -G git@github.com                                                                   |
+
   Scenario: Importing a Claude Code config with two github plugins probes once
     Given the user's ssh is denied for "github.com"
     Given pi runs with github's requests routed to the git host

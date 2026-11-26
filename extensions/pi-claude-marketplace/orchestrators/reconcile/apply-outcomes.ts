@@ -340,9 +340,10 @@ export interface PluginEnableFailedOutcome extends PluginOutcomeBase, CloneNoted
  * install-disabled cascade (DFEN-04 -- the install ran whole and then unstaged
  * because the plugin's own `defaultEnabled` said so). The three optional fields
  * below are what tell the two apart on the rendered row; the toggle path omits
- * all three.
+ * all three. D-SG-22: the install-disabled cascade also carries the note of
+ * the GitHub clone its install ran; a toggle disable clones nothing.
  */
-export interface PluginDisabledOutcome extends PluginOutcomeBase {
+export interface PluginDisabledOutcome extends PluginOutcomeBase, CloneNoted {
   readonly kind: "plugin-disabled";
   readonly version?: string;
   /**
