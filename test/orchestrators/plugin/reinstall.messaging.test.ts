@@ -1460,7 +1460,7 @@ test("REINSTALL_CONTEXT declares complete row policies", () => {
   assert.deepStrictEqual(policies, expectedPolicies);
 });
 
-test("D-SG-22: each reinstall row names its own subject's clone, and a skipped or manual-recovery row names none", () => {
+test("D-SG-22: each reinstall row names its own subject's clone, a skipped and a manual-recovery row too", () => {
   // arrange
   const harness = createNotifyHarness({
     message: [
@@ -1473,7 +1473,9 @@ test("D-SG-22: each reinstall row names its own subject's clone, and a skipped o
       "    SSH not configured, cloning via HTTPS: https://github.com/acme/beta.git",
       "    HTTPS clone failed, retrying with SSH: git@github.com:acme/beta.git",
       "  ⊘ gamma (skipped) {up-to-date}",
+      "    Cloning via HTTPS: https://github.com/acme/gamma.git",
       "  ⊘ delta (manual recovery) {rollback partial}",
+      "    Cloning via HTTPS: https://github.com/acme/delta.git",
       "",
       "Plugin reinstall: 1 failure, 1 warning, 2 successes",
       "",
@@ -1518,6 +1520,88 @@ test("D-SG-22: each reinstall row names its own subject's clone, and a skipped o
       notes: [],
       reasons: ["network error"],
     },
+    {
+      partition: "skipped",
+      name: "gamma",
+      marketplace: "official",
+      scope: "project",
+      notes: ["up-to-date"],
+    },
+    {
+      partition: "failed",
+      name: "delta",
+      marketplace: "official",
+      scope: "project",
+      notes: [],
+      failureClass: "manual-recovery",
+      reasons: [],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "plural", () => notes);
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
+test("D-SG-22: a held skipped row names its clone above the holders' cause line", () => {
+  // arrange
+  const holders =
+    'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@official"';
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● official [project]",
+      "  ⊘ alpha (skipped) {dependents constrain}",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/alpha.git",
+      `    cause: ${holders}`,
+    ].join("\n"),
+    severity: "warning",
+  });
+  const notes = createGitHubCloneNotes();
+  notes.record("alpha@official", {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/alpha.git",
+  });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "skipped",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      notes: [holders],
+      reasons: ["dependents constrain"],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single", () => notes);
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
+test("D-SG-22: a skipped or manual-recovery row whose subject cloned nothing names no clone", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● official [project]",
+      "  ⊘ gamma (skipped) {up-to-date}",
+      "  ⊘ delta (manual recovery) {rollback partial}",
+      "",
+      "Plugin reinstall: 1 warning, 1 success",
+    ].join("\n"),
+    severity: "warning",
+  });
+  const notes = createGitHubCloneNotes();
+  notes.record("alpha@official", { note: "via-ssh", url: "git@github.com:acme/alpha.git" });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
     {
       partition: "skipped",
       name: "gamma",
