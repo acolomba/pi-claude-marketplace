@@ -419,22 +419,16 @@ function makeDeviceFlowHttp(): ReturnType<typeof createDeviceFlowFake>["http"] {
 function capturingUpdateSeam(gitOps: GitOps): {
   readonly seam: UpdateCloneCacheSeam;
   readonly captured: {
-    pinAuth: GitAuthBundle | undefined;
     cloneAuth: GitAuthBundle | undefined;
   };
 } {
   const captured: {
-    pinAuth: GitAuthBundle | undefined;
     cloneAuth: GitAuthBundle | undefined;
   } = {
-    pinAuth: undefined,
     cloneAuth: undefined,
   };
   const seam: UpdateCloneCacheSeam = {
-    resolvePluginPin: (args) => {
-      captured.pinAuth = args.auth;
-      return resolvePluginPin({ ...args, gitOps });
-    },
+    resolvePluginPin,
     materializePluginClone: (args) => {
       captured.cloneAuth = args.resolveAuth();
       return materializePluginClone({ ...args, gitOps });
@@ -9403,7 +9397,7 @@ const SHA_NEW = "2222222222222222222222222222222222222222";
  */
 function seamWith(gitOps: GitOps): UpdateCloneCacheSeam {
   return {
-    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    resolvePluginPin,
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
@@ -11154,7 +11148,6 @@ test("plugin update authentication: an unpinned provider update threads auth to 
       assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
       assert.equal(captured.cloneAuth?.host, "github.com");
       assert.equal(captured.cloneAuth?.kind, "device-flow");
-      assert.equal(captured.pinAuth, undefined);
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -11235,7 +11228,7 @@ test("GHB-03: a GitHub-source plugin update on an invalid base fails the update 
           return true;
         },
       );
-      assert.deepStrictEqual(captured, { pinAuth: undefined, cloneAuth: undefined });
+      assert.deepStrictEqual(captured, { cloneAuth: undefined });
       verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });

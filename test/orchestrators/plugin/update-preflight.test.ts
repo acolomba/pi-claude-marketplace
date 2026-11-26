@@ -2691,10 +2691,8 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   };
   const authMemo = new Map<string, AuthAttemptResult>();
   const pinnedSeam: UpdateCloneCacheSeam = {
-    resolvePluginPin: (options) => {
-      assert.strictEqual(options.auth?.host, "github.com");
-      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
-    },
+    resolvePluginPin: () =>
+      Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
     materializePluginClone: (options) => {
       assert.strictEqual(options.resolveAuth().host, "github.com");
       assert.strictEqual(options.ref, "stable");
@@ -2757,14 +2755,8 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
     reject: () => Promise.resolve(),
   };
   const pinnedSeam: UpdateCloneCacheSeam = {
-    resolvePluginPin: (options) => {
-      assert.deepStrictEqual(options.auth, {
-        kind: "stored-credential",
-        credentialOps,
-        host: "github.com",
-      });
-      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
-    },
+    resolvePluginPin: () =>
+      Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
     materializePluginClone: (options) => {
       assert.deepStrictEqual(options.resolveAuth(), {
         kind: "stored-credential",
@@ -3195,7 +3187,7 @@ test("D-SG-19, OQ-4: an unpinned github update source refreshes its mirror and c
   });
 });
 
-test("D-SG-19, OQ-4: a pinned github update source resolves its pin and clones over one transport of the command's context", async (t) => {
+test("D-SG-19: a pinned github update source clones over one transport of the command's context", async (t) => {
   // arrange
   setGitHubBaseUrl(t, undefined);
   const sha = "6666666666666666666666666666666666666666";
@@ -3207,10 +3199,7 @@ test("D-SG-19, OQ-4: a pinned github update source resolves its pin and clones o
   const transportContext = transportContextFor("configured");
   const transports: Array<CloneTransport | undefined> = [];
   const cloneCacheSeam: UpdateCloneCacheSeam = {
-    resolvePluginPin: (options) => {
-      transports.push(options.transport);
-      return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha });
-    },
+    resolvePluginPin: () => Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha }),
     materializePluginClone: (options) => {
       transports.push(options.transport);
       return Promise.resolve(seed.pluginRoot);
@@ -3228,8 +3217,7 @@ test("D-SG-19, OQ-4: a pinned github update source resolves its pin and clones o
 
   // assert
   assert.ok(!("partition" in prepared));
-  assert.strictEqual(transports.length, 2);
-  assert.strictEqual(transports[0], transports[1], "the pin and the clone share one transport");
+  assert.strictEqual(transports.length, 1);
   assert.deepStrictEqual(await plannedTransport(transports[0]), {
     first: { transport: "ssh", url: "git@github.com:org/repo.git" },
     note: "via-ssh",
@@ -3263,10 +3251,7 @@ test("D-SG-19: an update source with no transport context plans every clone step
   };
 
   const cloneCacheSeam = (root: string): UpdateCloneCacheSeam => ({
-    resolvePluginPin: async (options) => {
-      await record("pin", options.transport);
-      return { cloneUrl: "https://github.com/org/repo", pin: sha };
-    },
+    resolvePluginPin: () => Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha }),
     materializePluginClone: async (options) => {
       await record("clone", options.transport);
       return root;
@@ -3295,7 +3280,7 @@ test("D-SG-19: an update source with no transport context plans every clone step
   const https = "https://github.com/org/repo.git";
   assert.deepStrictEqual(
     planned,
-    ["pin", "clone", "mirror", "copy"].map((step) => ({
+    ["clone", "mirror", "copy"].map((step) => ({
       step,
       first: https,
       note: "ssh-not-configured",

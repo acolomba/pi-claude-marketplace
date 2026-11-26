@@ -130,6 +130,7 @@ import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "
 
 import {
   canonicalCloneUrl,
+  isPinnedSource,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
   resolveGitPluginRootWithSubdir,
@@ -163,6 +164,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
+import type { PinnedGitSource } from "./clone-cache.ts";
 import type { WorkflowNoteScript } from "./discover-names.ts";
 import type { Dirent } from "node:fs";
 
@@ -2517,8 +2519,9 @@ type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
  * `install-clone-probe.ts::probeInstallClone`; the pinned/unpinned fork lives inside the
  * callback so info still names no git surface (it reaches the seam only by name).
  * The probe takes no lock itself: the row builders run it and the row read in
- * one locked body (`runFetchLocked`, GLK-05). OQ-7: every clone-cache call
- * gets a transport over the command's context, the pin's `ls-remote` included.
+ * one locked body (`runFetchLocked`, GLK-05). OQ-7: the clone and the mirror
+ * refresh get a transport over the command's context; a pinned source's pin is
+ * its sha and sends nothing.
  */
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
   const transportOf = (gitSource: GitBackedSource): CloneTransport =>
@@ -2538,12 +2541,9 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
     return resolveGitPluginRootWithSubdir(gitSource, mirrorRoot, resolvedSha);
   }
 
-  async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
+  async function probePinned(gitSource: PinnedGitSource): Promise<GitPluginRootResult> {
     const transport = transportOf(gitSource);
-    const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({
-      source: gitSource,
-      transport,
-    });
+    const { cloneUrl, pin, ref } = await fetchCtx.seam.resolvePluginPin({ source: gitSource });
     const cloneRoot = await fetchCtx.seam.materializePluginClone({
       locations,
       cloneUrl,
@@ -2556,7 +2556,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
   }
 
   return (gitSource) =>
-    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
+    isPinnedSource(gitSource) ? probePinned(gitSource) : probeUnpinned(gitSource);
 }
 
 /**

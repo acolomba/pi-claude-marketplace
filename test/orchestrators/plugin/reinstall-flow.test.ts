@@ -4703,7 +4703,7 @@ function createGitOps(
 /** Bind install's clone-cache seam to a mock gitOps (used to seed the install). */
 function installSeamWith(gitOps: GitOps): InstallCloneCacheSeam {
   return {
-    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    resolvePluginPin,
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),

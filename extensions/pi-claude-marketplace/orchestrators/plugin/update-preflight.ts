@@ -43,6 +43,7 @@ import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import {
   canonicalCloneUrl,
+  isPinnedSource,
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -90,6 +91,7 @@ import type {
   PluginUpdateUnchangedOutcome,
   UpdateConstraintDisclosure,
 } from "../types.ts";
+import type { PinnedGitSource } from "./clone-cache.ts";
 import type {
   ConstraintRequester,
   UpdateConstraintVerdict,
@@ -365,8 +367,8 @@ interface UpdateCloneProbe {
  * (D-18-04). The pinned arm never fetches a present clone, so it ignores it.
  *
  * D-SG-19, OQ-4: `transportFor` gives both arms the source's clone transport,
- * so a mirror's clone and freshness check, a copy's clone, and a pin's
- * `ls-remote` all walk one plan.
+ * so a mirror's clone and freshness check and a copy's clone all walk one
+ * plan. A pinned source's pin is its sha, so its pin sends nothing.
  */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
@@ -413,14 +415,10 @@ function makeUpdateCloneProbe(
     return result;
   }
 
-  async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
+  async function probePinned(gitSource: PinnedGitSource): Promise<GitPluginRootResult> {
     const authBundle = cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind);
     const transport = transportFor(gitSource);
-    const pin = await seam.resolvePluginPin({
-      source: gitSource,
-      auth: authBundle,
-      transport,
-    });
+    const pin = await seam.resolvePluginPin({ source: gitSource });
     const cloneRoot = await seam.materializePluginClone({
       locations,
       cloneUrl: pin.cloneUrl,
@@ -445,7 +443,7 @@ function makeUpdateCloneProbe(
   }
 
   return {
-    probe: (source) => (source.sha === undefined ? probeUnpinned(source) : probePinned(source)),
+    probe: (source) => (isPinnedSource(source) ? probePinned(source) : probeUnpinned(source)),
     resolvedSha: () => captured,
     cloneAuth,
   };
