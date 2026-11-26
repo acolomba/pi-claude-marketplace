@@ -137,6 +137,46 @@ test("keeps an unchanged targeted result exact without a tally or reload hint", 
   boundary.verifyBoundary();
 });
 
+test("D-SG-22: a targeted up-to-date row names the clone its update ran", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const plugins = createGitHubCloneNotes();
+  plugins.record("hello@mp", {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/hello.git",
+  });
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "unchanged",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      },
+    },
+  ];
+  const expectedMessage = [
+    "● mp [project]",
+    "  ⊘ hello (skipped) {up-to-date}",
+    "    SSH not configured, cloning via HTTPS: https://github.com/acme/hello.git",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single", false, {
+    plugins,
+    marketplace: () => undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
 test("D-10-13: the ceiling version discloses its range and holders", () => {
   // arrange
   const boundary = createNotificationBoundary(1);
@@ -864,6 +904,7 @@ test("D-SG-22: each row names its own subject's clone, a dependency row its key'
     "    SSH not configured, cloning via HTTPS: https://github.com/acme/dep.git",
     "    HTTPS clone failed, retrying with SSH: git@github.com:acme/dep.git",
     "  ⊘ quiet v1.0.0 (skipped) {dependents constrain}",
+    "    Cloning via HTTPS: https://github.com/acme/quiet.git",
     '    cause: the declared ranges admit no version in common -- required by "alpha@mp"',
     "",
     "● other [user]",

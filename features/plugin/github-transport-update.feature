@@ -41,6 +41,21 @@ Feature: Plugin github transport update
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
+  Scenario: Updating a github plugin whose clone is gone and whose repository has not moved names the clone on its up-to-date row
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    When the user runs "/claude:plugin update ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status  | reasons    | scope   | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | skipped | up-to-date | project | ssh-not-configured | https://github.com/acme/ghp.git |
+
   Scenario: Updating a github plugin when the user's ssh authenticates refreshes it over ssh
     Given the user's ssh authenticates to "github.com" as "acme"
     Given pi runs with github's requests routed to the git host
