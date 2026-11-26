@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   composeDisableRefusalCause,
   composeEnableCascadeRows,
@@ -628,6 +629,60 @@ describe("composeEnableCascadeRows", () => {
     assert.deepStrictEqual(rows, [memberRow, rootRow]);
   });
 
+  test("D-SG-22: gives the root row its subject's clone note and each re-enabled member row its key's", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    const rootClone = {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/helper.git",
+    } as const;
+    const memberClone = { note: "via-ssh", url: "git@github.com:acme/formatter.git" } as const;
+    notes.record("helper@official", rootClone);
+    notes.record("formatter@tools", memberClone);
+    const rootRow = {
+      status: "installed",
+      name: "helper",
+      dependencies: [],
+      version: "1.0.0",
+      severity: "info",
+      needsReload: true,
+    } satisfies EnableMsg;
+    const clonedMember = {
+      status: "installed",
+      name: "formatter@tools",
+      version: "2.1.0",
+      dependencies: [],
+      reasons: ["dependency enabled"],
+      severity: "info",
+      needsReload: true,
+    } satisfies EnableCascadeMemberRow;
+    const keptMember = { ...clonedMember, name: "linter@tools" } satisfies EnableCascadeMemberRow;
+    const skippedMember = {
+      status: "skipped",
+      name: "helper@official",
+      version: "1.0.0",
+      reasons: ["already enabled"],
+      severity: "info",
+      needsReload: false,
+    } satisfies EnableCascadeMemberRow;
+
+    // act
+    const rows = composeEnableCascadeRows({
+      scope: "user",
+      rootRow,
+      members: [keptMember, clonedMember, skippedMember],
+      clones: { notes, rootSubject: "helper@official" },
+    });
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      { ...clonedMember, clone: memberClone },
+      { ...rootRow, clone: rootClone },
+      skippedMember,
+      keptMember,
+    ]);
+  });
+
   test("carries a skipped already-enabled member row through unchanged", () => {
     // arrange
     const rootRow = {
@@ -731,5 +786,89 @@ describe("composeDisableRefusalCause", () => {
     // assert
     assert.equal(cause, "Disable 1 other plugin first, then shared-lib@official.");
     assert.ok(!cause.includes("alpha@official@extra"));
+  });
+});
+
+describe("composeEnableCascadeRows clone notes", () => {
+  test("D-SG-22: gives a partially installed or failed root row its subject's clone note", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    const clone = { note: "via-https", url: "https://github.com/acme/helper.git" } as const;
+    notes.record("helper@official", clone);
+    const rootRows: readonly EnableMsg[] = [
+      {
+        status: "partially-installed",
+        name: "helper",
+        dependencies: [],
+        reasons: ["lsp"],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "failed",
+        name: "helper",
+        reasons: [],
+        severity: "error",
+        needsReload: false,
+      },
+    ];
+
+    // act
+    const composed = rootRows.map((rootRow) =>
+      composeEnableCascadeRows({
+        scope: "user",
+        rootRow,
+        members: [],
+        clones: { notes, rootSubject: "helper@official" },
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      composed,
+      rootRows.map((rootRow) => [{ ...rootRow, clone }]),
+    );
+  });
+
+  test("D-SG-22: leaves a skipped root row, and a root whose subject cloned nothing, unchanged", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record("helper@official", { note: "via-ssh", url: "git@github.com:acme/helper.git" });
+    const skipped: EnableMsg = {
+      status: "skipped",
+      name: "helper",
+      reasons: ["already enabled"],
+      severity: "info",
+      needsReload: false,
+    };
+    const installed: EnableMsg = {
+      status: "installed",
+      name: "quiet",
+      dependencies: [],
+      severity: "info",
+      needsReload: true,
+    };
+
+    // act
+    const [skippedRows, quietRows] = [
+      composeEnableCascadeRows({
+        scope: "user",
+        rootRow: skipped,
+        members: [],
+        clones: { notes, rootSubject: "helper@official" },
+      }),
+      composeEnableCascadeRows({
+        scope: "user",
+        rootRow: installed,
+        members: [],
+        clones: { notes, rootSubject: "quiet@official" },
+      }),
+    ];
+
+    // assert
+    assert.deepStrictEqual(
+      [skippedRows?.[0] === skipped, quietRows?.[0] === installed],
+      [true, true],
+    );
   });
 });

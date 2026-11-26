@@ -66,6 +66,7 @@ import type {
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { CloneTransportNote } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 /**
  * The reconcile composition: the factory bound to the real selected-state
@@ -10009,6 +10010,218 @@ test("D-SG-19: two enable commands make two transport contexts", async () => {
         distinct: made[0] !== made[1],
       },
       { made: 2, plugins: ["a", "b"], firstOwn: true, secondOwn: true, distinct: true },
+    );
+  });
+});
+
+// ─── D-SG-22: each enable row names the transport of its own clone ──────────
+
+/**
+ * D-SG-22: a transaction whose install ledger, for each plugin `notes` names,
+ * records that note into its options' transport context under the plugin's
+ * `<plugin>@<marketplace>`, as a re-clone of its source does, then runs the
+ * real ledger, or throws `fail` when it is given.
+ */
+function cloningTransaction(
+  notes: Readonly<Record<string, CloneTransportNote>>,
+  fail?: Error,
+): EnableDisableTransaction {
+  return {
+    ...REAL_ENABLE_DISABLE_TRANSACTION,
+    runInstallLedger(state, locations, options, capture) {
+      const subject = `${options.plugin}@${options.marketplace}`;
+      const note = notes[subject];
+      if (note !== undefined) {
+        options.transportContext?.notes.record(subject, note);
+      }
+
+      return fail === undefined
+        ? REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(state, locations, options, capture)
+        : Promise.reject(fail);
+    },
+  };
+}
+
+/** D-SG-22: an enable command over `transaction`, with a context whose checks must not run. */
+function enableOver(
+  transaction: EnableDisableTransaction,
+): ReturnType<typeof createSetPluginEnabled> {
+  return createSetPluginEnabled(
+    transaction,
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    process.env,
+    unplannedTransportContext,
+  );
+}
+
+test("D-SG-22: an enable whose root and a re-enabled member re-clone names each clone under its own row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const enable = enableOver(
+      cloningTransaction({
+        "a@official": { note: "ssh-not-configured", url: "https://github.com/acme/a.git" },
+        "b@official": { note: "via-ssh", url: "git@github.com:acme/b.git" },
+      }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● official [user]",
+          "  ● a v1.0.0 (installed)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/a.git",
+          "  ● b@official v1.0.0 (installed) {dependency enabled}",
+          "    Cloning via SSH: git@github.com:acme/b.git",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-SG-22, OQ-3: an enable over kept clones names no clone", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const enable = enableOver(cloningTransaction({}));
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● official [user]",
+          "  ● a v1.0.0 (installed)",
+          "  ● b@official v1.0.0 (installed) {dependency enabled}",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: an enable whose re-clone fails names each attempt under its failed row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [{ name: "a", version: "1.0.0", enabled: false }]);
+    const enable = enableOver(
+      cloningTransaction(
+        {
+          "a@official": {
+            note: "ssh-not-configured",
+            url: "https://github.com/acme/a.git",
+            retries: ["git@github.com:acme/a.git"],
+          },
+        },
+        new Error("both clones failed"),
+      ),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a v1.0.0 (failed)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/a.git",
+          "    HTTPS clone failed, retrying with SSH: git@github.com:acme/a.git",
+          "    cause: both clones failed",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: an enable given a transport context names the clones its collector keeps for its rows", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [{ name: "a", version: "1.0.0", enabled: false }]);
+    const given = unplannedTransportContext();
+    const enable = enableOver(
+      cloningTransaction({
+        "a@official": { note: "via-https", url: "https://github.com/acme/a.git" },
+      }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+      transportContext: given,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        kept: given.notes.noteFor("a@official"),
+        message: notifications.map((notification) => notification.message),
+      },
+      {
+        kept: { note: "via-https", url: "https://github.com/acme/a.git" },
+        message: [
+          [
+            "● official [user]",
+            "  ● a v1.0.0 (installed)",
+            "    Cloning via HTTPS: https://github.com/acme/a.git",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        ],
+      },
     );
   });
 });

@@ -141,7 +141,7 @@ import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import type { PluginTransportContext } from "../github-transport.ts";
+import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
 import type { RecordDeclarations } from "./dependency-index.ts";
@@ -2705,6 +2705,7 @@ async function runSetEnabledOutcome(
       configBasename,
       outcome,
       cascadeRows: enableCascadeRows,
+      notes: opts.transportContext.notes,
     });
     surfaceEnableStagingWarnings({ ctx, run, plugin, scope, enable, outcome, sink });
     // AFILE-04: the notices follow the rows, on success and on failure.
@@ -3101,9 +3102,24 @@ function dispatchOutcome(args: {
   readonly outcome: SetEnabledOutcome;
   /** EDEP-01: the enable cascade's classified member rows; empty for `disable`. */
   readonly cascadeRows: readonly EnableCascadeMemberRow[];
+  /**
+   * D-SG-22: the command's clone notes, which the enable rows read by subject;
+   * absent where the command reached no plugin.
+   */
+  readonly notes?: GitHubCloneNotes;
 }): void {
-  const { ctx, run, marketplace, scope, plugin, enable, configBasename, outcome, cascadeRows } =
-    args;
+  const {
+    ctx,
+    run,
+    marketplace,
+    scope,
+    plugin,
+    enable,
+    configBasename,
+    outcome,
+    cascadeRows,
+    notes,
+  } = args;
   // SEV-01 / D-05: the row composer stamps severity from the run's snapshot,
   // the same one `notifyWithContext` composes the `{requires pi-...}` markers
   // from. The composer holds no Pi reference of its own.
@@ -3136,7 +3152,14 @@ function dispatchOutcome(args: {
     // notification -- root plus every classified member, sorted. A
     // one-element sort is a no-op, so a root with no members composes to
     // `[enableRow]` alone (pinned by the `enable-fresh` catalog state).
-    const rows = composeEnableCascadeRows({ scope, rootRow: enableRow, members: cascadeRows });
+    const rows = composeEnableCascadeRows({
+      scope,
+      rootRow: enableRow,
+      members: cascadeRows,
+      ...(notes !== undefined && {
+        clones: { notes, rootSubject: `${plugin}@${marketplace}` },
+      }),
+    });
     notifyWithContext(
       ctx,
       run,

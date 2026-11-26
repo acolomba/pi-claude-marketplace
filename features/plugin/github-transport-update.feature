@@ -2,7 +2,7 @@ Feature: Plugin github transport update
 
   Updating or reinstalling a plugin whose source is a github owner/repo picks ssh or https the way installing it does, with one probe for the whole command, and the dependency moves of an update follow the same choice (D-SG-19).
   An ssh stand-in first on Pi's path answers the probe and serves the git host's repositories over ssh, and a CONNECT proxy tunnels git's github.com connections to the git host.
-  Each row names the transport of the clone its plugin ran, and the marketplace's block names the re-clone of the marketplace refresh an update runs first (D-SG-22). A fetch and an info with --fetch name the clone they ran the same way.
+  Each row names the transport of the clone its plugin ran, and the marketplace's block names the re-clone of the marketplace refresh an update runs first (D-SG-22). A fetch, an info with --fetch, and an enable name the clone they ran the same way.
 
   Background:
     Given the git repository "ghp" holds these plugins:
@@ -216,8 +216,8 @@ Feature: Plugin github transport update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope | version |
-      | gits             | user              | ghp@gits | ghp  | installed |         | user  | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope | version | clone note         | clone url                       |
+      | gits             | user              | ghp@gits | ghp  | installed |         | user  | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the installation record of the user scope holds these plugins:
       | id       | version | enabled |
       | ghp@gits | 1.0.0   | true    |
