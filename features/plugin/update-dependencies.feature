@@ -587,8 +587,8 @@ Feature: Plugin update dependencies
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name           | marketplace scope | id                              | name | status  | reasons    | scope   |
-      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | skipped | up-to-date | project |
+      | marketplace name           | marketplace scope | id                              | name | status  | reasons    | scope   | marketplace clone note | marketplace clone url                                        |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | skipped | up-to-date | project | via-https              | https://github.com/anthropics/anthropic-plugin-directory.git |
     Then the installation record of the project scope holds these plugins:
       | id                              | version                 | enabled |
       | app@anthropic-plugin-directory  | 1.0.0                   | true    |
