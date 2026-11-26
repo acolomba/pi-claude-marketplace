@@ -108,6 +108,7 @@ import type {
   SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function createUpdateOperations() {
   return createPluginUpdateOperations(
@@ -9428,6 +9429,8 @@ async function seedGitPluginMarketplace(opts: {
   recordedSha?: string;
   /** Extra installed git plugins (name -> recordedSha + entrySource) sharing the mp. */
   extraPlugins?: Record<string, { entrySource: unknown; recordedSha: string }>;
+  /** The scope the marketplace and its records land in; project when absent. */
+  scope?: Scope;
 }): Promise<{ marketplaceRoot: string; manifestPath: string; oldCloneRoot?: string }> {
   const marketplaceRoot = path.join(opts.cwd, "mp-src");
   const pluginName = "gp";
@@ -9456,7 +9459,8 @@ async function seedGitPluginMarketplace(opts: {
 
   await writeFile(manifestPath, JSON.stringify({ name: "mp", plugins: entries }));
 
-  const locations = locationsFor("project", opts.cwd);
+  const scope = opts.scope ?? "project";
+  const locations = locationsFor(scope, opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const plugins: Record<string, PluginRecord> = {};
@@ -9495,7 +9499,7 @@ async function seedGitPluginMarketplace(opts: {
     marketplaces: {
       mp: {
         name: "mp",
-        scope: "project",
+        scope,
         source: pathSource("./mp-src"),
         addedFromCwd: opts.cwd,
         manifestPath,
@@ -16147,6 +16151,65 @@ test("D-SG-22: a PUP-2 sync that re-clones a github marketplace names the transp
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+test("D-SG-22: a bare update of a plugin in both scopes names each scope's clone under its own row only", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-clone-note-scopes-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const cloneUrl = "https://github.com/org/repo";
+    const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+    for (const scope of ["project", "user"] as const) {
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: `${cloneUrl}.git`, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+        scope,
+      });
+    }
+
+    // The user scope already holds the new commit's clone, so only the
+    // project scope clones.
+    const userClone = await locationsFor("user", cwd).pluginCloneDir(
+      pluginCloneKey(cloneUrl, SHA_NEW),
+    );
+    await cp(fixtureRepoDir, userClone, { recursive: true });
+    const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await updatePlugins({
+      ctx,
+      run,
+      cwd,
+      target: { kind: "all" },
+      cloneCacheSeam: seamWith(gitOps),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((n) => n.message),
+      [
+        [
+          "● mp [project]",
+          "  ● gp v9.9.9 (1111111) → v9.9.9 (2222222) (updated)",
+          "    Cloning via HTTPS: https://github.com/org/repo.git",
+          "",
+          "● mp [user]",
+          "  ● gp v9.9.9 (1111111) → v9.9.9 (2222222) (updated)",
+          "",
+          "Plugin update: 2 updated",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      ],
+    );
   });
 });
 

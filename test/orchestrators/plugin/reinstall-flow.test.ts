@@ -10647,7 +10647,7 @@ test("D-SG-19: a reinstall clones over the transport context the command gives i
   });
 });
 
-test("D-SG-19: a bulk reinstall makes one transport context and gives it to every plugin it reinstalls", async () => {
+test("D-SG-19: a bulk reinstall makes one transport context whose checks every plugin it reinstalls shares", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-transport-bulk-"));
     try {
@@ -10682,14 +10682,14 @@ test("D-SG-19: a bulk reinstall makes one transport context and gives it to ever
       );
       assert.strictEqual(contexts.length, 2);
       assert.ok(contexts[0] !== undefined, "the bulk reinstall made a context");
-      assert.strictEqual(contexts[0], contexts[1]);
+      assert.strictEqual(contexts[0].checks, contexts[1]?.checks);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("D-SG-19: a bulk reinstall gives every plugin the transport context its caller gives", async () => {
+test("D-SG-19: a bulk reinstall gives every plugin a view of the transport context its caller gives", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-transport-bulk-given-"));
     try {
@@ -10723,7 +10723,14 @@ test("D-SG-19: a bulk reinstall gives every plugin the transport context its cal
       });
 
       // assert
-      assert.deepStrictEqual(contexts, [transportContext]);
+      // The view shares the caller's checks and hands each note it keeps to
+      // the caller's notes.
+      const note = { note: "via-ssh", url: "git@github.com:org/hello.git" } as const;
+      contexts[0]?.notes.record("hello@mp", note);
+      assert.deepStrictEqual(
+        [contexts.length, contexts[0]?.checks, transportContext.notes.noteFor("hello@mp")],
+        [1, transportContext.checks, note],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -10900,6 +10907,67 @@ test("D-SG-22, OQ-3: a reinstall that reuses a warm clone names no clone", async
           ["● mp [project]", "  ● gp v9.9.9 (reinstalled)", "", "/reload to pick up changes"].join(
             "\n",
           ),
+        ],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-22: a bare reinstall of a plugin in both scopes names each scope's clone under its own row only", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-note-scopes-"));
+    try {
+      // arrange
+      for (const scope of ["user", "project"] as const) {
+        await seedMarketplace({
+          cwd,
+          scope,
+          marketplaceRoot: path.join(cwd, `mp-${scope}-src`),
+          marketplaceName: "mp",
+          pluginName: "p",
+          resources: { skill: `${scope}-scope skill` },
+          install: true,
+        });
+      }
+
+      const single = createReinstallPlugin(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      // Only the project scope's reinstall clones: it records the note its
+      // clone would, and the user scope's clone stays warm.
+      await createNodeReinstallPlugins((options) => {
+        if (options.scope === "project") {
+          options.transportContext?.notes.record("p@mp", {
+            note: "via-https",
+            url: "https://github.com/org/p.git",
+          });
+        }
+
+        return single(options);
+      })({ ctx, run, cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map((n) => n.message),
+        [
+          [
+            "● mp [project]",
+            "  ● p v1.0.0 (reinstalled)",
+            "    Cloning via HTTPS: https://github.com/org/p.git",
+            "",
+            "● mp [user]",
+            "  ● p v1.0.0 (reinstalled)",
+            "",
+            "Plugin reinstall: 2 successes",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
         ],
       );
     } finally {

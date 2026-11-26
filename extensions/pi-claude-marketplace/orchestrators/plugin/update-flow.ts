@@ -104,7 +104,7 @@ import {
   buildGitHubAuth,
   hostFromCloneUrl,
 } from "../auth-host.ts";
-import { createGitHubCloneNotes } from "../github-transport.ts";
+import { createGitHubCloneNotes, withOwnCloneNotes } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
@@ -626,12 +626,28 @@ async function updatePluginsWith(
       return;
     }
 
+    // D-SG-22: the target clones through a view of the run's context with
+    // notes of its own, so a plugin installed in both scopes shows each
+    // scope's clone on that scope's row only. The view shares the run's
+    // checks, so the run still probes once (D-SG-19).
+    const targetContext = withOwnCloneNotes(transportContext);
+    const targetScoped: DirectRunScoped = {
+      ...runScoped,
+      clones: { ...clones, plugins: targetContext.notes },
+    };
     let outcome: UpdateRunOutcome;
     const report: CandidateReport = {};
     try {
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
-        buildDirectThreePhaseArgs(runOpts, t, cardinality, bindings, runScoped, report),
+        buildDirectThreePhaseArgs(
+          { ...runOpts, transportContext: targetContext },
+          t,
+          cardinality,
+          bindings,
+          targetScoped,
+          report,
+        ),
       );
     } catch (err) {
       // GHB-03: an invalid GitHub base override fails the whole command.
@@ -652,7 +668,7 @@ async function updatePluginsWith(
         pluginName: t.plugin,
         err,
         report,
-        clones,
+        clones: targetScoped.clones,
       });
       abortUpdateBatch(ctx, run, outcomes, cardinality, { composeCascade, clones }, [
         updateFailedDiagnostic(t.plugin, t.scope, report),
@@ -692,7 +708,7 @@ async function updatePluginsWith(
       return;
     }
 
-    outcomes.push({ target: t, outcome });
+    outcomes.push({ target: t, outcome, notes: targetContext.notes });
   }
 
   composeCascade(ctx, run, outcomes, cardinality, false, clones);

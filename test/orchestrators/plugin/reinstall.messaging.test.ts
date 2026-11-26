@@ -1537,7 +1537,7 @@ test("D-SG-22: each reinstall row names its own subject's clone, and a skipped o
   ];
 
   // act
-  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "plural", notes);
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "plural", () => notes);
 
   // assert
   verify(harness.ctx);

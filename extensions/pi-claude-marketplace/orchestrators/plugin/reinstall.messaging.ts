@@ -58,6 +58,13 @@ export const REINSTALL_CONTEXT = {
   },
 } as const satisfies CommandContext<ReinstallStatus>;
 
+/**
+ * D-SG-22: the clone notes the row of `outcome` reads, or undefined when its
+ * reinstall kept none. A command that reinstalls one `<plugin>@<marketplace>`
+ * in both scopes gives each outcome the notes of its own reinstall.
+ */
+export type ReinstallCloneNotes = (outcome: ReinstallPluginOutcome) => GitHubCloneNotes | undefined;
+
 // Outcome -> row projection: reinstall's message vocabulary (FLOW-09).
 /**
  * Render the bulk-reinstall outcome cascade as a single
@@ -85,17 +92,17 @@ export const REINSTALL_CONTEXT = {
  *   marketplaces[] or plugins[].
  * - Callers MUST NOT compose the "/reload to pick up changes" trailer
  *   themselves; notify() aggregates it from the rows.
- * - D-SG-22: `notes` are the command's clone notes. A reinstalled or failed
- *   row names the transport of the GitHub clone its plugin ran, read by
- *   `<plugin>@<marketplace>`; a skipped or manual-recovery row has no clone
- *   field.
+ * - D-SG-22: `notesFor` gives the clone notes each outcome's row reads. A
+ *   reinstalled or failed row names the transport of the GitHub clone its
+ *   plugin ran, read by `<plugin>@<marketplace>`; a skipped or manual-recovery
+ *   row has no clone field.
  */
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
   run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
-  notes?: GitHubCloneNotes,
+  notesFor?: ReinstallCloneNotes,
 ): void {
   // Group rows by (scope, marketplace) in input order. Two different scopes
   // for the same marketplace name render as two separate marketplace
@@ -138,7 +145,7 @@ export function renderReinstallPartitionAndNotify(
     const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
       withReinstallCloneNote(
         outcomeToPluginMessage(o, run.softDeps),
-        notes,
+        notesFor?.(o),
         `${o.name}@${o.marketplace}`,
       ),
     );
