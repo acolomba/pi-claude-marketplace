@@ -675,36 +675,45 @@ const SSH_DENIED = new GitCommandError(
   { operation: "ls-remote", exitCode: 128 },
 );
 
-test("D-SG-20: retries a github dependency's failed ssh listing once over https and memoizes only the https listing", async (t) => {
+test("D-SG-20: retries a github dependency's failed ssh listing once over https, and a later probe of the repository reads that answer with no ssh attempt", async (t) => {
   // arrange
   unforced(t);
   const queried: string[] = [];
   const seam = answeringPerUrl(
     new Map<string, readonly RemoteTag[] | Error>([
       [GHD_SSH_URL, SSH_DENIED],
-      [GHD_HTTPS_URL, [{ name: "ghd--v1.0.0", oid: "aaa1" }]],
+      [
+        GHD_HTTPS_URL,
+        [
+          { name: "ghd--v1.0.0", oid: "aaa1" },
+          { name: "ghd--v2.0.0", oid: "bbb2" },
+        ],
+      ],
     ]),
     queried,
   );
   const tagMemo = new Map<string, readonly RemoteTag[]>();
+  const probe = (range: string) =>
+    probeDependencyTags({
+      pluginName: "ghd",
+      source: GITHUB_DEPENDENCY,
+      range,
+      seam,
+      tagMemo,
+      auth: auth(),
+    });
 
   // act
-  const outcome = await probeDependencyTags({
-    pluginName: "ghd",
-    source: GITHUB_DEPENDENCY,
-    range: "^1.0.0",
-    seam,
-    tagMemo,
-    auth: auth(),
-  });
+  const first = await probe("^1.0.0");
+  const second = await probe("^2.0.0");
 
   // assert
   assert.deepStrictEqual(
-    { outcome, queried, memo: [...tagMemo.keys()] },
+    { first, second, queried },
     {
-      outcome: { kind: "pinned", tag: "ghd--v1.0.0", oid: "aaa1", version: "1.0.0" },
+      first: { kind: "pinned", tag: "ghd--v1.0.0", oid: "aaa1", version: "1.0.0" },
+      second: { kind: "pinned", tag: "ghd--v2.0.0", oid: "bbb2", version: "2.0.0" },
       queried: [GHD_SSH_URL, GHD_HTTPS_URL],
-      memo: [GHD_HTTPS_URL],
     },
   );
 });
