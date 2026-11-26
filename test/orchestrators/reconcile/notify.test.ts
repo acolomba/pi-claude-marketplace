@@ -4060,3 +4060,207 @@ describe("dependencyInstallRows", () => {
     assert.deepStrictEqual(rows, []);
   });
 });
+
+describe("D-SG-22: apply's rows and blocks name the transport of each GitHub clone", () => {
+  const CLONE = {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/demo.git",
+    retries: ["git@github.com:acme/demo.git"],
+  } as const;
+  const where = { scope: "project", marketplace: "mp", plugin: "demo" } as const;
+
+  test("an added and a failed marketplace block name the clone of their add", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      { kind: "mp-added", scope: "project", marketplace: "mp", clone: CLONE },
+      {
+        kind: "mp-add-failed",
+        scope: "user",
+        marketplace: "mp",
+        reason: "network unreachable",
+        clone: CLONE,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        { name: "mp", scope: "project", status: "added", clone: CLONE, plugins: [] },
+        {
+          name: "mp",
+          scope: "user",
+          status: "failed",
+          severity: "error",
+          plugins: [],
+          reasons: ["network unreachable"],
+          clone: CLONE,
+        },
+      ],
+    });
+  });
+
+  test("an installed, an enabled, a failed install, and a failed enable row name their clones", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      { kind: "plugin-installed", ...where, version: "1.0.0", dependencies: [], clone: CLONE },
+      { kind: "plugin-enabled", ...where, plugin: "kit", version: "1.0.0", clone: CLONE },
+      {
+        kind: "plugin-enabled",
+        ...where,
+        plugin: "part",
+        unsupported: ["hooks"],
+        clone: CLONE,
+      },
+      {
+        kind: "plugin-install-failed",
+        ...where,
+        plugin: "gone",
+        reason: "network unreachable",
+        clone: CLONE,
+      },
+      {
+        kind: "plugin-enable-failed",
+        ...where,
+        plugin: "stuck",
+        reason: "network unreachable",
+        clone: CLONE,
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade.marketplaces[0]?.plugins, [
+      {
+        status: "installed",
+        name: "demo",
+        clone: CLONE,
+        version: "1.0.0",
+        dependencies: [],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "installed",
+        name: "kit",
+        clone: CLONE,
+        version: "1.0.0",
+        dependencies: [],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "partially-installed",
+        name: "part",
+        clone: CLONE,
+        dependencies: [],
+        reasons: ["unsupported hooks"],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "failed",
+        name: "gone",
+        clone: CLONE,
+        reasons: ["network unreachable"],
+        severity: "error",
+        needsReload: false,
+      },
+      {
+        status: "failed",
+        name: "stuck",
+        clone: CLONE,
+        reasons: ["network unreachable"],
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+  });
+
+  test("a backfill names the clone of its move on both arms", () => {
+    // arrange
+    const backfill = {
+      kind: "plugin-backfilled",
+      ...where,
+      version: "1.0.0",
+      dependencies: [],
+      clone: CLONE,
+    } as const;
+    const outcomes: readonly PerEntryOutcome[] = [
+      { ...backfill, installable: true, unsupported: [] },
+      { ...backfill, plugin: "part", installable: false, unsupported: ["hooks"] },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade.marketplaces[0]?.plugins, [
+      {
+        status: "installed",
+        name: "demo",
+        clone: CLONE,
+        version: "1.0.0",
+        dependencies: [],
+        reasons: ["components now supported"],
+        severity: "info",
+        needsReload: true,
+      },
+      {
+        status: "partially-installed",
+        name: "part",
+        clone: CLONE,
+        version: "1.0.0",
+        dependencies: [],
+        reasons: ["components now supported", "unsupported hooks"],
+        severity: "info",
+        needsReload: true,
+      },
+    ]);
+  });
+
+  test("a failed uninstall and a failed disable name no clone", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      { kind: "plugin-uninstall-failed", ...where, reason: "permission denied" },
+      { kind: "plugin-disable-failed", ...where, plugin: "kit", reason: "permission denied" },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(
+      cascade.marketplaces[0]?.plugins.map((row) => "clone" in row),
+      [false, false],
+    );
+  });
+
+  test("a held-down record moved and enabled names the clone its enable ran", () => {
+    // act
+    const outcome = enabledMoveOutcome(DEMO_MOVE, {
+      kind: "plugin-enabled",
+      ...where,
+      version: "1.1.0",
+      clone: CLONE,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome.row, {
+      status: "updated",
+      name: "demo",
+      clone: CLONE,
+      scope: "project",
+      from: DEMO_MOVE.fromVersion,
+      to: DEMO_MOVE.toVersion,
+      dependencies: [],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+});

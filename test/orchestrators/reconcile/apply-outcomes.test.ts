@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
+  carriedClone,
   carriedMcpConfigNotices,
   carriedStagingWarnings,
   classifyOrchestratorThrow,
+  cloneNoteOf,
   installFailureReasonFields,
   classifyReadPassThrow,
   cascadeDisabledOutcome,
@@ -14,6 +17,7 @@ import {
   sourceMismatchOutcomeSubject,
   sourceMismatchOutcomes,
   stagingDiagnosticsOf,
+  withMoveClone,
   type InvalidBlockOutcome,
   type LayerMarketplaceGapOutcome,
   type MpAddedOutcome,
@@ -1437,5 +1441,202 @@ describe("stagingDiagnosticsOf", () => {
       diagnostics.map(({ plugin }) => plugin),
       ["linter", "formatter"],
     );
+  });
+});
+
+describe("carriedClone", () => {
+  test("D-SG-22: carries the clone note of an outcome that has one", () => {
+    // arrange
+    const outcome = {
+      status: "added",
+      name: "official",
+      clone: { note: "via-ssh", url: "git@github.com:acme/official.git" },
+    } as const;
+
+    // act
+    const carried = carriedClone(outcome);
+
+    // assert
+    assert.deepStrictEqual(carried, {
+      clone: { note: "via-ssh", url: "git@github.com:acme/official.git" },
+    });
+  });
+
+  test("D-SG-22, NREG-01: carries nothing for an outcome that cloned nothing", () => {
+    // arrange
+    const outcome = {};
+
+    // act
+    const carried = carriedClone(outcome);
+
+    // assert
+    assert.deepStrictEqual(carried, {});
+  });
+});
+
+describe("cloneNoteOf", () => {
+  test("D-SG-22: gives the note the collector keeps for the subject", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record("formatter@official", {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/formatter.git",
+    });
+    notes.record("linter@official", { note: "via-ssh", url: "git@github.com:acme/linter.git" });
+
+    // act
+    const noted = cloneNoteOf(notes, "formatter@official");
+
+    // assert
+    assert.deepStrictEqual(noted, {
+      clone: { note: "ssh-not-configured", url: "https://github.com/acme/formatter.git" },
+    });
+  });
+
+  test("D-SG-22, NREG-01: gives nothing for a subject that cloned nothing", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record("linter@official", { note: "via-ssh", url: "git@github.com:acme/linter.git" });
+
+    // act
+    const noted = cloneNoteOf(notes, "formatter@official");
+
+    // assert
+    assert.deepStrictEqual(noted, {});
+  });
+});
+
+describe("withMoveClone", () => {
+  const CLONE = { note: "via-https", url: "https://github.com/acme/formatter.git" } as const;
+  const where = { scope: "project", marketplace: "official", plugin: "formatter" } as const;
+
+  /** A converged outcome whose row is `row`. */
+  function converged(row: PluginConvergedOutcome["row"]): PluginConvergedOutcome {
+    return { kind: "plugin-converged", ...where, row };
+  }
+
+  const base = { name: "formatter", severity: "info", needsReload: true } as const;
+
+  test("D-SG-22: puts the move's note on each row that can show a clone", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [
+      converged({ ...base, status: "installed", dependencies: [] }),
+      converged({ ...base, status: "updated", from: "1.0.0", to: "2.0.0", dependencies: [] }),
+      converged({ ...base, status: "partially-installed", dependencies: [], reasons: [] }),
+      converged({ ...base, status: "failed", reasons: [], severity: "error", needsReload: false }),
+    ];
+
+    // act
+    const moved = withMoveClone(outcomes, { clone: CLONE });
+
+    // assert
+    assert.deepStrictEqual(moved, [
+      converged({ ...base, status: "installed", dependencies: [], clone: CLONE }),
+      converged({
+        ...base,
+        status: "updated",
+        from: "1.0.0",
+        to: "2.0.0",
+        dependencies: [],
+        clone: CLONE,
+      }),
+      converged({
+        ...base,
+        status: "partially-installed",
+        dependencies: [],
+        reasons: [],
+        clone: CLONE,
+      }),
+      converged({
+        ...base,
+        status: "failed",
+        reasons: [],
+        severity: "error",
+        needsReload: false,
+        clone: CLONE,
+      }),
+    ]);
+  });
+
+  test("D-SG-22: leaves a row whose kind shows no clone as it is", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [
+      converged({ ...base, status: "uninstalled" }),
+      converged({ ...base, status: "disabled" }),
+      converged({
+        ...base,
+        status: "skipped",
+        reasons: ["dependents constrain"],
+        severity: "warning",
+        needsReload: false,
+      }),
+      converged({
+        ...base,
+        status: "partially-upgradable",
+        reasons: [],
+        severity: "warning",
+        needsReload: false,
+      }),
+      { kind: "plugin-uninstalled", ...where },
+    ];
+
+    // act
+    const moved = withMoveClone(outcomes, { clone: CLONE });
+
+    // assert
+    assert.deepStrictEqual(moved, outcomes);
+  });
+
+  test("D-SG-22: puts the move's note on a backfill", () => {
+    // arrange
+    const backfill: PluginBackfilledOutcome = {
+      kind: "plugin-backfilled",
+      ...where,
+      dependencies: [],
+      installable: true,
+      unsupported: [],
+    };
+
+    // act
+    const moved = withMoveClone([backfill], { clone: CLONE });
+
+    // assert
+    assert.deepStrictEqual(moved, [{ ...backfill, clone: CLONE }]);
+  });
+
+  test("D-SG-22: keeps the clone a row already names, such as its enable's", () => {
+    // arrange
+    const own = { note: "via-ssh", url: "git@github.com:acme/formatter.git" } as const;
+    const outcomes: PerEntryOutcome[] = [
+      converged({ ...base, status: "installed", dependencies: [], clone: own }),
+      {
+        kind: "plugin-backfilled",
+        ...where,
+        dependencies: [],
+        installable: true,
+        unsupported: [],
+        clone: own,
+      },
+    ];
+
+    // act
+    const moved = withMoveClone(outcomes, { clone: CLONE });
+
+    // assert
+    assert.deepStrictEqual(moved, outcomes);
+  });
+
+  test("D-SG-22, OQ-3: a move that cloned nothing leaves every row as it is", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [
+      converged({ ...base, status: "updated", from: "1.0.0", to: "2.0.0", dependencies: [] }),
+    ];
+
+    // act
+    const moved = withMoveClone(outcomes, {});
+
+    // assert
+    assert.deepStrictEqual(moved, outcomes);
+    assert.notStrictEqual(moved, outcomes);
   });
 });
