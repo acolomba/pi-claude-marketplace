@@ -2,7 +2,7 @@ Feature: Plugin github transport update
 
   Updating or reinstalling a plugin whose source is a github owner/repo picks ssh or https the way installing it does, with one probe for the whole command, and the dependency moves of an update follow the same choice (D-SG-19).
   An ssh stand-in first on Pi's path answers the probe and serves the git host's repositories over ssh, and a CONNECT proxy tunnels git's github.com connections to the git host.
-  Each row names the transport of the clone its plugin ran, and the marketplace's block names the re-clone of the marketplace refresh an update runs first (D-SG-22).
+  Each row names the transport of the clone its plugin ran, and the marketplace's block names the re-clone of the marketplace refresh an update runs first (D-SG-22). A fetch, an info with --fetch, and an enable name the clone they ran the same way.
 
   Background:
     Given the git repository "ghp" holds these plugins:
@@ -160,8 +160,8 @@ Feature: Plugin github transport update
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
-      | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
@@ -178,19 +178,21 @@ Feature: Plugin github transport update
     Given the marketplace "gits" is added to the project scope
     When the user runs "/claude:plugin info ghp@gits --fetch"
     Then the result has these fields:
-      | kind                           | plugin-info |
-      | marketplace details autoupdate | false       |
-      | marketplace name               | gits        |
-      | marketplace scope              | project     |
-      | needs reload                   | false       |
-      | plugin components resolved     | true        |
-      | plugin components skills       | ghp-skill   |
-      | plugin id                      | ghp@gits    |
-      | plugin name                    | ghp         |
-      | plugin reasons                 |             |
-      | plugin status                  | available   |
-      | plugin version                 | 1.0.0       |
-      | severity                       | info        |
+      | kind                           | plugin-info                     |
+      | marketplace details autoupdate | false                           |
+      | marketplace name               | gits                            |
+      | marketplace scope              | project                         |
+      | needs reload                   | false                           |
+      | plugin clone note              | ssh-not-configured              |
+      | plugin clone url               | https://github.com/acme/ghp.git |
+      | plugin components resolved     | true                            |
+      | plugin components skills       | ghp-skill                       |
+      | plugin id                      | ghp@gits                        |
+      | plugin name                    | ghp                             |
+      | plugin reasons                 |                                 |
+      | plugin status                  | available                       |
+      | plugin version                 | 1.0.0                           |
+      | severity                       | info                            |
     Then the user's ssh receives these launches:
       | argv                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
@@ -214,8 +216,8 @@ Feature: Plugin github transport update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope | version |
-      | gits             | user              | ghp@gits | ghp  | installed |         | user  | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope | version | clone note         | clone url                       |
+      | gits             | user              | ghp@gits | ghp  | installed |         | user  | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the installation record of the user scope holds these plugins:
       | id       | version | enabled |
       | ghp@gits | 1.0.0   | true    |

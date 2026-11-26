@@ -256,6 +256,31 @@ export interface PluginTransportContext {
 }
 
 /**
+ * D-SG-22: `context` with a collector of its own, which also hands each note
+ * to `context`'s collector. A command that clones one `<plugin>@<marketplace>`
+ * in both scopes gives each scope its own view, so each scope's row reads the
+ * note of its own clone only. The view shares the context's checks and reads
+ * its force only when a clone asks for it, as the context does (NFR-5).
+ */
+export function withOwnCloneNotes(context: PluginTransportContext): PluginTransportContext {
+  const own = createGitHubCloneNotes();
+  return {
+    get force() {
+      return context.force;
+    },
+    platform: context.platform,
+    checks: context.checks,
+    notes: {
+      record: (subject, note) => {
+        own.record(subject, note);
+        context.notes.record(subject, note);
+      },
+      noteFor: own.noteFor,
+    },
+  };
+}
+
+/**
  * D-SG-18: one plugin clone's plan, with the notes and the subject it reports
  * under. The plan is made only when a clone step runs, so a warm cache asks
  * no check and runs no probe (NFR-5).

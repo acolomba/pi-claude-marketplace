@@ -63,6 +63,7 @@ import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/p
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { CloneTransportNote } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type ManifestEntry = MarketplaceManifest["plugins"][number];
@@ -798,7 +799,13 @@ test("materializes a cold unpinned GitHub mirror through Device Flow once per ho
         message: "Open https://github.com/login/device and enter: ABCD-1234",
         severity: "info",
       },
-      { message: "● marketplace [project]\n  ○ private v4.0.0 (available)" },
+      {
+        message: [
+          "● marketplace [project]",
+          "  ○ private v4.0.0 (available)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/plugin.git",
+        ].join("\n"),
+      },
     ]);
     assert.deepStrictEqual(credentials.calls, {
       approve: [
@@ -2924,6 +2931,20 @@ interface SeenTransport {
 }
 
 /**
+ * D-SG-22: whether a note `transport` records reaches the command's own
+ * collector in `context`. The note goes under a subject no row reads, so it
+ * changes no row.
+ */
+function reachesCommandNotes(
+  transport: CloneTransport,
+  context: PluginTransportContext | undefined,
+): boolean {
+  const note: CloneTransportNote = { note: "via-https", url: "https://github.com/probe.git" };
+  transport.notes.record("seam-probe", note);
+  return context?.notes.noteFor("seam-probe") === note;
+}
+
+/**
  * OQ-7: a seam that clones nothing. Each call records the transport it got
  * and makes its plan, as a clone step would, so the context's checks run.
  */
@@ -2936,7 +2957,7 @@ function transportRecordingSeam(
     seen.push({
       call,
       subject: transport?.subject,
-      sharesNotes: transport !== undefined && transport.notes === contexts[0]?.notes,
+      sharesNotes: transport !== undefined && reachesCommandNotes(transport, contexts[0]),
       first: transport === undefined ? undefined : (await transport.plan()).first.url,
     });
   };
@@ -3185,6 +3206,224 @@ test("NFR-5: a fetch of a pinned github plugin whose clone is warm asks no trans
     assert.deepStrictEqual(seen, []);
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ⊘ warm v1.0.0 (skipped) {up-to-date}" },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
+// ─── D-SG-22: each fetched row names the transport of its own clone ─────────
+
+/** D-SG-22: `ghp@marketplace` from github `acme/ghp`, pinned at `pin`, in `scope`. */
+async function seedPinnedGitHubPlugin(
+  cwd: string,
+  scope: Scope,
+  pin: string,
+  version?: string,
+): Promise<ScopedLocations> {
+  const marketplace = await marketplaceRecord({
+    cwd,
+    entries: [
+      {
+        name: "ghp",
+        source: { source: "github", repo: "acme/ghp", sha: pin },
+        ...(version === undefined ? {} : { version }),
+      },
+    ],
+    name: "marketplace",
+    scope,
+  });
+  return saveMarketplaces(cwd, scope, [marketplace]);
+}
+
+test("D-SG-22: a fetch that clones a github plugin names the transport under its row", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const pin = "1".repeat(40);
+    await seedPinnedGitHubPlugin(cwd, "project", pin, "1.0.0");
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "ghp", "1.0.0");
+    const git = gitBoundary({
+      allowedRemoteUrls: ["https://github.com/acme/ghp.git"],
+      fixtureSourceDir: fixture,
+    });
+    const cache = cacheBoundary(git.gitOps);
+    const boundary = notificationBoundary("github clone note");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: cache.seam,
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "ghp" },
+      transportContext: httpsFirstContext({ count: 0 }),
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message: [
+          "● marketplace [project]",
+          "  ○ ghp v1.0.0 (available)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+        ].join("\n"),
+      },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
+test("D-SG-22: a fetch whose github clone fails names each attempt under its failed row", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    await seedPinnedGitHubPlugin(cwd, "project", "2".repeat(40));
+    const git = gitBoundary({
+      allowedRemoteUrls: ["https://github.com/acme/ghp.git", "git@github.com:acme/ghp.git"],
+      cloneError: cloneFailure({ kind: "network", curlCode: 7 }),
+    });
+    const cache = cacheBoundary(git.gitOps);
+    const boundary = notificationBoundary("failed github clone note");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: cache.seam,
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "ghp" },
+      transportContext: httpsFirstContext({ count: 0 }),
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● marketplace [project]",
+          "  ⊘ ghp (failed) {network unreachable}",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+          "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghp.git",
+          "    cause: git clone failed: network, exit code 128",
+          "The retry over SSH failed too: git clone failed: network, exit code 128",
+          "Check the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again. -> git clone failed: network, exit code 128",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
+test("D-SG-22: a sweep of one plugin in two scopes names each clone under its own scope's row only", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const projectPin = "3".repeat(40);
+    const userPin = "4".repeat(40);
+    await seedPinnedGitHubPlugin(cwd, "project", projectPin, "1.0.0");
+    await seedPinnedGitHubPlugin(cwd, "user", userPin);
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "ghp", "1.0.0");
+    const git = gitBoundary({
+      allowedRemoteUrls: ["https://github.com/acme/ghp.git"],
+      fixtureSourceDir: fixture,
+    });
+    const cache = cacheBoundary(git.gitOps);
+    const seam: FetchCloneCacheSeam = {
+      ...cache.seam,
+      resolvePluginPin(args) {
+        return args.source.sha === userPin
+          ? Promise.reject(cloneFailure({ kind: "network", curlCode: 7 }))
+          : cache.seam.resolvePluginPin(args);
+      },
+    };
+    const boundary = notificationBoundary("two scopes, one clone");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: seam,
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      target: { kind: "marketplace", marketplace: "marketplace" },
+      transportContext: httpsFirstContext({ count: 0 }),
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● marketplace [project]",
+          "  ○ ghp v1.0.0 (available)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+          "",
+          "● marketplace [user]",
+          "  ⊘ ghp (failed) {network unreachable}",
+          "    cause: git clone failed: network, exit code 128",
+          "",
+          "Plugin fetch: 1 failure, 1 success",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    verifyNotifications(boundary);
+  });
+});
+
+test("D-SG-22, OQ-3: a fetch that finds its github mirror current names no clone", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const head = "5".repeat(40);
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "moving", source: { source: "github", repo: "acme/moving", ref: "main" } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const mirrorRoot = await locations.pluginCloneDir(
+      pluginMirrorKey("https://github.com/acme/moving"),
+    );
+    await writePluginTree(mirrorRoot, "moving", "3.0.0");
+    await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
+    await writeFile(path.join(mirrorRoot, ".git", "HEAD"), `${head}\n`);
+    const git = gitBoundary({
+      allowedRemoteUrls: ["https://github.com/acme/moving", "https://github.com/acme/moving.git"],
+      head,
+      localRefs: { "refs/heads/main": head },
+      remoteHead: head,
+      remoteRefs: { "refs/remotes/origin/main": head },
+    });
+    const cache = cacheBoundary(git.gitOps);
+    const boundary = notificationBoundary("current github mirror");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: cache.seam,
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "moving" },
+      transportContext: httpsFirstContext({ count: 0 }),
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      { message: "● marketplace [project]\n  ○ moving v3.0.0 (available)" },
+    ]);
+    assert.deepStrictEqual(git.schedule, [
+      "resolve-local HEAD",
+      "resolve-remote https://github.com/acme/moving.git ref=main auth=github.com",
+      "resolve-local HEAD",
     ]);
     verifyNotifications(boundary);
   });

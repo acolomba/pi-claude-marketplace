@@ -486,7 +486,8 @@ const HOOK_ENTRY = Type.Union([
 /**
  * WIRE-04 / WIRE-06: the fields both plugin-info row arms carry. `id` is
  * `<name>@<marketplaceName>`, `reasons` is always present, and `dependencies`
- * holds the pre-rendered plugin addresses the info text prints.
+ * holds the pre-rendered plugin addresses the info text prints. D-SG-22:
+ * `clone` is the note of the GitHub clone an `info --fetch` ran.
  */
 const PLUGIN_INFO_ROW_FIELDS = {
   status: PLUGIN_INFO_STATUS,
@@ -498,6 +499,7 @@ const PLUGIN_INFO_ROW_FIELDS = {
   description: Type.Optional(Type.String()),
   notes: Type.Optional(STRINGS),
   dependencies: Type.Optional(STRINGS),
+  clone: Type.Optional(CLONE),
 };
 
 /**

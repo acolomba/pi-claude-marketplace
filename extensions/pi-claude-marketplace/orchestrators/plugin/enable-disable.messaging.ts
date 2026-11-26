@@ -11,8 +11,11 @@ import {
 } from "../../shared/notification-types.ts";
 import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
 
+import { withCloneNote } from "./install.messaging.ts";
+
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 
 /**
  * enable's private status set: a fresh `installed` row, a fresh
@@ -72,19 +75,41 @@ export type EnableCascadeMemberRow = PluginInstalledMessage | PluginSkippedMessa
  *
  * A one-element sort is a no-op, so a root that declares no dependencies
  * (`members: []`) composes to exactly `[rootRow]`.
+ *
+ * D-SG-22: with `clones`, the command's notes, the root row names the clone
+ * kept under `rootSubject`, its `<plugin>@<marketplace>`, and each member row
+ * the clone kept under its own key, which is its name.
  */
 export function composeEnableCascadeRows(args: {
   readonly scope: Scope;
   readonly rootRow: EnableMsg;
   readonly members: readonly EnableCascadeMemberRow[];
+  readonly clones?: { readonly notes: GitHubCloneNotes; readonly rootSubject: string };
 }): readonly EnableMsg[] {
-  const rows: EnableMsg[] = [args.rootRow, ...args.members];
+  const { clones } = args;
+  const rows: EnableMsg[] =
+    clones === undefined
+      ? [args.rootRow, ...args.members]
+      : [
+          withEnableCloneNote(args.rootRow, clones.notes, clones.rootSubject),
+          ...args.members.map((member) => withEnableCloneNote(member, clones.notes, member.name)),
+        ];
   return [...rows].sort((a, b) =>
     compareByNameThenScope(
       { name: a.name, scope: args.scope },
       { name: b.name, scope: args.scope },
     ),
   );
+}
+
+/**
+ * D-SG-22: `row` with the note `notes` keep for `subject`, the
+ * `<plugin>@<marketplace>` whose re-clone the row reports. A skipped row ran
+ * no clone, so it is returned unchanged, as is a row whose subject cloned
+ * nothing over GitHub.
+ */
+function withEnableCloneNote(row: EnableMsg, notes: GitHubCloneNotes, subject: string): EnableMsg {
+  return row.status === "skipped" ? row : withCloneNote(row, notes, subject);
 }
 
 /** The command label and complete per-status reason policy. */

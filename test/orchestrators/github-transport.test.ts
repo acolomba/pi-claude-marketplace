@@ -7,6 +7,7 @@ import {
   createPluginTransportContext,
   pluginCloneTransport,
   transportForce,
+  withOwnCloneNotes,
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { GitHubTransportsFailedError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
@@ -16,7 +17,10 @@ import type {
   TransportAttempt,
   TransportPlan,
 } from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
-import type { PluginSshOps } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
+import type {
+  PluginSshOps,
+  PluginTransportContext,
+} from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 
 const SSH_ATTEMPT = {
   transport: "ssh",
@@ -877,6 +881,74 @@ describe("pluginCloneTransport", () => {
     assert.deepStrictEqual(
       { first: plan.first, calls: port.calls },
       { first: { transport: "ssh", url: "git@github.com:acme/ghp.git" }, calls: [] },
+    );
+  });
+});
+
+describe("withOwnCloneNotes", () => {
+  test("D-SG-22: keeps the notes recorded through the view apart and hands each to the context", () => {
+    // arrange
+    const context = createPluginTransportContext({ env: {}, ssh: countingPort({}).ssh });
+    const own = { note: "via-https", url: "https://github.com/acme/ghp.git" } as const;
+    const other = { note: "via-ssh", url: "git@github.com:acme/ghp.git" } as const;
+    const view = withOwnCloneNotes(context);
+    const otherView = withOwnCloneNotes(context);
+
+    // act
+    view.notes.record("ghp@gits", own);
+    otherView.notes.record("tools@gits", other);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        viewGhp: view.notes.noteFor("ghp@gits"),
+        viewTools: view.notes.noteFor("tools@gits"),
+        contextGhp: context.notes.noteFor("ghp@gits"),
+        contextTools: context.notes.noteFor("tools@gits"),
+      },
+      { viewGhp: own, viewTools: undefined, contextGhp: own, contextTools: other },
+    );
+  });
+
+  test("D-SG-22, NFR-5: shares the context's checks and platform and reads its force only when asked", () => {
+    // arrange
+    const reads: string[] = [];
+    const context = createPluginTransportContext({
+      env: { CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "true" },
+      ssh: countingPort({}).ssh,
+      platform: "win32",
+    });
+    const counted: PluginTransportContext = {
+      get force() {
+        reads.push("force");
+        return context.force;
+      },
+      platform: context.platform,
+      checks: context.checks,
+      notes: context.notes,
+    };
+
+    // act
+    const view = withOwnCloneNotes(counted);
+    const before = [...reads];
+    const force = view.force;
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        before,
+        force,
+        after: reads,
+        platform: view.platform,
+        sharesChecks: view.checks === context.checks,
+      },
+      {
+        before: [],
+        force: "prefer-https",
+        after: ["force"],
+        platform: "win32",
+        sharesChecks: true,
+      },
     );
   });
 });

@@ -1027,6 +1027,16 @@
                 "description": { "type": "string" },
                 "notes": { "type": "array", "items": { "type": "string" } },
                 "dependencies": { "type": "array", "items": { "type": "string" } },
+                "clone": {
+                  "type": "object",
+                  "required": ["note", "url"],
+                  "properties": {
+                    "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                    "url": { "type": "string" },
+                    "retries": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "additionalProperties": false
+                },
                 "componentsResolved": { "type": "boolean", "const": true },
                 "components": {
                   "type": "object",
@@ -1230,6 +1240,16 @@
                 "description": { "type": "string" },
                 "notes": { "type": "array", "items": { "type": "string" } },
                 "dependencies": { "type": "array", "items": { "type": "string" } },
+                "clone": {
+                  "type": "object",
+                  "required": ["note", "url"],
+                  "properties": {
+                    "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                    "url": { "type": "string" },
+                    "retries": { "type": "array", "items": { "type": "string" } }
+                  },
+                  "additionalProperties": false
+                },
                 "componentsResolved": { "type": "boolean", "const": false }
               },
               "additionalProperties": false
@@ -1508,6 +1528,16 @@
                       "description": { "type": "string" },
                       "notes": { "type": "array", "items": { "type": "string" } },
                       "dependencies": { "type": "array", "items": { "type": "string" } },
+                      "clone": {
+                        "type": "object",
+                        "required": ["note", "url"],
+                        "properties": {
+                          "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                          "url": { "type": "string" },
+                          "retries": { "type": "array", "items": { "type": "string" } }
+                        },
+                        "additionalProperties": false
+                      },
                       "componentsResolved": { "type": "boolean", "const": true },
                       "components": {
                         "type": "object",
@@ -1717,6 +1747,16 @@
                       "description": { "type": "string" },
                       "notes": { "type": "array", "items": { "type": "string" } },
                       "dependencies": { "type": "array", "items": { "type": "string" } },
+                      "clone": {
+                        "type": "object",
+                        "required": ["note", "url"],
+                        "properties": {
+                          "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                          "url": { "type": "string" },
+                          "retries": { "type": "array", "items": { "type": "string" } }
+                        },
+                        "additionalProperties": false
+                      },
                       "componentsResolved": { "type": "boolean", "const": false }
                     },
                     "additionalProperties": false

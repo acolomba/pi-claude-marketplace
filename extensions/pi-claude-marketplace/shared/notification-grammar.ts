@@ -960,6 +960,9 @@ export function renderPruneCommittedWarning(
  * `dependencies:` line -- as one `    note: <text>` line per entry. A row that
  * carries none is byte-unchanged.
  *
+ * D-SG-22: the clone note of an `info --fetch` renders under the row, after
+ * the description and before the components, as a cascade row's does.
+ *
  * SORT PRECONDITION: per-kind arrays, `requires` and `dependencies` MUST be
  * pre-sorted at message construction. The renderer does not sort.
  */
@@ -989,6 +992,8 @@ export function renderPluginInfo(message: PluginInfoMessage): string {
   if (plugin.description !== undefined && plugin.description.length > 0) {
     lines.push(...wrapDescription(plugin.description, 4, DESCRIPTION_MAX_COLS));
   }
+
+  lines.push(...composeCloneNoteLines(plugin.clone, "    "));
 
   // INFO-02 / INFO-05: per-kind components OR the unresolved marker.
   switch (plugin.componentsResolved) {

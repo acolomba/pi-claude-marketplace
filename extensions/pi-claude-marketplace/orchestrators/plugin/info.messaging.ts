@@ -1,6 +1,10 @@
-import { type PluginSkippedMessage } from "../../shared/notification-types.ts";
+import {
+  type PluginInfoMessage,
+  type PluginSkippedMessage,
+} from "../../shared/notification-types.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 
 /**
  * info.messaging.ts -- the command-local notification vocabulary for
@@ -49,3 +53,18 @@ export const PLUGIN_INFO_CONTEXT = {
   Messaging: { label: "Plugin info" },
   rowPolicies: { skipped: { markers: false, contentReasons: true } },
 } as const satisfies CommandContext<PluginInfoStatus>;
+
+/**
+ * D-SG-22: `message` whose plugin row carries the note `notes` keep for
+ * `subject`, the `<plugin>@<marketplace>` the info read. A bare info has no
+ * notes, and a scope that cloned nothing over GitHub has no note, so either
+ * returns `message` unchanged.
+ */
+export function withInfoCloneNote(
+  message: PluginInfoMessage,
+  notes: GitHubCloneNotes | undefined,
+  subject: string,
+): PluginInfoMessage {
+  const clone = notes?.noteFor(subject);
+  return clone === undefined ? message : { ...message, plugin: { ...message.plugin, clone } };
+}

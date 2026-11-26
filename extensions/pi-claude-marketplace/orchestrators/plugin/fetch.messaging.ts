@@ -7,7 +7,10 @@ import {
   type PluginUnavailableMessage,
 } from "../../shared/notification-types.ts";
 
+import { withCloneNote } from "./install.messaging.ts";
+
 import type { CommandContext } from "../../shared/notify-context.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 
 /**
  * fetch's private status set. D-81-02: a fetch success renders the plugin's
@@ -41,3 +44,19 @@ export const FETCH_CONTEXT = {
     failed: { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<FetchStatus>;
+
+/**
+ * D-SG-22: `row` with the note `notes` keep for `subject`, the
+ * `<plugin>@<marketplace>` of the fetched plugin. A `remote` or `skipped` row
+ * cannot carry one, so it is returned unchanged, as is a row whose subject
+ * cloned nothing over GitHub.
+ */
+export function withFetchCloneNote(
+  row: FetchMsg,
+  notes: GitHubCloneNotes,
+  subject: string,
+): FetchMsg {
+  return row.status === "remote" || row.status === "skipped"
+    ? row
+    : withCloneNote(row, notes, subject);
+}

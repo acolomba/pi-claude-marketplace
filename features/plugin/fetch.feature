@@ -49,8 +49,8 @@ Feature: Plugin fetch
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
-      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -81,8 +81,8 @@ Feature: Plugin fetch
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons           | scope   | cause chain                                                                                                                                                             | cause truncated | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | permission denied | project | Could not replace the plugin mirror because it is in use; the existing copy was kept and the next command will try again., {read-only plugin mirror folder rename error} | false           |       |                  |
+      | marketplace name | marketplace scope | id       | name | status | reasons           | scope   | cause chain                                                                                                                                                              | cause truncated | leaks | rollback partial | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | permission denied | project | Could not replace the plugin mirror because it is in use; the existing copy was kept and the next command will try again., {read-only plugin mirror folder rename error} | false           |       |                  | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -98,8 +98,8 @@ Feature: Plugin fetch
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
-      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
 
   Scenario: A fetch installs no new version, so the plugin list shows the installed one as upgradable
@@ -145,8 +145,8 @@ Feature: Plugin fetch
       | ghp  | 2.0.0   |      |
     When the user runs "/claude:plugin fetch ghp@gits --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
-      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
     Then the project scope holds these git clones:
@@ -192,10 +192,10 @@ Feature: Plugin fetch
       | tally warnings      | 0                              |
       | tally success count | 2                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial |
-      | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                                                                                                |                 |       |                  |
-      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |       |                  |
-      | gits             | project           | urlp@gits | urlp | available |                |         | 1.0.0   |                                                                                                                                                |                 |       |                  |
+      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial | clone note | clone url                       |
+      | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                                                                                                |                 |       |                  |            |                                 |
+      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |       |                  | via-https  | https://github.com/acme/ghp.git |
+      | gits             | project           | urlp@gits | urlp | available |                |         | 1.0.0   |                                                                                                                                                |                 |       |                  |            |                                 |
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
@@ -270,9 +270,9 @@ Feature: Plugin fetch
       | tally warnings      | 0                              |
       | tally success count | 1                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial |
-      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |       |                  |
-      | more             | project           | urlp@more | urlp | available |                |         | 1.0.0   |                                                                                                                                                |                 |       |                  |
+      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial | clone note | clone url                       |
+      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |       |                  | via-https  | https://github.com/acme/ghp.git |
+      | more             | project           | urlp@more | urlp | available |                |         | 1.0.0   |                                                                                                                                                |                 |       |                  |            |                                 |
     # A new copy of an unpinned plugin is cloned once, so each repository
     # answers one round.
     Then the git host receives these requests:

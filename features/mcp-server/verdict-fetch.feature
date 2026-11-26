@@ -26,8 +26,8 @@ Feature: MCP server verdict fetch
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status              | reasons         | version |
-      | gits             | project           | ghp@gits | ghp  | partially-available | unsupported mcp | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status              | reasons         | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | partially-available | unsupported mcp | 1.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -57,8 +57,8 @@ Feature: MCP server verdict fetch
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
-      | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
