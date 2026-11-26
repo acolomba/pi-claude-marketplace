@@ -125,8 +125,23 @@ Feature: Plugin bootstrap
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons        | scope | cause chain                                                                                                                      | cause truncated | leaks | rollback partial |
-      | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | source missing | user  | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/anthropics/claude-plugins-official.git | false           |       |                  |
+      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons        | scope | cause chain                                                                                                                      | cause truncated | leaks | rollback partial | marketplace clone note | marketplace clone url                                     |
+      | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | source missing | user  | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/anthropics/claude-plugins-official.git | false           |       |                  | via-https              | https://github.com/anthropics/claude-plugins-official.git |
+    Then the "claude-plugins.json" file of the user scope does not exist
+    Then the user scope holds no git clones
+
+  Scenario: Bootstrapping when the official marketplace's manifest is invalid names the clone on its failed result
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    Given the manifest of the marketplace "claude-plugins-official" has become invalid
+    When the user runs "/claude:plugin bootstrap"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                               | scope | status | reasons          | clone note | clone url                                                 |
+      | anthropics/claude-plugins-official | user  | failed | invalid manifest | via-https  | https://github.com/anthropics/claude-plugins-official.git |
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the user scope holds no git clones
 

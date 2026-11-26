@@ -38,7 +38,7 @@
 //   - ATTR-07: bootstrap passes `rethrowPreconditionErrors: true` so a failed
 //     add reaches the catch below, which renders it.
 
-import { addMarketplace, notifyAddFailure } from "../marketplace/add.ts";
+import { addMarketplace, createAddCloneNotes, notifyAddFailure } from "../marketplace/add.ts";
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -108,9 +108,14 @@ export interface BootstrapOptions {
  * `claude-plugins.local.json` declares the marketplace, the add declares
  * it in `claude-plugins.json` too and emits its `(added)` row, still
  * without a clone (LAYER-01).
+ *
+ * D-SG-22: the add records its clone's note in this bootstrap's collector,
+ * which the failed block reads, so a failure after the clone names it as
+ * `marketplace add` of the same source does.
  */
 export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<void> {
   const add: { committed: boolean } = { committed: false };
+  const cloneNotes = createAddCloneNotes();
   const addOptions: AddMarketplaceOptions = {
     ctx: opts.ctx,
     run: opts.run,
@@ -127,6 +132,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     // ATTR-07: re-throw the typed precondition instead of emitting a
     // `(failed)` row, so the catch below renders it.
     rethrowPreconditionErrors: true,
+    cloneNotes,
   };
   try {
     await addMarketplace(addOptions);

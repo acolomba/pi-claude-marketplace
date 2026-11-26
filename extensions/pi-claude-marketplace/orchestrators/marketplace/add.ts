@@ -327,6 +327,13 @@ export interface AddMarketplaceOptions {
    * the git address validator accepts.
    */
   readonly commandLine?: true;
+  /**
+   * D-SG-22: a collector that also receives the note of the add's clone, made
+   * with `createAddCloneNotes`. Bootstrap passes one, and the same options to
+   * `notifyAddFailure`, so its failed block names the clone the add ran. Every
+   * other caller omits it: the add keeps its note in its own collector.
+   */
+  readonly cloneNotes?: AddCloneNotes;
 }
 
 /**
@@ -1703,10 +1710,11 @@ function handleAddFailure(
 /**
  * Renders a failed add exactly as the public `marketplace add` command does,
  * for a composer that passed `rethrowPreconditionErrors` and caught the error
- * (bootstrap). An error that is not an add precondition is rethrown.
+ * (bootstrap). An error that is not an add precondition is rethrown. D-SG-22:
+ * the block names the clone the add ran, read from the collector in `opts`.
  */
 export function notifyAddFailure(opts: AddMarketplaceOptions, err: unknown): void {
-  handleAddFailure(opts, err, false);
+  handleAddFailure(opts, err, false, opts.cloneNotes?.note());
 }
 
 /**
@@ -1769,7 +1777,7 @@ async function runAddOutcome<U extends UnchangedAdd>(
   // to fall back to and no way for a new cleanup site to go uninjected.
   const removalOps = createRemovalOps();
   const locations = locationsFor(opts.scope, opts.cwd);
-  const clone = createAddCloneNotes();
+  const clone = createAddCloneNotes(opts.cloneNotes);
 
   // ATTR-07: route every enumerated precondition failure through notify as a
   // structured `⊘ <subject> [<scope>] (failed) {<reason>}` row on the
@@ -1850,18 +1858,23 @@ function withAddClone<O extends AddedMarketplace | FailedAdd>(
   return note === undefined ? outcome : { ...outcome, clone: note };
 }
 
-/**
- * D-SG-22: the clone notes of one add, and the note of its clone. An add
- * clones at most one source, and the runner keeps that clone's note under the
- * source it cloned: the typed one, or the recorded one for a repair
- * (D-PL5-17). So the add's note is the one kept for the subject recorded last.
- * A reused record, a path source, a hosted catalog, and a clone of a host that
- * is not GitHub record none.
- */
-function createAddCloneNotes(): {
+/** D-SG-22: the clone notes of one add, and the note of its clone. */
+export interface AddCloneNotes {
   readonly notes: GitHubCloneNotes;
   readonly note: () => CloneTransportNote | undefined;
-} {
+}
+
+/**
+ * D-SG-22: a new collector of an add's clone notes. An add clones at most one
+ * source, and the runner keeps that clone's note under the source it cloned:
+ * the typed one, or the recorded one for a repair (D-PL5-17). So the add's
+ * note is the one kept for the subject recorded last. A reused record, a path
+ * source, a hosted catalog, and a clone of a host that is not GitHub record
+ * none. Each note is also recorded in `forward`, the caller's collector, which
+ * keeps the same rule, so the add's own failure and the caller's report of it
+ * name the same clone.
+ */
+export function createAddCloneNotes(forward?: AddCloneNotes): AddCloneNotes {
   const notes = createGitHubCloneNotes();
   let subject: string | undefined;
   return {
@@ -1869,6 +1882,7 @@ function createAddCloneNotes(): {
       record: (recorded, note) => {
         subject = recorded;
         notes.record(recorded, note);
+        forward?.notes.record(recorded, note);
       },
       noteFor: notes.noteFor,
     },
