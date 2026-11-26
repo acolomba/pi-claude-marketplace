@@ -263,9 +263,10 @@ export interface PreparePluginUpdateOptions {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
-   * D-SG-19, OQ-4: the command's GitHub transport context. With one, the
-   * candidate's clones and its pin's `ls-remote` run over the plan it gives
-   * the source; with none, each runs once on the source's wire URL.
+   * D-SG-19, OQ-4: the command's GitHub transport context, whose plan the
+   * candidate's clones run over. Every command root passes one; a direct
+   * caller that passes none gets a new context made for this preflight
+   * (`updateCloneTransport`), with the full skip checks and probe.
    */
   readonly transportContext?: PluginTransportContext;
   /**
