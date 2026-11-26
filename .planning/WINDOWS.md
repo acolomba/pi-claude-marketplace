@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 29
+open_count: 32
 waived_count: 52
 fixed_count: 48
-total_count: 129
-last_updated: 2026-11-25T21:29:31.467Z
+total_count: 132
+last_updated: 2026-11-26T00:08:31.629Z
 ---
 
 # Broken Windows Ledger
@@ -144,6 +144,9 @@ last_updated: 2026-11-25T21:29:31.467Z
 | 127 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts |  | [system-git] A bootstrap add that fails after its clone shows no clone note, because notifyAddFailure has no collector; marketplace add of the same source shows it (D-SG-22) | open |  | 2026-11-25T20:05:15.637Z |  |
 | 128 | 4 | unrun-verify | extensions/pi-claude-marketplace/domain/github-plugin-transport.ts |  | [system-git] the Windows SSH-first github plugin install, the ssh -G check run through Git for Windows' sh (git ls-remote with Pi's wrapped GIT_SSH_COMMAND plus ' -G >&2'), and the HTTPS-then-SSH retry after a publickey or host-key failure are proven by fake-platform unit rows only; the manual Windows check at the pull request covers them (SG-SSH-05) | open |  | 2026-11-25T21:29:31.350Z |  |
 | 129 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts |  | [system-git] a url record whose URL now parses as a hosted catalog (pre-D-PL5-04 .json record) still refreshes from its checkout's recorded origin; OQ-5 parity holds for every other source | open |  | 2026-11-25T21:29:31.467Z |  |
+| 130 | 4 | deviation | extensions/pi-claude-marketplace/shared/notification-types.ts |  | [system-git] An install that lands disabled (DFEN-04) shows no clone note: PluginDisabledMessage has no clone field (D-SG-22) | open |  | 2026-11-26T00:08:31.423Z |  |
+| 131 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts |  | [system-git] A failure while an install plans its dependency moves shows no clone note: projectCaughtFailure is called without the install's notes (D-SG-22) | open |  | 2026-11-26T00:08:31.525Z |  |
+| 132 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts |  | [system-git] A D-MF-04 add of a dependency's other marketplace shows no clone note: the install notification has no block for that marketplace (D-SG-22) | open |  | 2026-11-26T00:08:31.629Z |  |
 
 ````json
 [
@@ -1765,6 +1768,45 @@ last_updated: 2026-11-25T21:29:31.467Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-25T21:29:31.467Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 130,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/shared/notification-types.ts",
+    "line": null,
+    "description": "[system-git] An install that lands disabled (DFEN-04) shows no clone note: PluginDisabledMessage has no clone field (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T00:08:31.423Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 131,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts",
+    "line": null,
+    "description": "[system-git] A failure while an install plans its dependency moves shows no clone note: projectCaughtFailure is called without the install's notes (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T00:08:31.525Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 132,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
+    "line": null,
+    "description": "[system-git] A D-MF-04 add of a dependency's other marketplace shows no clone note: the install notification has no block for that marketplace (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T00:08:31.629Z",
     "resolved_at": null,
     "milestone": null
   }
