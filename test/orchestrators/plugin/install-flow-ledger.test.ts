@@ -6748,6 +6748,111 @@ test("LAYER-07 / D-03-INV / D-SEED-01: a saved install settles each marketplace 
   });
 });
 
+/** D-SG-22 / D-MF-04: the note a github add of `deps-mp` records. */
+const DEPS_ADD_NOTE = { note: "via-https", url: "https://github.com/acme/deps-mp.git" } as const;
+
+/**
+ * D-SG-22 / D-MF-04: `seam`, whose `record` first records the clone note a
+ * github clone of the added marketplace would, then runs `record` itself.
+ */
+function notingAdd(seam: MarketplaceAddSeam): MarketplaceAddSeam {
+  return {
+    record: (args) => {
+      args.cloneNotes?.record("any subject", DEPS_ADD_NOTE);
+      return seam.record(args);
+    },
+    settle: seam.settle,
+  };
+}
+
+test("D-SG-22 / D-MF-04: an install names its dependency marketplace's add clone on a block after its own", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-note-"));
+    try {
+      // arrange
+      const projectLocations = locationsFor("project", cwd);
+      const sourceRoot = await seedProjectRootWithUserDependency(cwd);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        transportContext: defaultPluginTransportContext({}),
+        marketplaceAdd: notingAdd(
+          stubMarketplaceAdd({
+            name: "deps-mp",
+            sourceRoot,
+            cloneDir: path.join(projectLocations.extensionRoot, "sources", "deps-mp"),
+            settled: [],
+          }),
+        ),
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      assert.deepStrictEqual(notifications[0]?.message.split("\n"), [
+        "● mp [project]",
+        "  ● hello v0.0.1 (installed)",
+        "  ● some-other-plugin@deps-mp v0.0.1 (installed)",
+        "",
+        "● deps-mp [project]",
+        "  Cloning via HTTPS: https://github.com/acme/deps-mp.git",
+        "",
+        "/reload to pick up changes",
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-22 / D-MF-04: an install whose dependency marketplace add fails names that add's clone on its block", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-add-note-fail-"));
+    try {
+      // arrange
+      await seedProjectRootWithUserDependency(cwd);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        transportContext: defaultPluginTransportContext({}),
+        marketplaceAdd: notingAdd({
+          record: () => Promise.reject(new Error("clone refused")),
+          settle: () => Promise.reject(new Error("a failed install settles nothing")),
+        }),
+      });
+
+      // assert
+      assert.equal(outcome.status, "failed");
+      assert.deepStrictEqual(notifications[0]?.message.split("\n"), [
+        "Some plugin operations have failed.",
+        "",
+        "● mp [project]",
+        "  ⊘ hello (failed) {dependency failed}",
+        "  ⊘ some-other-plugin@deps-mp (failed)",
+        "    cause: clone refused",
+        "",
+        "● deps-mp [project]",
+        "  Cloning via HTTPS: https://github.com/acme/deps-mp.git",
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 /**
  * LAYER-07: `hello@mp` depends on `some-other-plugin@deps-mp`, and the user
  * scope alone records both path marketplaces. Returns their source trees.

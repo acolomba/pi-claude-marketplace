@@ -8,6 +8,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
+  addedMarketplaceBlocks,
   cascadeStagingDiagnostics,
   collectPostCommitWarnings,
   declareInstalledPlugin,
@@ -1339,5 +1340,194 @@ describe("D-SG-22: clone notes on the install's rows", () => {
 
     // assert
     assert.deepStrictEqual(member, { clone: ADD_NOTE });
+  });
+});
+
+describe("D-SG-22 / D-MF-04: the blocks of the marketplaces an install added", () => {
+  const TOOLS_NOTE = { note: "via-https", url: "https://github.com/acme/tools.git" } as const;
+  const KIT_NOTE = { note: "via-ssh", url: "git@github.com:acme/kit.git" } as const;
+  const ROOT_NOTE = { note: "via-https", url: "https://github.com/acme/mp.git" } as const;
+
+  function notes() {
+    const collector = createGitHubCloneNotes();
+    collector.record("mp", ROOT_NOTE);
+    collector.record("tools", TOOLS_NOTE);
+    collector.record("kit", KIT_NOTE);
+    collector.record("lib@plain", TOOLS_NOTE);
+    return collector;
+  }
+
+  test("gives each other added marketplace with a note its own bare block, in add order", () => {
+    // arrange
+    const added = ["kit", "mp", "plain", "tools", "kit"];
+
+    // act
+    const blocks = addedMarketplaceBlocks(notes(), "project", "mp", added);
+
+    // assert
+    assert.deepStrictEqual(blocks, [
+      { name: "kit", scope: "project", clone: KIT_NOTE, plugins: [] },
+      { name: "tools", scope: "project", clone: TOOLS_NOTE, plugins: [] },
+    ]);
+  });
+
+  for (const [title, collector, added] of [
+    ["no collector", undefined, ["tools"]],
+    ["no added marketplace", createGitHubCloneNotes(), undefined],
+    ["an add that recorded no note", createGitHubCloneNotes(), ["tools"]],
+  ] as const) {
+    test(`adds no block with ${title}`, () => {
+      // arrange
+      const marketplace = "mp";
+
+      // act
+      const blocks = addedMarketplaceBlocks(collector, "project", marketplace, added);
+
+      // assert
+      assert.deepStrictEqual(blocks, []);
+    });
+  }
+
+  test("appends the block after a failed install's own block", () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    handleCaughtInstallFailure({
+      err: new Error("stopped"),
+      ctx,
+      run,
+      marketplace: "mp",
+      scope: "project",
+      plugin: "app",
+      rootKey: "app@mp",
+      capture: { rollbackPartials: [], version: undefined },
+      cascadeFailure: { mcpConfigNotices: [] },
+      orchestrated: false,
+      notes: notes(),
+      addedMarketplaces: ["tools"],
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications[0]?.message.split("\n").slice(2), [
+      "● mp [project]",
+      "  Cloning via HTTPS: https://github.com/acme/mp.git",
+      "  ⊘ app (failed)",
+      "    cause: stopped",
+      "",
+      "● tools [project]",
+      "  Cloning via HTTPS: https://github.com/acme/tools.git",
+    ]);
+  });
+
+  test("appends the block of a failed dependency's marketplace after a cascade failure's block", () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    handleCaughtInstallFailure({
+      err: new Error("dependency stopped"),
+      ctx,
+      run,
+      marketplace: "mp",
+      scope: "project",
+      plugin: "app",
+      rootKey: "app@mp",
+      capture: { rollbackPartials: [], version: undefined },
+      cascadeFailure: {
+        mcpConfigNotices: [],
+        subject: {
+          kind: "member",
+          key: "lib@tools",
+          error: new Error("dependency stopped"),
+          rollbackPartials: [],
+        },
+      },
+      orchestrated: false,
+      notes: notes(),
+      addedMarketplaces: ["kit"],
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications[0]?.message.split("\n").slice(2), [
+      "● mp [project]",
+      "  Cloning via HTTPS: https://github.com/acme/mp.git",
+      "  ⊘ app (failed) {dependency failed}",
+      "  ⊘ lib@tools (failed)",
+      "    cause: dependency stopped",
+      "",
+      "● kit [project]",
+      "  Cloning via SSH: git@github.com:acme/kit.git",
+      "",
+      "● tools [project]",
+      "  Cloning via HTTPS: https://github.com/acme/tools.git",
+    ]);
+  });
+
+  test("adds no block for the marketplace of a dependency the closure walk refused", () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    handleCaughtInstallFailure({
+      err: new Error("not declared"),
+      ctx,
+      run,
+      marketplace: "mp",
+      scope: "project",
+      plugin: "app",
+      rootKey: "app@mp",
+      capture: { rollbackPartials: [], version: undefined },
+      cascadeFailure: {
+        mcpConfigNotices: [],
+        subject: {
+          kind: "closure",
+          failure: { ok: false, reason: "not-found", key: "lib@tools", requiredBy: "app@mp" },
+        },
+      },
+      orchestrated: false,
+      notes: notes(),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications[0]?.message.split("\n").filter((line) => line.startsWith("●")),
+      ["● mp [project]"],
+    );
+  });
+
+  test("appends the block after a promotion's block", () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    promotedRowOutcome({
+      ctx,
+      run,
+      marketplace: "mp",
+      scope: "project",
+      plugin: "app",
+      promotion: {
+        version: "1.2.3",
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        materialized: [],
+        mcpConfigNotices: [],
+      },
+      orchestrated: false,
+      notes: notes(),
+      addedMarketplaces: ["tools"],
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications[0]?.message.split("\n"), [
+      "● mp [project]",
+      "  Cloning via HTTPS: https://github.com/acme/mp.git",
+      "  ● app v1.2.3 (installed) {already installed, dependency promoted}",
+      "",
+      "● tools [project]",
+      "  Cloning via HTTPS: https://github.com/acme/tools.git",
+    ]);
   });
 });

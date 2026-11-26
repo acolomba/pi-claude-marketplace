@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   dependencyMoveContext,
   INSTALL_MOVE_MATERIALIZATION,
@@ -579,5 +580,95 @@ describe("dependency planning operations", () => {
     // assert
     assert.strictEqual(caughtOutcome.status, "failed");
     assert.deepStrictEqual(notificationCounts, [1, 0]);
+  });
+
+  test("D-SG-22: a failed move names the requesting plugin's clone on its row and the block's on its block", () => {
+    // arrange
+    const projected = makeCtx();
+    const notes = createGitHubCloneNotes();
+    notes.record("app@mp", { note: "via-ssh", url: "git@github.com:acme/app.git" });
+    notes.record("mp", { note: "via-https", url: "https://github.com/acme/mp.git" });
+    notes.record("dep@mp", { note: "via-https", url: "https://github.com/acme/dep.git" });
+    const moved = [
+      {
+        key: "dep@mp",
+        name: "dep",
+        marketplace: "mp",
+        row: {
+          status: "updated" as const,
+          name: "dep@mp",
+          dependencies: [],
+          from: "1.0.0",
+          to: "2.0.0",
+          severity: "info" as const,
+          needsReload: true,
+        },
+      },
+    ];
+
+    // act
+    projectFailedInstallDependencyPlanMoves({
+      opts: {
+        ctx: projected.ctx,
+        run: projected.run,
+        scope: "project",
+        cwd: "/project",
+        marketplace: "mp",
+        plugin: "app",
+      },
+      moved,
+      mcpConfigNotices: [],
+      cause: new Error("move stopped"),
+      orchestrated: false,
+      unmaterialized: [],
+      notes,
+    });
+
+    // assert: the moved row keeps the row the update runner gave it.
+    assert.deepStrictEqual(projected.notifications[0]?.message.split("\n").slice(2), [
+      "● mp [project]",
+      "  Cloning via HTTPS: https://github.com/acme/mp.git",
+      "  ⊘ app (failed) {dependency failed}",
+      "    Cloning via SSH: git@github.com:acme/app.git",
+      "  ● dep@mp v1.0.0 → v2.0.0 (updated)",
+      "",
+      "/reload to pick up changes",
+    ]);
+  });
+
+  test("D-SG-22: a failed move with no clone notes reports the rows it reported before", () => {
+    // arrange
+    const [bare, noted] = [makeCtx(), makeCtx()];
+
+    // act
+    for (const [projected, notes] of [
+      [bare, undefined],
+      [noted, createGitHubCloneNotes()],
+    ] as const) {
+      projectFailedInstallDependencyPlanMoves({
+        opts: {
+          ctx: projected.ctx,
+          run: projected.run,
+          scope: "project",
+          cwd: "/project",
+          marketplace: "mp",
+          plugin: "app",
+        },
+        moved: [],
+        mcpConfigNotices: [],
+        cause: new Error("move stopped"),
+        orchestrated: false,
+        unmaterialized: ["fresh@mp"],
+        notes,
+      });
+    }
+
+    // assert
+    assert.deepStrictEqual(noted.notifications, bare.notifications);
+    assert.deepStrictEqual(bare.notifications[0]?.message.split("\n").slice(2), [
+      "● mp [project]",
+      "  ⊘ app (failed) {dependency failed}",
+      "  ⊘ fresh@mp (failed) {dependency failed}",
+    ]);
   });
 });

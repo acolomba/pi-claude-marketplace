@@ -32,6 +32,41 @@ Feature: Plugin cross-scope install
       | id           |
       | app@upstream |
 
+  Scenario Outline: Installing a plugin into the project scope that adds the github marketplace of its dependency names that add's clone
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | lib  | 1.0.0   |
+    Given the marketplace "upstream" is published as a dir source
+    Given the marketplace "upstream" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@tools    |
+    Given the marketplace "upstream" allows dependencies on the marketplace "tools"
+    Given the marketplace "upstream" is added to the user scope
+    Given the marketplace "tools" is added to the user scope
+    When the user runs "/claude:plugin install app@upstream --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace clone note | marketplace clone url             | id           | name      | status    | reasons | scope   | version |
+      | upstream         | project           |                        |                                   | app@upstream | app       | installed |         | project | 1.0.0   |
+      | upstream         | project           |                        |                                   | lib@tools    | lib@tools | installed |         | project | 1.0.0   |
+      | tools            | project           | via-https              | https://github.com/acme/tools.git |              |           |           |         |         |         |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | upstream | {home}/marketplaces/upstream |
+      | tools    | <source>                     |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id           |
+      | app@upstream |
+
+    @github
+    Examples:
+      | source kind | source     |
+      | github      | acme/tools |
+
   Scenario Outline: Installing a plugin into the project scope from a marketplace the user scope added declares that marketplace in the project's base config
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" offers these plugins:

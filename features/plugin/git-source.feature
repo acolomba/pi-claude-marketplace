@@ -120,6 +120,40 @@ Feature: Plugin git source
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
+  Scenario: Installing a github plugin whose entry installs it disabled names its clone on the disabled row
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" publishes this manifest:
+      """
+      {
+        "name": "gits",
+        "owner": { "name": "features" },
+        "plugins": [
+          {
+            "name": "ghp",
+            "source": { "source": "github", "repo": "acme/ghp" },
+            "defaultEnabled": false
+          }
+        ]
+      }
+      """
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status   | reasons           | scope   | version | hint   | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | disabled | installs disabled | project | 1.0.0   | enable | via-https  | https://github.com/acme/ghp.git |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
   Scenario: A plugin pinned to the commit another installed plugin was cloned at installs with no request
     Given the git repository "mono" holds these plugins:
       | name | version | path         |

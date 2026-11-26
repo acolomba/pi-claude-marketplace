@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 
 import {
@@ -194,6 +196,19 @@ test("D-SG-18: an install given a transport context clones under it and makes no
   });
 });
 
+/** DFEN-04: the catalog entry of `name` declares `defaultEnabled: false`. */
+async function declareInstallsDisabled(marketplaceRoot: string, name: string): Promise<void> {
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  const catalog = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    plugins: Array<{ name: string; defaultEnabled?: boolean }>;
+  };
+  for (const entry of catalog.plugins.filter((candidate) => candidate.name === name)) {
+    entry.defaultEnabled = false;
+  }
+
+  await writeFile(manifestPath, JSON.stringify(catalog));
+}
+
 /**
  * Installs `app@mp` from a url source whose mirror step records a note for its
  * subject, as the clone runner does, and then `finish`es the step; returns the
@@ -202,9 +217,14 @@ test("D-SG-18: an install given a transport context clones under it and makes no
 async function installNotingClone(
   owner: InstallTestOwner,
   finish: "clone" | "fail" | "warm",
+  defaultEnabled?: false,
 ): Promise<string | undefined> {
   const { cwd, marketplaceRoot } = await seedCatalogScope(owner.root, {});
   const repository = await offerGitPlugin(marketplaceRoot, "app");
+  if (defaultEnabled === false) {
+    await declareInstallsDisabled(marketplaceRoot, "app");
+  }
+
   const inner = seamWith(
     createGitOps({
       fixtureSourceDir: repository,
@@ -228,6 +248,7 @@ async function installNotingClone(
     cwd,
     marketplace: "mp",
     plugin: "app",
+    ...(defaultEnabled === false && { applyDefaultEnabled: true }),
     cloneCacheSeam: {
       ...inner,
       materializeOrRefreshPluginMirror: (args) => {
@@ -263,6 +284,24 @@ test("D-SG-22: an install names the transport of its clone under the plugin's ro
       "    SSH not configured, cloning via HTTPS: https://github.com/acme/app.git",
       "",
       "/reload to pick up changes",
+    ]);
+  });
+});
+
+test("D-SG-22, DFEN-04: an install that lands disabled names its clone under the disabled row", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const finish = "clone";
+
+    // act
+    const message = await installNotingClone(owner, finish, false);
+
+    // assert
+    assert.deepStrictEqual(message?.split("\n"), [
+      "● mp [project]",
+      "  ◍ app v1.0.0 (disabled) {installs disabled}",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/app.git",
+      "    Run enable on this plugin to use its components.",
     ]);
   });
 });
