@@ -109,7 +109,8 @@ behavior_unverified: 0
 overrides_applied: 0
 gaps:
   - truth: "D-SG-22 (SG-SSH-02): every GitHub clone's final notification names the transport it used, with the retry line and the both-failed error when they apply"
-    status: partial
+    status: closed
+    closed_by: [04-19, 04-21, 04-22, 04-23, 04-24, 04-25]
     reason: "The closed clone note, its lines, its JSON fields, and the both-failed error exist and are wired on marketplace add, marketplace update, install, update, reinstall, the PUP-2 sync, fetch, info --fetch, enable, apply, and import. Twelve reporting paths that run a GitHub clone still show no note, so the decision's 'every GitHub clone' is not met. Three of them are marketplace clones of an owner/repo source, which SC2's 'the user sees upstream's progress lines' also covers. PROJECT.md D-SG-22 and 04-VALIDATION.md both say a gap plan closes them after verification. No later phase owns them: Phase 6 settles wording only, and D-SG-22 gives this phase the note's placement."
     artifacts:
       - path: "extensions/pi-claude-marketplace/shared/notification-types.ts"
