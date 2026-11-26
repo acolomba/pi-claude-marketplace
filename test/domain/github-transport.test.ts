@@ -178,6 +178,11 @@ for (const { raw, url, transport } of [
   },
   { raw: "git@127.0.0.1:acme/tools.git", url: "git@127.0.0.1:acme/tools.git", transport: "ssh" },
   {
+    raw: "http://127.0.0.1:9/acme/tools.git",
+    url: "http://127.0.0.1:9/acme/tools.git",
+    transport: "https",
+  },
+  {
     raw: "ssh://git@127.0.0.1/acme/tools.git",
     url: "ssh://git@127.0.0.1/acme/tools.git",
     transport: "ssh",
@@ -220,7 +225,8 @@ for (const { raw, transport, note } of [
   { raw: "ssh://git@github.com/acme/tools.git", transport: "ssh", note: "via-ssh" },
   { raw: "git+ssh://git@ssh.github.com/acme/tools.git", transport: "ssh", note: "via-ssh" },
   { raw: "https://www.GitHub.com/acme/tools.git", transport: "https", note: "via-https" },
-  { raw: "http://github.com/acme/tools", transport: "https", note: "via-https" },
+  { raw: "http://github.com/acme/tools", transport: "https", note: "via-http" },
+  { raw: "http://github.com/acme/tools.git", transport: "https", note: "via-http" },
 ] as const) {
   test(`D-SG-22, OQ-3: clones the GitHub url source ${raw} once as written with the ${note} note and no probe`, async () => {
     // arrange
@@ -255,6 +261,25 @@ test("D-SG-21, OQ-3: keeps the ssh note of an scp GitHub url source while the ba
   } satisfies PlanOrder);
   assert.strictEqual(calls(), 0);
 });
+
+for (const force of ["base-override", "prefer-https"] as const) {
+  test(`IN-A-02, D-SG-21: keeps the via-http note of an http GitHub url source while ${force} forces GitHub clones`, async () => {
+    // arrange
+    const raw = "http://github.com/acme/tools.git";
+    const source = { kind: "url", raw, url: raw } satisfies UrlSource;
+    const { probe, calls } = probeAnswering("configured");
+
+    // act
+    const plan = await planMarketplaceClone({ source, force, probe });
+
+    // assert
+    assert.deepStrictEqual(orderOf(plan), {
+      first: { transport: "https", url: raw },
+      note: "via-http",
+    } satisfies PlanOrder);
+    assert.strictEqual(calls(), 0);
+  });
+}
 
 test("D-SG-24: keeps a non-GitHub ssh url source as written when prefer-https forces GitHub clones", async () => {
   // arrange

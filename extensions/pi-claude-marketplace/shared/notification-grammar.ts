@@ -1097,12 +1097,14 @@ function isDescriptionBearingRow(
 }
 
 /**
- * D-SG-22: Claude Code's line for the first transport a GitHub clone chose.
- * SG-ERR-01 settles the final wording.
+ * D-SG-22: Claude Code's line for the first transport a GitHub clone chose,
+ * and IN-A-02's line for a GitHub address written with `http://`. SG-ERR-01
+ * settles the final wording.
  */
 const CLONE_NOTE_LEADS = {
   "via-ssh": "Cloning via SSH",
   "via-https": "Cloning via HTTPS",
+  "via-http": "Cloning via HTTP",
   "ssh-not-configured": "SSH not configured, cloning via HTTPS",
 } as const satisfies Record<CloneNoteKind, string>;
 
@@ -1112,9 +1114,19 @@ const SSH_SCHEME_URL = /^(?:ssh|git\+ssh|ssh\+git):\/\//i;
 /** An scp address such as `git@github.com:owner/repo.git`: no slash before its first colon. */
 const SCP_ADDRESS = /^[^/:]+:(?!\/\/)/;
 
-/** The transport a clone of `url` runs over, in Claude Code's words. */
-function cloneTransport(url: string): "SSH" | "HTTPS" {
-  return SSH_SCHEME_URL.test(url) || SCP_ADDRESS.test(url) ? "SSH" : "HTTPS";
+/** An `http:` URL. */
+const HTTP_SCHEME_URL = /^http:/i;
+
+/**
+ * The transport a clone of `url` runs over, in Claude Code's words. A plain
+ * `http:` URL is `HTTP`, so a retry line never calls it HTTPS (IN-A-02).
+ */
+function cloneTransport(url: string): "SSH" | "HTTPS" | "HTTP" {
+  if (SSH_SCHEME_URL.test(url) || SCP_ADDRESS.test(url)) {
+    return "SSH";
+  }
+
+  return HTTP_SCHEME_URL.test(url) ? "HTTP" : "HTTPS";
 }
 
 /**

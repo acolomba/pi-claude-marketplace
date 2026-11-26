@@ -423,9 +423,12 @@ export interface TransitionMessageBase extends MessageBase {
  * D-SG-22: how a GitHub clone chose its first transport, in Claude Code's
  * words. `via-ssh` is its `Cloning via SSH`, `via-https` its `Cloning via
  * HTTPS`, and `ssh-not-configured` its `SSH not configured, cloning via HTTPS`.
- * A bare literal union like the other closed sets.
+ * Claude Code has no line for plain http. `via-http`, `Cloning via HTTP`, is
+ * the maintainer's choice for a GitHub address written with `http://` and
+ * cloned as written (IN-A-02). A bare literal union like the other closed
+ * sets.
  */
-export type CloneNoteKind = "via-ssh" | "via-https" | "ssh-not-configured";
+export type CloneNoteKind = "via-ssh" | "via-https" | "via-http" | "ssh-not-configured";
 
 /**
  * D-SG-22: the transport note of a row whose command ran a GitHub clone. `url`

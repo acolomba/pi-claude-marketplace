@@ -512,7 +512,8 @@ for (const { retry, transport } of [
   { retry: "ssh+git://git@github.com/acme/ghp.git", transport: "SSH" },
   { retry: "SSH://git@github.com/acme/ghp.git", transport: "SSH" },
   { retry: "https://github.com/acme/ghp.git", transport: "HTTPS" },
-  { retry: "http://git.example/acme/ghp.git", transport: "HTTPS" },
+  { retry: "http://git.example/acme/ghp.git", transport: "HTTP" },
+  { retry: "HTTP://github.com/acme/ghp.git", transport: "HTTP" },
 ]) {
   test(`D-SG-22: names ${transport} as the transport of a retry over ${retry}`, () => {
     // arrange
@@ -536,6 +537,51 @@ for (const { retry, transport } of [
     ]);
   });
 }
+
+test("IN-A-02: renders the via-http note of a marketplace block under its header", () => {
+  // arrange
+  const marketplace = {
+    ...MARKETPLACE_BASE,
+    name: "tools",
+    status: "added",
+    clone: { note: "via-http", url: "http://github.com/acme/tools.git" },
+  } as const satisfies ResolvedMarketplace;
+
+  // act
+  const rendered = composeReconcileAppliedBody([marketplace]);
+
+  // assert
+  assert.equal(
+    rendered,
+    ["● tools [user] (added)", "  Cloning via HTTP: http://github.com/acme/tools.git"].join("\n"),
+  );
+});
+
+test("IN-A-02: renders the via-http note of a plugin row and names an http attempt HTTP in its retry", () => {
+  // arrange
+  const plugin = {
+    status: "installed",
+    severity: "info",
+    needsReload: true,
+    name: "ghp",
+    reasons: [],
+    clone: {
+      note: "via-http",
+      url: "http://github.com/acme/ghp.git",
+      retries: ["git@github.com:acme/ghp.git"],
+    },
+  } satisfies ResolvedRow<PluginInstalledMessage>;
+
+  // act
+  const lines = composePluginLines(plugin, "user");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ● ghp (installed)",
+    "    Cloning via HTTP: http://github.com/acme/ghp.git",
+    "    HTTP clone failed, retrying with SSH: git@github.com:acme/ghp.git",
+  ]);
+});
 
 test("renders the remedy cause line of a realized disabled row", () => {
   // arrange

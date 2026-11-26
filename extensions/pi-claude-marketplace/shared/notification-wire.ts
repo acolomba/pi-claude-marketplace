@@ -183,6 +183,7 @@ const SCOPES = {
 const CLONE_NOTE_KINDS = {
   "via-ssh": true,
   "via-https": true,
+  "via-http": true,
   "ssh-not-configured": true,
 } as const satisfies Record<CloneNoteKind, true>;
 

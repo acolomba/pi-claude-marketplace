@@ -152,6 +152,25 @@ test("accepts a cascade payload that carries every optional field", () => {
   assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
 });
 
+for (const { note, url } of [
+  { note: "via-ssh", url: "git@github.com:acme/ghp.git" },
+  { note: "via-https", url: "https://github.com/acme/ghp.git" },
+  { note: "via-http", url: "http://github.com/acme/ghp.git" },
+  { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+]) {
+  test(`D-SG-22, IN-A-02: accepts a clone note of kind ${note}`, () => {
+    // arrange
+    const row = { ...failedRow(), clone: { note, url } };
+    const payload = cascadePayloadWith(row);
+
+    // act
+    const errors = leafErrors(CASCADE_MEMBER, payload);
+
+    // assert
+    assert.deepStrictEqual(errors, []);
+  });
+}
+
 const ROW = "/marketplaces/0/plugins/0";
 
 for (const { title, mutate, expectedErrors } of [

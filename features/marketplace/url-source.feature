@@ -37,6 +37,20 @@ Feature: Marketplace url source
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
+  Scenario: Adding a marketplace from an http:// github address names its clone as http
+    Given the marketplace "tools" is published as a github source
+    When the user runs "/claude:plugin marketplace add http://github.com/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status | clone note | clone url                        |
+      | tools | project | added  | via-http   | http://github.com/acme/tools.git |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                           |
+      | tools | http://github.com/acme/tools.git |
+
   Scenario: Adding a url marketplace outside github ignores an invalid github base address
     Given pi runs with the github base address "http://example.invalid"
     Given the marketplace "tools" is published as a url source

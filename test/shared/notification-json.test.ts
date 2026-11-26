@@ -1369,6 +1369,34 @@ test("D-SG-22: copies the clone retries so the payload shares no array with the 
   assert.notStrictEqual(clone?.retries, retries);
 });
 
+test("IN-A-02: carries the via-http clone note of a block unchanged", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "tools",
+      scope: "user",
+      status: "added",
+      clone: { note: "via-http", url: "http://github.com/acme/tools.git" },
+      plugins: [],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.ok("marketplaces" in payload);
+  assert.deepStrictEqual(payload.marketplaces[0]?.clone, {
+    note: "via-http",
+    url: "http://github.com/acme/tools.git",
+  });
+  assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
+});
+
 test("gives a failed row whose subject is a marketplace its name alone as the id", () => {
   // arrange
   const presentation = presentationOf([

@@ -209,6 +209,7 @@ const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
 const CLONE_NOTE_KIND_ENROLLMENT: Record<CloneNoteKind, true> = {
   "via-ssh": true,
   "via-https": true,
+  "via-http": true,
   "ssh-not-configured": true,
 };
 
@@ -294,12 +295,12 @@ test("ASTAT-02: McpServerStatus is the closed 12-entry MCP server status set", (
   assert.strictEqual(memberCount, 12);
 });
 
-test("D-SG-22: CloneNoteKind is the closed 3-entry clone note set", () => {
+test("D-SG-22, IN-A-02: CloneNoteKind is the closed 4-entry clone note set", () => {
   // act
   const memberCount = Object.keys(CLONE_NOTE_KIND_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 3);
+  assert.strictEqual(memberCount, 4);
 });
 
 test("standalone notification kinds include scoped prune outcomes exactly", () => {

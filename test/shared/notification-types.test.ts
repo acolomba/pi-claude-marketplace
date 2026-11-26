@@ -369,8 +369,11 @@ void ({
   reasons: ["lock held"],
   severity: "error",
 } satisfies PluginFailedMessage);
-// D-SG-22: the clone note kinds are exactly upstream's three transport lines.
-void (true satisfies IsExact<CloneNoteKind, "via-ssh" | "via-https" | "ssh-not-configured">);
+// D-SG-22, IN-A-02: the clone note kinds are upstream's three transport lines and the http line.
+void (true satisfies IsExact<
+  CloneNoteKind,
+  "via-ssh" | "via-https" | "via-http" | "ssh-not-configured"
+>);
 // D-SG-22: a marketplace block and each row a GitHub clone produces carry a clone note.
 void ({
   name: "tools",
