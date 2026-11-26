@@ -4933,7 +4933,7 @@ test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source 
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: 404 on https://github.com/org/repo.git -> git clone --depth failed: repository-not-found, exit code 128",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    Cloning via HTTPS: https://github.com/org/repo.git\n    cause: 404 on https://github.com/org/repo.git -> git clone --depth failed: repository-not-found, exit code 128",
           severity: "error",
         },
       ]);
@@ -10724,6 +10724,184 @@ test("D-SG-19: a bulk reinstall gives every plugin the transport context its cal
 
       // assert
       assert.deepStrictEqual(contexts, [transportContext]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ─── D-SG-22: a reinstall names the transport of each GitHub clone it ran ────
+
+/** The source of a plugin pinned at `GIT_SOURCE_SHA` in a github.com repository. */
+const GITHUB_URL_SOURCE = {
+  source: "url",
+  url: "https://github.com/org/repo.git",
+  sha: GIT_SOURCE_SHA,
+};
+
+/** Seeds `gp@mp` from `GITHUB_URL_SOURCE` and deletes its clone, so a reinstall clones it again. */
+async function seedColdGitHubUrlPlugin(cwd: string): Promise<void> {
+  await seedInstalledGitSourcePlugin({
+    cwd,
+    marketplaceName: "mp",
+    pluginName: "gp",
+    source: GITHUB_URL_SOURCE,
+  });
+  const locations = locationsFor("project", cwd);
+  await rm(
+    await locations.pluginCloneDir(pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA)),
+    { recursive: true, force: true },
+  );
+}
+
+test("D-SG-22: a reinstall that clones a github.com plugin names the transport under its row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-note-"));
+    try {
+      // arrange
+      await seedColdGitHubUrlPlugin(cwd);
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map((n) => n.message),
+        [
+          [
+            "● mp [project]",
+            "  ● gp v9.9.9 (reinstalled)",
+            "    Cloning via HTTPS: https://github.com/org/repo.git",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        ],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-22: a single reinstall that clones a github.com plugin names the transport under its row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-single-clone-note-"));
+    try {
+      // arrange
+      await seedColdGitHubUrlPlugin(cwd);
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map((n) => n.message),
+        [
+          [
+            "● mp [project]",
+            "  ● gp v9.9.9 (reinstalled)",
+            "    Cloning via HTTPS: https://github.com/org/repo.git",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+        ],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-22: a reinstall whose github.com clone fails names the clone it tried under its failed row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-failed-clone-note-"));
+    try {
+      // arrange
+      await seedColdGitHubUrlPlugin(cwd);
+      const { gitOps } = createGitOps({
+        cloneThrows: new GitCommandError(
+          { kind: "network" },
+          { operation: "clone", exitCode: 128 },
+        ),
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.strictEqual(
+        notifications
+          .flatMap((n) => n.message.split("\n"))
+          .includes("    Cloning via HTTPS: https://github.com/org/repo.git"),
+        true,
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-22, OQ-3: a reinstall that reuses a warm clone names no clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-warm-clone-note-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: GITHUB_URL_SOURCE,
+      });
+      const { gitOps } = createGitOps({ cloneThrows: new Error("a warm clone clones nothing") });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map((n) => n.message),
+        [
+          ["● mp [project]", "  ● gp v9.9.9 (reinstalled)", "", "/reload to pick up changes"].join(
+            "\n",
+          ),
+        ],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

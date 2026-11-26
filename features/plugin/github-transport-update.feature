@@ -138,8 +138,8 @@ Feature: Plugin github transport update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |

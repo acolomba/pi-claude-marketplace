@@ -15,12 +15,14 @@ import {
 } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
+import { withCloneNote } from "./install.messaging.ts";
 import { disclosureCause, revisionVersionSlot } from "./update-row.ts";
 
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext, MarketplaceRows, Plural } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
@@ -83,12 +85,17 @@ export const REINSTALL_CONTEXT = {
  *   marketplaces[] or plugins[].
  * - Callers MUST NOT compose the "/reload to pick up changes" trailer
  *   themselves; notify() aggregates it from the rows.
+ * - D-SG-22: `notes` are the command's clone notes. A reinstalled or failed
+ *   row names the transport of the GitHub clone its plugin ran, read by
+ *   `<plugin>@<marketplace>`; a skipped or manual-recovery row has no clone
+ *   field.
  */
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
   run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
   cardinality: "single" | "plural",
+  notes?: GitHubCloneNotes,
 ): void {
   // Group rows by (scope, marketplace) in input order. Two different scopes
   // for the same marketplace name render as two separate marketplace
@@ -129,7 +136,11 @@ export function renderReinstallPartitionAndNotify(
   // the policy map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
     const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
-      outcomeToPluginMessage(o, run.softDeps),
+      withReinstallCloneNote(
+        outcomeToPluginMessage(o, run.softDeps),
+        notes,
+        `${o.name}@${o.marketplace}`,
+      ),
     );
     return { name: block.name, scope: block.scope, plugins };
   });
@@ -140,6 +151,21 @@ export function renderReinstallPartitionAndNotify(
   // single-vs-plural signal is the invocation FORM, threaded from
   // `reinstallPlugins`.
   notifyWithContext(ctx, run, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
+}
+
+/**
+ * D-SG-22: `row` with the clone note `notes` keeps for `subject`. Only the
+ * reinstalled and failed rows carry a clone field; any other row, and a row
+ * whose subject cloned nothing over GitHub, stays unchanged.
+ */
+function withReinstallCloneNote(
+  row: ReinstallMsg,
+  notes: GitHubCloneNotes | undefined,
+  subject: string,
+): ReinstallMsg {
+  return row.status === "reinstalled" || row.status === "failed"
+    ? withCloneNote(row, notes, subject)
+    : row;
 }
 
 /**
