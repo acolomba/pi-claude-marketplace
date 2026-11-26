@@ -88,10 +88,17 @@ const HTTPS_URL = /^https?:/i;
 /**
  * OQ-1: whether a GitHub source was written as `owner/repo` (with a ref or
  * not), the one spelling Claude Code probes for. A GitHub URL clones as
- * written.
+ * written. The marketplace and plugin plans share it, so they cannot
+ * disagree on which spelling probes.
  */
-function isOwnerRepoSpelling(source: GitHubSource): boolean {
+export function isOwnerRepoSpelling(source: GitHubSource): boolean {
   return !source.raw.includes("://");
+}
+
+/** D-SG-20, upstream `KHi`: the GitHub source a git-subdir `owner/repo` shorthand names. */
+export function shorthandSource(shorthand: string): GitHubSource {
+  const [owner = "", repo = ""] = shorthand.split("/");
+  return { kind: "github", raw: shorthand, owner, repo };
 }
 
 /** Claude Code's SSH clone URL of a GitHub source: `git@github.com:<owner>/<repo>.git`. */
@@ -109,8 +116,7 @@ export function gitHubSshCloneUrl(source: GitHubSource): string {
  */
 export function tagReadUrl(source: GitBackedSource, force: TransportForce | undefined): string {
   if (source.kind === "git-subdir" && isGitSubdirShorthand(source.url)) {
-    const [owner = "", repo = ""] = source.url.split("/");
-    return tagReadUrl({ kind: "github", raw: source.url, owner, repo }, force);
+    return tagReadUrl(shorthandSource(source.url), force);
   }
 
   return source.kind === "github" && force === undefined && isOwnerRepoSpelling(source)
@@ -118,8 +124,8 @@ export function tagReadUrl(source: GitBackedSource, force: TransportForce | unde
     : networkCloneUrl(source);
 }
 
-// The `after` of a plan with one attempt.
-function noRetry(): Promise<undefined> {
+/** The `after` of a plan with one attempt: no attempt follows a failure. */
+export function noRetry(): Promise<undefined> {
   return Promise.resolve(undefined);
 }
 

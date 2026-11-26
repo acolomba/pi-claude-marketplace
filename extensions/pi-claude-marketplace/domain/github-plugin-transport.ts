@@ -23,7 +23,14 @@ import { GitCommandError } from "../shared/errors.ts";
 import { gitHubAddressOf } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
-import { addressTransport, gitHubSshCloneUrl, stopsTheClone } from "./github-transport.ts";
+import {
+  addressTransport,
+  gitHubSshCloneUrl,
+  isOwnerRepoSpelling,
+  noRetry,
+  shorthandSource,
+  stopsTheClone,
+} from "./github-transport.ts";
 import { isGitSubdirShorthand } from "./source.ts";
 
 import type { CloneNoteKind } from "../shared/notification-types.ts";
@@ -69,11 +76,6 @@ export interface PluginClonePlanInput {
   readonly platform?: NodeJS.Platform | undefined;
 }
 
-// The `after` of a plan with one attempt.
-function noRetry(): Promise<undefined> {
-  return Promise.resolve(undefined);
-}
-
 // One attempt as written, with no retry. A GitHub address, however it is
 // spelled, notes the transport its scheme uses; any other address notes
 // nothing.
@@ -94,12 +96,6 @@ function only(attempt: TransportAttempt): TransportPlan {
     note: attempt.transport === "ssh" ? "via-ssh" : "via-https",
     after: noRetry,
   };
-}
-
-// The GitHub source a git-subdir `owner/repo` shorthand names.
-function shorthandSource(shorthand: string): GitHubSource {
-  const [owner = "", repo = ""] = shorthand.split("/");
-  return { kind: "github", raw: shorthand, owner, repo };
 }
 
 // The SSH and HTTPS attempts of a GitHub source.
@@ -258,7 +254,7 @@ export async function planPluginClone(input: PluginClonePlanInput): Promise<Tran
     return only(force === undefined ? ssh : https);
   }
 
-  if (force !== undefined || source.raw.includes("://")) {
+  if (force !== undefined || !isOwnerRepoSpelling(source)) {
     return only({ transport: "https", url: networkCloneUrl(source) });
   }
 

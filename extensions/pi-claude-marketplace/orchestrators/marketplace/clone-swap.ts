@@ -30,7 +30,7 @@
 import { mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 
-import { addressTransport, planMarketplaceClone } from "../../domain/github-transport.ts";
+import { addressTransport, noRetry, planMarketplaceClone } from "../../domain/github-transport.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -151,10 +151,7 @@ export function marketplaceRefreshPlans(
 
 /** One attempt of `url`, with no note, over the transport git uses for it. */
 function oneAttemptPlan(url: string): TransportPlan {
-  return {
-    first: { transport: addressTransport(url), url },
-    after: () => Promise.resolve(undefined),
-  };
+  return { first: { transport: addressTransport(url), url }, after: noRetry };
 }
 
 /** The rename the swap moves whole checkouts with; tests inject a failing one. */

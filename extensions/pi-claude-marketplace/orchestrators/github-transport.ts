@@ -11,7 +11,11 @@ import { planPluginClone } from "../domain/github-plugin-transport.ts";
 import { stopsTheClone } from "../domain/github-transport.ts";
 import { isGitSubdirShorthand } from "../domain/source.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
-import { errorMessage, GitHubTransportsFailedError } from "../shared/errors.ts";
+import {
+  errorMessage,
+  GITHUB_TRANSPORT_LABELS,
+  GitHubTransportsFailedError,
+} from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost } from "../shared/github-base-url.ts";
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 import { redactCredentials } from "../shared/redact-credentials.ts";
@@ -117,8 +121,6 @@ const CHOICE_LINES: Readonly<Partial<Record<CloneNoteKind, string>>> = {
   "ssh-not-configured": "SSH not configured for GitHub, using HTTPS for",
 };
 
-const TRANSPORT_LABELS = { ssh: "SSH", https: "HTTPS" } as const;
-
 // Keeps the plan's note for the run's subject, with the URLs of the retries
 // that ran after its first attempt. T-04-06: a url source can carry a
 // credential in its userinfo, so each URL is kept redacted and every renderer
@@ -195,7 +197,7 @@ async function runAfter<T>(
     retries.length + 1 < MAX_ATTEMPTS
       ? await run.plan.after(failed.error, failed.attempt)
       : undefined;
-  const label = TRANSPORT_LABELS[failed.attempt.transport];
+  const label = GITHUB_TRANSPORT_LABELS[failed.attempt.transport];
   if (next === undefined) {
     if (earlier === undefined || stopsTheClone(failed.error)) {
       throw failed.error;
@@ -209,7 +211,7 @@ async function runAfter<T>(
   }
 
   hookDebugLog(
-    `${label} clone failed for ${run.surface} ${run.subject} (${debugMessage(failed.error)}), falling back to ${TRANSPORT_LABELS[next.transport]}`,
+    `${label} clone failed for ${run.surface} ${run.subject} (${debugMessage(failed.error)}), falling back to ${GITHUB_TRANSPORT_LABELS[next.transport]}`,
     "git",
   );
   await run.beforeRetry?.();

@@ -1446,7 +1446,14 @@ export class GitHubTransportsFailedError extends Error {
   }
 }
 
-const TRANSPORT_LABELS = { ssh: "SSH", https: "HTTPS" } as const;
+/**
+ * D-SG-22: each GitHub transport in Claude Code's words, which the clone
+ * runner's debug lines and the both-failed messages share.
+ */
+export const GITHUB_TRANSPORT_LABELS = { ssh: "SSH", https: "HTTPS" } as const satisfies Record<
+  GitHubTransportAttemptFailure["transport"],
+  string
+>;
 
 function gitHubTransportsMessage(
   surface: "marketplace" | "plugin",
@@ -1455,14 +1462,14 @@ function gitHubTransportsMessage(
 ): string {
   if (surface === "plugin") {
     // eslint-disable-next-line local/no-github-literal -- GHB-02: Claude Code's user-facing remedy names github.com verbatim
-    return `${first.error.message}\nThe retry over ${TRANSPORT_LABELS[last.transport]} failed too: ${last.error.message}\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.`;
+    return `${first.error.message}\nThe retry over ${GITHUB_TRANSPORT_LABELS[last.transport]} failed too: ${last.error.message}\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.`;
   }
 
   return `Fetching the marketplace from GitHub failed on both attempts. ${attemptText(first)}\n\n${attemptText(last)}`;
 }
 
 function attemptText(attempt: GitHubTransportAttemptFailure): string {
-  return `${TRANSPORT_LABELS[attempt.transport]} (${attempt.url}): ${attempt.error.message}`;
+  return `${GITHUB_TRANSPORT_LABELS[attempt.transport]} (${attempt.url}): ${attempt.error.message}`;
 }
 
 function quotedName(name: string): string {
