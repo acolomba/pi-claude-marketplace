@@ -2,6 +2,7 @@ Feature: Plugin github transport update
 
   Updating or reinstalling a plugin whose source is a github owner/repo picks ssh or https the way installing it does, with one probe for the whole command, and the dependency moves of an update follow the same choice (D-SG-19).
   An ssh stand-in first on Pi's path answers the probe and serves the git host's repositories over ssh, and a CONNECT proxy tunnels git's github.com connections to the git host.
+  Each row names the transport of the clone its plugin ran, and the marketplace's block names the re-clone of the marketplace refresh an update runs first (D-SG-22).
 
   Background:
     Given the git repository "ghp" holds these plugins:
@@ -26,8 +27,8 @@ Feature: Plugin github transport update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    |
-      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 2.0.0 |
+      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 2.0.0 | ssh-not-configured | https://github.com/acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
@@ -54,8 +55,8 @@ Feature: Plugin github transport update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    |
-      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 2.0.0 |
+      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 2.0.0 | via-ssh    | git@github.com:acme/ghp.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
@@ -90,9 +91,9 @@ Feature: Plugin github transport update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name     | status  | reasons | scope   | from  | to    | cause chain                                                          | cause truncated | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp      | updated |         | project | 1.0.0 | 2.0.0 |                                                                      |                 |       |                  |
-      | gits             | project           | ghd@gits | ghd@gits | updated |         | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "ghp@gits" | false           |       |                  |
+      | marketplace name | marketplace scope | id       | name     | status  | reasons | scope   | from  | to    | cause chain                                                          | cause truncated | leaks | rollback partial | clone note | clone url                   |
+      | gits             | project           | ghp@gits | ghp      | updated |         | project | 1.0.0 | 2.0.0 |                                                                      |                 |       |                  | via-ssh    | git@github.com:acme/ghp.git |
+      | gits             | project           | ghd@gits | ghd@gits | updated |         | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "ghp@gits" | false           |       |                  | via-ssh    | git@github.com:acme/ghd.git |
     Then the user's ssh receives these launches:
       | argv                                                                                                                |
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                 |
@@ -101,6 +102,28 @@ Feature: Plugin github transport update
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
       | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/ghd.git' |
+    Then the git host receives no request
+
+  Scenario: A plugin update whose github marketplace moved names the transport of the marketplace's re-clone
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   |              |
+    Given the user's ssh authenticates to "github.com" as "acme"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.1.0   |              |
+    When the user runs "/claude:plugin update app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace clone note | marketplace clone url         | id        | name | status  | reasons | scope   | from  | to    |
+      | tools            | project           | via-ssh                | git@github.com:acme/tools.git | app@tools | app  | updated |         | project | 1.0.0 | 1.1.0 |
     Then the git host receives no request
 
   Scenario: Reinstalling a github plugin with no ssh setting clones it over https first

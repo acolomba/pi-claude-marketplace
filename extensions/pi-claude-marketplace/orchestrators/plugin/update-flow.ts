@@ -104,6 +104,7 @@ import {
   buildGitHubAuth,
   hostFromCloneUrl,
 } from "../auth-host.ts";
+import { createGitHubCloneNotes } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
@@ -124,6 +125,7 @@ import {
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { collectPluginClonesLocked } from "./clone-gc.ts";
+import { withCloneNote } from "./install.messaging.ts";
 import {
   materializeLatestVersion,
   recordCandidate,
@@ -155,11 +157,12 @@ import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { CloneTransportNote } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps } from "../auth-host.ts";
-import type { PluginTransportContext } from "../github-transport.ts";
+import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginConvergeFn,
@@ -169,7 +172,11 @@ import type {
 } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { StagingDiagnostic } from "./staging-diagnostics.ts";
-import type { UpdateCascadeOutcome, UpdateHooksRouting } from "./update-cascade.ts";
+import type {
+  UpdateCascadeOutcome,
+  UpdateCloneNotes,
+  UpdateHooksRouting,
+} from "./update-cascade.ts";
 import type {
   MaterializationPolicy,
   UpdatePluginsOptions,
@@ -196,6 +203,7 @@ type UpdateCascadeComposer = (
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure?: boolean,
+  clones?: UpdateCloneNotes,
 ) => void;
 
 /**
@@ -298,6 +306,8 @@ async function syncMarketplaceBySwap(args: {
   readonly auth: GitAuthBundle;
   readonly keepOnUnreachable: boolean;
   readonly renameOps: RenameOps;
+  /** D-SG-22: the collector the re-clone records its note into, under `mpName`. */
+  readonly notes: GitHubCloneNotes;
 }): Promise<void> {
   const { source, mpName, locations, gitOps, auth } = args;
   const liveDir = await locations.sourceCloneDir(mpName);
@@ -314,6 +324,8 @@ async function syncMarketplaceBySwap(args: {
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,
       auth,
+      notes: args.notes,
+      subject: mpName,
       liveMarker: MARKETPLACE_MANIFEST_MARKER,
       keepOnUnreachable: args.keepOnUnreachable,
       ownershipMarker: true,
@@ -351,23 +363,27 @@ async function syncMarketplaceBySwap(args: {
  * allocates the `authMemo` when the caller supplies none and passes it here
  * (D-79-02), so that flow runs at most once per host across the marketplace
  * syncs and the plugin clones.
+ *
+ * D-SG-22: each sync records its re-clone's note into a collector of its own,
+ * under the marketplace's name, as `marketplace update` does, so a same-name
+ * marketplace of the other scope never shows another's note. `cloneNote`
+ * gives that note, and undefined for a sync that cloned nothing.
  */
-function makeSyncCloneOnce(
-  opts: UpdatePluginsOptions,
-): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
+function makeSyncCloneOnce(opts: UpdatePluginsOptions): MarketplaceSyncs {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const gitHubSsh = opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const keepOnUnreachable = keepMarketplaceOnFailure(opts.environment);
   const renameOps = opts.renameOps ?? DEFAULT_RENAME_OPS;
-  const synced = new Set<string>();
-  return async (scope, mpName, locations) => {
+  const synced = new Map<string, GitHubCloneNotes>();
+  const syncOnce = async (scope: Scope, mpName: string, locations: ScopedLocations) => {
     const key = `${scope}/${mpName}`;
     if (synced.has(key)) {
       return;
     }
 
-    synced.add(key);
+    const notes = createGitHubCloneNotes();
+    synced.set(key, notes);
 
     const state = await loadState(locations.extensionRoot);
     const mp = ownValue(state.marketplaces, mpName);
@@ -388,6 +404,7 @@ function makeSyncCloneOnce(
           auth,
           keepOnUnreachable,
           renameOps,
+          notes,
         }),
       );
     }
@@ -395,6 +412,17 @@ function makeSyncCloneOnce(
     // hosted catalog: nothing to sync here; `marketplace update` and autoupdate
     // refresh it, not `plugin update`.
   };
+
+  return {
+    syncOnce,
+    cloneNote: (scope, mpName) => synced.get(`${scope}/${mpName}`)?.noteFor(mpName),
+  };
+}
+
+/** PUP-2: the run's marketplace syncs, once per (scope, marketplace), and their clone notes. */
+interface MarketplaceSyncs {
+  readonly syncOnce: (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void>;
+  readonly cloneNote: (scope: Scope, mpName: string) => CloneTransportNote | undefined;
 }
 
 /** The collaborators `createPluginUpdateOperations` binds into every target's arguments. */
@@ -414,8 +442,7 @@ function buildDirectThreePhaseArgs(
   target: ResolvedTarget,
   cardinality: "single" | "plural",
   bindings: UpdateBindings,
-  constraintTagMemo: Map<string, readonly RemoteTag[]>,
-  constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>,
+  runScoped: DirectRunScoped,
   report: CandidateReport,
 ): DirectThreePhaseArgs {
   return {
@@ -458,8 +485,8 @@ function buildDirectThreePhaseArgs(
     // `updatePluginsWith` and threaded into every target here -- never a
     // per-target allocation, or a repository common to several targets
     // would be listed once per target instead of once per run.
-    constraintTagMemo,
-    constraintMarketplaceTagMemo,
+    constraintTagMemo: runScoped.constraintTagMemo,
+    constraintMarketplaceTagMemo: runScoped.constraintMarketplaceTagMemo,
     cleanupClones: collectPluginClonesLocked,
     ...recordCandidate(report),
     notifyPhaseFailure: (error, failures) => {
@@ -474,9 +501,18 @@ function buildDirectThreePhaseArgs(
         reasonOverride: "rollback partial",
         rollbackPartial: failures,
         report,
+        clones: runScoped.clones,
       });
     },
   };
+}
+
+/** What every target of one direct update run shares. */
+interface DirectRunScoped {
+  readonly constraintTagMemo: Map<string, readonly RemoteTag[]>;
+  readonly constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>;
+  /** D-SG-22: the notes of the run's clones, which its rows read. */
+  readonly clones: UpdateCloneNotes;
 }
 
 /**
@@ -526,19 +562,28 @@ async function updatePluginsWith(
   // most once. A caller-supplied memo wins. D-SG-19: beside it, ONE transport
   // context, so every plugin clone of the run follows one probe. The
   // marketplace syncs plan their own transports (SG-SSH-02).
+  const transportContext = opts.transportContext ?? newTransportContext();
   const runOpts: UpdatePluginsOptions = {
     ...opts,
     authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
-    transportContext: opts.transportContext ?? newTransportContext(),
+    transportContext,
   };
-  const syncCloneOnce = makeSyncCloneOnce(runOpts);
+  const syncs = makeSyncCloneOnce(runOpts);
   // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
   // `UpdatePluginsOptions` -- it is a run-internal bound, not a caller knob,
   // and a caller-supplied memo would outlive the run and serve a stale
   // listing. A fresh pair here is what keeps two separate `updatePlugins`
-  // calls from sharing one.
-  const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
-  const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+  // calls from sharing one. D-SG-22: the rows read the notes of the run's
+  // plugin clones and of its marketplace syncs.
+  const clones: UpdateCloneNotes = {
+    plugins: transportContext.notes,
+    marketplace: syncs.cloneNote,
+  };
+  const runScoped: DirectRunScoped = {
+    constraintTagMemo: new Map<string, readonly RemoteTag[]>(),
+    constraintMarketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
+    clones,
+  };
 
   // Pair each outcome with its target so the cascade renderer can group
   // by (scope, marketplace) per CMC-21 (per-scope rendering, no collapse).
@@ -551,7 +596,7 @@ async function updatePluginsWith(
   for (const t of targets) {
     try {
       // eslint-disable-next-line no-await-in-loop -- syncs each marketplace once; a sync failure aborts the batch
-      await syncCloneOnce(t.scope, t.marketplace, t.locations);
+      await syncs.syncOnce(t.scope, t.marketplace, t.locations);
     } catch (err) {
       // GHB-03: an invalid GitHub base override fails the whole command.
       rethrowInvalidGitHubBaseUrl(err);
@@ -575,8 +620,9 @@ async function updatePluginsWith(
         pluginName: t.marketplace,
         err,
         unknownGitFailure: true,
+        clones,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, []);
+      abortUpdateBatch(ctx, run, outcomes, cardinality, { composeCascade, clones }, []);
       return;
     }
 
@@ -585,15 +631,7 @@ async function updatePluginsWith(
     try {
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
-        buildDirectThreePhaseArgs(
-          runOpts,
-          t,
-          cardinality,
-          bindings,
-          constraintTagMemo,
-          constraintMarketplaceTagMemo,
-          report,
-        ),
+        buildDirectThreePhaseArgs(runOpts, t, cardinality, bindings, runScoped, report),
       );
     } catch (err) {
       // GHB-03: an invalid GitHub base override fails the whole command.
@@ -614,8 +652,9 @@ async function updatePluginsWith(
         pluginName: t.plugin,
         err,
         report,
+        clones,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade, [
+      abortUpdateBatch(ctx, run, outcomes, cardinality, { composeCascade, clones }, [
         updateFailedDiagnostic(t.plugin, t.scope, report),
       ]);
       return;
@@ -646,7 +685,7 @@ async function updatePluginsWith(
         run,
         outcomes,
         cardinality,
-        composeCascade,
+        { composeCascade, clones },
         [updateFailedDiagnostic(t.plugin, t.scope, outcome)],
         outcome,
       );
@@ -656,7 +695,7 @@ async function updatePluginsWith(
     outcomes.push({ target: t, outcome });
   }
 
-  composeCascade(ctx, run, outcomes, cardinality);
+  composeCascade(ctx, run, outcomes, cardinality, false, clones);
   surfaceUpdateDiscoveryWarnings(ctx, run, outcomes);
   surfaceUpdateMcpConfigNotices(ctx, run, outcomes);
 }
@@ -884,12 +923,15 @@ function abortUpdateBatch(
   run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
-  composeCascade: UpdateCascadeComposer,
+  cascade: {
+    readonly composeCascade: UpdateCascadeComposer;
+    readonly clones: UpdateCloneNotes;
+  },
   failedDiagnostics: readonly StagingDiagnostic[],
   failed?: UpdatePhase3FailedOutcome,
 ): void {
   if (outcomes.length > 0) {
-    composeCascade(ctx, run, outcomes, cardinality, true);
+    cascade.composeCascade(ctx, run, outcomes, cardinality, true, cascade.clones);
   }
 
   surfaceCascadeStagingDiagnostics(ctx, run, failed?.dependencyStagingDiagnostics ?? []);
@@ -1240,6 +1282,12 @@ interface NotifyDirectFailureArgs {
    * layer-refusal failures carry none and show no version.
    */
   readonly report?: CandidateReport;
+  /**
+   * D-SG-22: the run's clone notes. The failed row names its plugin's clone,
+   * and the block the marketplace sync's re-clone; absent for a failure no
+   * clone ran before.
+   */
+  readonly clones?: UpdateCloneNotes;
 }
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
@@ -1273,6 +1321,7 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
         })),
       }),
   };
+  const marketplaceClone = args.clones?.marketplace(scope, marketplace);
   notifyWithContext(
     ctx,
     run,
@@ -1281,7 +1330,8 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
       {
         name: marketplace,
         scope,
-        plugins: [failedRow],
+        ...(marketplaceClone !== undefined && { clone: marketplaceClone }),
+        plugins: [withCloneNote(failedRow, args.clones?.plugins, `${pluginName}@${marketplace}`)],
       },
     ],
     undefined,
