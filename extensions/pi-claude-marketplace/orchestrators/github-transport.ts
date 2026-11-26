@@ -9,13 +9,14 @@
 
 import { planPluginClone } from "../domain/github-plugin-transport.ts";
 import { stopsTheClone } from "../domain/github-transport.ts";
-import { isGitSubdirShorthand } from "../domain/source.ts";
+import { isGitHubRepositoryFormat, isGitSubdirShorthand } from "../domain/source.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import {
   appendLeakToError,
   errorMessage,
   GITHUB_TRANSPORT_LABELS,
   GitHubTransportsFailedError,
+  InvalidGitHubRepositoryError,
 } from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost } from "../shared/github-base-url.ts";
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
@@ -371,6 +372,12 @@ function forceApplies(source: GitBackedSource): boolean {
  * platform only when a clone step asks for it, and the clone's note goes to
  * the context's notes under `subject`, `<plugin>@<marketplace>`. The force is
  * read only for a source it applies to (GHB-04).
+ *
+ * IN-A-01 / upstream `zHi`: the plan of a `github` source whose
+ * `<owner>/<repo>` is not an `owner/repo` pair rejects with
+ * `InvalidGitHubRepositoryError`. It rejects before it reads the force or
+ * any check, so no probe, skip check, or attempt runs and no note is kept,
+ * forced HTTPS included.
  */
 export function pluginCloneTransport(
   context: PluginTransportContext,
@@ -378,13 +385,21 @@ export function pluginCloneTransport(
   subject: string,
 ): CloneTransport {
   return {
-    plan: () =>
-      planPluginClone({
+    plan: () => {
+      if (source.kind === "github") {
+        const repository = `${source.owner}/${source.repo}`;
+        if (!isGitHubRepositoryFormat(repository)) {
+          return Promise.reject(new InvalidGitHubRepositoryError(repository));
+        }
+      }
+
+      return planPluginClone({
         source,
         force: forceApplies(source) ? context.force : undefined,
         checks: context.checks,
         platform: context.platform,
-      }),
+      });
+    },
     notes: context.notes,
     subject,
   };

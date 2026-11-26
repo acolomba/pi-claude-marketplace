@@ -102,8 +102,10 @@ export type GitBackedSource = UrlSource | GitSubdirSource | GitHubSource;
 const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/...";
 
 /**
- * D-SG-20 / upstream `KHi`: the GitHub `owner/repo` shorthand a git-subdir
- * `url` may hold in place of a git address.
+ * D-SG-20 / upstream `KHi`, `Uze`, and `zHi`: Claude Code's GitHub
+ * `owner/repo` pattern. It decides the shorthand a git-subdir `url` may hold
+ * in place of a git address, and the repository a `github` plugin source may
+ * name (IN-A-01). One constant keeps the two uses from drifting.
  */
 const GIT_SUBDIR_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
@@ -113,6 +115,15 @@ const GIT_SUBDIR_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
  */
 export function isGitSubdirShorthand(url: string): boolean {
   return GIT_SUBDIR_SHORTHAND.test(url);
+}
+
+/**
+ * IN-A-01 / upstream `zHi`: whether `repository`, a `github` source's
+ * `<owner>/<repo>`, is the `owner/repo` pair Claude Code clones. Claude Code
+ * refuses any other value before it builds a clone URL.
+ */
+export function isGitHubRepositoryFormat(repository: string): boolean {
+  return GIT_SUBDIR_SHORTHAND.test(repository);
 }
 
 /** MM-4: non-relative string sources -- the "fallthrough" reason. */
