@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 32
+open_count: 35
 waived_count: 52
 fixed_count: 48
-total_count: 132
-last_updated: 2026-11-26T00:08:31.629Z
+total_count: 135
+last_updated: 2026-11-26T01:23:49.245Z
 ---
 
 # Broken Windows Ledger
@@ -147,6 +147,9 @@ last_updated: 2026-11-26T00:08:31.629Z
 | 130 | 4 | deviation | extensions/pi-claude-marketplace/shared/notification-types.ts |  | [system-git] An install that lands disabled (DFEN-04) shows no clone note: PluginDisabledMessage has no clone field (D-SG-22) | open |  | 2026-11-26T00:08:31.423Z |  |
 | 131 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts |  | [system-git] A failure while an install plans its dependency moves shows no clone note: projectCaughtFailure is called without the install's notes (D-SG-22) | open |  | 2026-11-26T00:08:31.525Z |  |
 | 132 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts |  | [system-git] A D-MF-04 add of a dependency's other marketplace shows no clone note: the install notification has no block for that marketplace (D-SG-22) | open |  | 2026-11-26T00:08:31.629Z |  |
+| 133 | 4 | deviation | extensions/pi-claude-marketplace/shared/notification-types.ts |  | [system-git] A skipped, partially-upgradable, or manual-recovery update or reinstall row that cloned shows no clone note: the row types have no clone field (D-SG-22) | open |  | 2026-11-26T01:23:48.974Z |  |
+| 134 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts |  | [system-git] The autoupdate cascade's plugin rows show no clone note for the plugin clones the cascade runs (D-SG-22) | open |  | 2026-11-26T01:23:49.108Z |  |
+| 135 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts |  | [system-git] A bulk update where every plugin stayed up to date drops its blocks, so a PUP-2 marketplace sync re-clone there shows no clone note (D-SG-22) | open |  | 2026-11-26T01:23:49.245Z |  |
 
 ````json
 [
@@ -1807,6 +1810,45 @@ last_updated: 2026-11-26T00:08:31.629Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-26T00:08:31.629Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 133,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/shared/notification-types.ts",
+    "line": null,
+    "description": "[system-git] A skipped, partially-upgradable, or manual-recovery update or reinstall row that cloned shows no clone note: the row types have no clone field (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T01:23:48.974Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 134,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
+    "line": null,
+    "description": "[system-git] The autoupdate cascade's plugin rows show no clone note for the plugin clones the cascade runs (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T01:23:49.108Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 135,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+    "line": null,
+    "description": "[system-git] A bulk update where every plugin stayed up to date drops its blocks, so a PUP-2 marketplace sync re-clone there shows no clone note (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T01:23:49.245Z",
     "resolved_at": null,
     "milestone": null
   }
