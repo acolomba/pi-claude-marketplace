@@ -18,6 +18,8 @@
  * a file there, move a plugin's recorded plugin root outside its
  * marketplace, leave a plugin's recorded options unreadable, and set the scope
  * a marketplace's record names, as a hand edit of the installation record can.
+ * One leaves the installation record readable but not saveable, by holding it
+ * in a read-only directory, so a command fails at its save.
  * One also writes a file as a plugin does at run time, creating the data
  * directory that a dependency install does not create. Others rewrite the whole installation record
  * as an earlier release wrote it, or with a schema version newer than this
@@ -46,13 +48,14 @@ import {
 import { isPlainObject } from "../../lib/field-rows.ts";
 import { readGitClones } from "../../lib/git-clones.ts";
 import {
+  holdInstallationRecordReadOnly,
   readMarketplaceRecord,
   readPluginRecord,
   relocatePluginRoot,
   rewriteMarketplaceRecord,
   rewritePluginRecord,
 } from "../../lib/installation-record.ts";
-import { projectTokens } from "../../lib/run-tokens.ts";
+import { INSTALLATION_RECORD_SAVE_ERROR_TOKEN, projectTokens } from "../../lib/run-tokens.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -441,6 +444,20 @@ Given(
     const schemaVersion = await rewriteStateWithNewerSchema(this.scopeRoot(scope));
     const state = await readRecordFile(this, scope);
     assert.strictEqual(Reflect.get(state, "schemaVersion"), schemaVersion);
+  },
+);
+
+// The record still loads through the link, but its save is refused, so a
+// command fails after its ledger ran. The release makes the held directory
+// writable again before the sandbox is removed.
+Given(
+  "the installation record of the {word} scope can be read but no longer saved",
+  async function (this: ScenarioWorld, scope: string) {
+    const before = await readRecordFile(this, scope);
+    const held = await holdInstallationRecordReadOnly(this.scopeRoot(scope));
+    this.onRelease(held.release);
+    assert.deepStrictEqual(await readRecordFile(this, scope), before);
+    this.recordErrorMessage(INSTALLATION_RECORD_SAVE_ERROR_TOKEN, held.saveError);
   },
 );
 

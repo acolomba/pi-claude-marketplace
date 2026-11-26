@@ -27,8 +27,11 @@
  * `{read-only skill directory removal error}` also stands for its message with
  * each quoted path replaced by any path that ends in that segment, because
  * install shows that cause at a path where the step cannot make its call
- * (D-PL6-16). A message can hold a sandbox path, so a result is projected
- * through the error tokens before any other.
+ * (D-PL6-16). Only `{installation record save error}` also stands for its
+ * message with any number on the quoted temporary file, because
+ * write-file-atomic numbers that file differently on every run. A message can
+ * hold a sandbox path, so a result is projected through the error tokens
+ * before any other.
  */
 
 import path from "node:path";
@@ -73,6 +76,18 @@ const SCENARIO_TIME_TOKEN = "{scenario time}";
  */
 export const READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN = "{read-only skill directory removal error}";
 
+/**
+ * The error token of a save of an installation record held read-only. It
+ * alone matches its message with any number on the quoted temporary file,
+ * because write-file-atomic numbers that file differently on every run.
+ */
+export const INSTALLATION_RECORD_SAVE_ERROR_TOKEN = "{installation record save error}";
+
+// Escapes `text` for a regular expression.
+function escapeRegExp(text: string): string {
+  return text.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
 // Pi stamps with `toISOString()` on the worker's clock, so a timestamp of
 // this scenario is an exact ISO string inside the window, to the millisecond.
 function isScenarioTime(value: string, startedAt: number): boolean {
@@ -96,12 +111,37 @@ export function cutQuotedPaths(message: string): string {
 // Matches `message` with each quoted path cut to its last segment, or with
 // that path replaced by any path that ends in the segment.
 function anyQuotedPathPattern(message: string): RegExp {
-  const escape = (text: string): string => text.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const pattern = cutQuotedPaths(message)
     .split(/'([^']+)'/u)
-    .map((part, index) => (index % 2 === 0 ? escape(part) : `'(?:[^']*/)?${escape(part)}'`))
+    .map((part, index) =>
+      index % 2 === 0 ? escapeRegExp(part) : `'(?:[^']*/)?${escapeRegExp(part)}'`,
+    )
     .join("");
   return new RegExp(pattern, "gu");
+}
+
+// Matches `message`, or `message` with each quoted path cut to its last
+// segment, with any digits in place of the number that ends a quoted path.
+function anyTemporaryNumberPattern(message: string): RegExp {
+  const form = (text: string): string =>
+    text
+      .split(/(?<=\.)\d+(?=')/u)
+      .map(escapeRegExp)
+      .join("\\d+");
+  return new RegExp(`${form(message)}|${form(cutQuotedPaths(message))}`, "gu");
+}
+
+// The second form of the error message `standsFor` that projects back to
+// `token`, after the message itself.
+function shorterErrorForm(token: string, standsFor: string): string | RegExp {
+  switch (token) {
+    case READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN:
+      return anyQuotedPathPattern(standsFor);
+    case INSTALLATION_RECORD_SAVE_ERROR_TOKEN:
+      return anyTemporaryNumberPattern(standsFor);
+    default:
+      return cutQuotedPaths(standsFor);
+  }
 }
 
 /**
@@ -134,7 +174,9 @@ export function expandTokens(text: string, tokens: RunTokens): string {
  * otherwise every occurrence of a recorded error message, then of that
  * message with its quoted paths cut, becomes its error token. For
  * `{read-only skill directory removal error}` alone, the cut paths can also
- * stand at any path that ends in the same segment (D-PL6-16). Then every
+ * stand at any path that ends in the same segment (D-PL6-16), and for
+ * `{installation record save error}` alone, the temporary file's number can be
+ * any digits, in the message and in its cut form. Then every
  * occurrence of a sandbox directory becomes its token, every
  * occurrence of the git host's address becomes `{git host}`, every
  * occurrence of a revision's commit becomes its commit token, and every
@@ -147,11 +189,9 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
 
   let projected = value;
   for (const [token, standsFor] of tokens.errors) {
-    const shorter =
-      token === READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN
-        ? anyQuotedPathPattern(standsFor)
-        : cutQuotedPaths(standsFor);
-    projected = projected.replaceAll(standsFor, token).replaceAll(shorter, token);
+    projected = projected
+      .replaceAll(standsFor, token)
+      .replaceAll(shorterErrorForm(token, standsFor), token);
   }
 
   projected = projected

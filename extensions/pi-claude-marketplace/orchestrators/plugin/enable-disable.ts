@@ -102,6 +102,7 @@ import {
   type EnableCascadeMemberRow,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
+import { withCloneNote } from "./install.messaging.ts";
 import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   absentTargetReasons,
@@ -378,6 +379,14 @@ type SetEnabledOutcome =
       cause: Error;
       recordedVersion?: string;
       rollbackPartials?: readonly RollbackPartial[];
+      /**
+       * D-SG-22: the key of the cascade member whose phase failed, whose clone
+       * the root's failed row names, labelled with this key. Absent when the
+       * root's own phase or the config phase failed, and on every path that
+       * runs no cascade. Module-private: the typed result an orchestrated
+       * caller gets has no such member.
+       */
+      failingMember?: string;
     }
   | {
       kind: "disable-failed";
@@ -920,6 +929,13 @@ interface EnableCascadeRun {
    * beside `root`. A member's warnings never land here.
    */
   rootStagingWarnings?: readonly StagingWarning[];
+  /**
+   * D-SG-22: the key of the member whose phase threw, set by that phase's
+   * catch before it rethrows. `runPhases` reports the error and not the phase,
+   * so the run is the one place that knows it. Unset when the root's or the
+   * config phase threw, or when nothing did.
+   */
+  failingMember?: string;
 }
 
 /**
@@ -1068,6 +1084,8 @@ function buildEnableCascadeMemberPhase(
         // rethrows (mirrors `runEnableBranch`'s own I4 comment) -- carry it
         // into the run so the caller can thread it into the failed outcome.
         run.rollbackPartials.push(...capture.rollbackPartials);
+        // D-SG-22: the root's failed row names this member's clone.
+        run.failingMember = member.key;
         throw err;
       }
 
@@ -1248,6 +1266,51 @@ function enableCascadeRollbackPartials(
 }
 
 /**
+ * The `ok: false` result of an enable cascade ledger that `runPhases`
+ * reported failed. D-SG-22: `failingMember` is the member whose phase threw,
+ * absent when the root's or the config phase did.
+ */
+interface EnableCascadeFailure {
+  readonly ok: false;
+  readonly error: Error;
+  readonly rollbackPartials: readonly RollbackPartial[];
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
+  readonly failingMember?: string;
+}
+
+/** The `ok: false` result of `run`'s failed ledger `result`. */
+function enableCascadeFailure(
+  run: EnableCascadeRun,
+  result: RunPhasesResult & { readonly error: Error },
+): EnableCascadeFailure {
+  return {
+    ok: false,
+    error: result.error,
+    rollbackPartials: enableCascadeRollbackPartials(run, result),
+    mcpConfigNotices: run.mcpConfigNotices,
+    ...(run.failingMember !== undefined && { failingMember: run.failingMember }),
+  };
+}
+
+/**
+ * The `enable-failed` outcome of an enable cascade ledger that failed, for
+ * the root `installed`. D-SG-22: it carries the failing member, whose clone
+ * the root's failed row names.
+ */
+function enableCascadeFailedOutcome(
+  failure: EnableCascadeFailure,
+  installed: InstalledPluginRecord,
+): SetEnabledOutcome {
+  return {
+    kind: "enable-failed",
+    cause: failure.error,
+    recordedVersion: installed.version,
+    ...(failure.rollbackPartials.length > 0 && { rollbackPartials: failure.rollbackPartials }),
+    ...(failure.failingMember !== undefined && { failingMember: failure.failingMember }),
+  };
+}
+
+/**
  * WR-08: the config write(s) that overwrite a member's -- and, on the
  * fresh-root path, the root's own -- stale `enabled: false` entry, as the
  * FINAL phase of the SAME ledger the cascade's members (and, on that path,
@@ -1307,12 +1370,7 @@ async function runEnableCascadeMembers(
       readonly hydratable: readonly EnableCascadeHydratableMember[];
       readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
-  | {
-      readonly ok: false;
-      readonly error: Error;
-      readonly rollbackPartials: readonly RollbackPartial[];
-      readonly mcpConfigNotices: readonly McpConfigNotice[];
-    }
+  | EnableCascadeFailure
 > {
   const { run, phases } = buildEnableCascadeMemberPhases(
     transaction,
@@ -1330,12 +1388,7 @@ async function runEnableCascadeMembers(
   const result = await runPhases(phases, run);
   if (!result.ok) {
     assertFailedPhasesHasError(result);
-    return {
-      ok: false,
-      error: result.error,
-      rollbackPartials: enableCascadeRollbackPartials(run, result),
-      mcpConfigNotices: run.mcpConfigNotices,
-    };
+    return enableCascadeFailure(run, result);
   }
 
   return {
@@ -1374,12 +1427,7 @@ async function runEnableCascadeWithRoot(args: {
       readonly mcpConfigNotices: readonly McpConfigNotice[];
       readonly rootStagingWarnings: readonly StagingWarning[];
     }
-  | {
-      readonly ok: false;
-      readonly error: Error;
-      readonly rollbackPartials: readonly RollbackPartial[];
-      readonly mcpConfigNotices: readonly McpConfigNotice[];
-    }
+  | EnableCascadeFailure
 > {
   const {
     transaction,
@@ -1408,12 +1456,7 @@ async function runEnableCascadeWithRoot(args: {
   const result = await runPhases(phases, run);
   if (!result.ok) {
     assertFailedPhasesHasError(result);
-    return {
-      ok: false,
-      error: result.error,
-      rollbackPartials: enableCascadeRollbackPartials(run, result),
-      mcpConfigNotices: run.mcpConfigNotices,
-    };
+    return enableCascadeFailure(run, result);
   }
 
   assertRootMaterialized(run);
@@ -2247,17 +2290,7 @@ async function settleIdempotentEnableCascade(args: {
   );
   sink.mcpConfigNotices = materialized.mcpConfigNotices;
   if (!materialized.ok) {
-    return {
-      rows: [],
-      outcome: {
-        kind: "enable-failed",
-        cause: materialized.error,
-        recordedVersion: installed.version,
-        ...(materialized.rollbackPartials.length > 0 && {
-          rollbackPartials: materialized.rollbackPartials,
-        }),
-      },
-    };
+    return { rows: [], outcome: enableCascadeFailedOutcome(materialized, installed) };
   }
 
   if (materialized.wrote) {
@@ -2330,15 +2363,7 @@ async function runFreshEnableCascadeWithRoot(args: {
   });
   sink.mcpConfigNotices = merged.mcpConfigNotices;
   if (!merged.ok) {
-    return {
-      rows: [],
-      outcome: {
-        kind: "enable-failed",
-        cause: merged.error,
-        recordedVersion: installed.version,
-        ...(merged.rollbackPartials.length > 0 && { rollbackPartials: merged.rollbackPartials }),
-      },
-    };
+    return { rows: [], outcome: enableCascadeFailedOutcome(merged, installed) };
   }
 
   // D-PL1-12: only a merged ledger that completed reports the root's
@@ -2662,22 +2687,31 @@ async function runSetEnabledOutcome(
       // marketplace) carries the reason that names the fact its cause line
       // states. FLR-01 / D-02: a held state lock reads `lock held`. Every other
       // transaction throw keeps the brace-less `(failed)` row.
+      //
+      // D-SG-22: an enable that threw after its ledger re-cloned the root (a
+      // failed save, for instance) names that clone, read under the root's
+      // key. A throw before the ledger finds no note, and a disable clones
+      // nothing, so both rows keep their bytes.
       emitEnableDisableFailedRow({
         ctx,
         run,
         enable,
         marketplace,
         scope,
-        row: {
-          status: "failed",
-          name: plugin,
-          reasons: standaloneTransactionThrowReasons(cause),
-          cause,
-          // D-03/D-06: a transaction-throw enable/disable failure -> error, no
-          // reload.
-          severity: "error",
-          needsReload: false,
-        },
+        row: withCloneNote<PluginFailedMessage>(
+          {
+            status: "failed",
+            name: plugin,
+            reasons: standaloneTransactionThrowReasons(cause),
+            cause,
+            // D-03/D-06: a transaction-throw enable/disable failure -> error, no
+            // reload.
+            severity: "error",
+            needsReload: false,
+          },
+          enable ? opts.transportContext.notes : undefined,
+          `${plugin}@${marketplace}`,
+        ),
       });
       // AFILE-04: a throw after a rewrite (a config write or the save) still
       // reports the comments that rewrite removed.
@@ -3152,12 +3186,20 @@ function dispatchOutcome(args: {
     // notification -- root plus every classified member, sorted. A
     // one-element sort is a no-op, so a root with no members composes to
     // `[enableRow]` alone (pinned by the `enable-fresh` catalog state).
+    //
+    // D-SG-22: the root row names the root's own clone, or, when a cascade
+    // member's phase failed, that member's clone, labelled with its key.
+    const failingMember = outcome.kind === "enable-failed" ? outcome.failingMember : undefined;
     const rows = composeEnableCascadeRows({
       scope,
       rootRow: enableRow,
       members: cascadeRows,
       ...(notes !== undefined && {
-        clones: { notes, rootSubject: `${plugin}@${marketplace}` },
+        clones: {
+          notes,
+          rootSubject: `${plugin}@${marketplace}`,
+          ...(failingMember !== undefined && { failingMember }),
+        },
       }),
     });
     notifyWithContext(

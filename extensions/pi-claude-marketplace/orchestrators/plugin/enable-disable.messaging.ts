@@ -78,20 +78,28 @@ export type EnableCascadeMemberRow = PluginInstalledMessage | PluginSkippedMessa
  *
  * D-SG-22: with `clones`, the command's notes, the root row names the clone
  * kept under `rootSubject`, its `<plugin>@<marketplace>`, and each member row
- * the clone kept under its own key, which is its name.
+ * the clone kept under its own key, which is its name. With `failingMember`,
+ * the key of the cascade member whose phase failed the enable, the root's
+ * failed row names that member's clone instead, labelled with the key: the
+ * failure shows no member row, and the root, whose phase runs after every
+ * member's, cloned nothing of its own.
  */
 export function composeEnableCascadeRows(args: {
   readonly scope: Scope;
   readonly rootRow: EnableMsg;
   readonly members: readonly EnableCascadeMemberRow[];
-  readonly clones?: { readonly notes: GitHubCloneNotes; readonly rootSubject: string };
+  readonly clones?: {
+    readonly notes: GitHubCloneNotes;
+    readonly rootSubject: string;
+    readonly failingMember?: string;
+  };
 }): readonly EnableMsg[] {
   const { clones } = args;
   const rows: EnableMsg[] =
     clones === undefined
       ? [args.rootRow, ...args.members]
       : [
-          withEnableCloneNote(args.rootRow, clones.notes, clones.rootSubject),
+          withRootCloneNote(args.rootRow, clones),
           ...args.members.map((member) => withEnableCloneNote(member, clones.notes, member.name)),
         ];
   return [...rows].sort((a, b) =>
@@ -110,6 +118,31 @@ export function composeEnableCascadeRows(args: {
  */
 function withEnableCloneNote(row: EnableMsg, notes: GitHubCloneNotes, subject: string): EnableMsg {
   return row.status === "skipped" ? row : withCloneNote(row, notes, subject);
+}
+
+/**
+ * D-SG-22: the root `row` with the note of its own clone, or, with
+ * `failingMember`, with the failing member's note labelled with that member's
+ * key (the `<plugin>: ` prefix and `clone.plugin`), so the note never shows
+ * under the root's name.
+ */
+function withRootCloneNote(
+  row: EnableMsg,
+  clones: {
+    readonly notes: GitHubCloneNotes;
+    readonly rootSubject: string;
+    readonly failingMember?: string;
+  },
+): EnableMsg {
+  const { notes, rootSubject, failingMember } = clones;
+  if (failingMember === undefined) {
+    return withEnableCloneNote(row, notes, rootSubject);
+  }
+
+  const note = notes.noteFor(failingMember);
+  return note === undefined || row.status === "skipped"
+    ? row
+    : { ...row, clone: { ...note, plugin: failingMember } };
 }
 
 /** The command label and complete per-status reason policy. */
