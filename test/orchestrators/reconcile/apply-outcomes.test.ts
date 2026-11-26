@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   carriedMcpConfigNotices,
   carriedStagingWarnings,
   classifyOrchestratorThrow,
-  installFailureReasonFields,
   classifyReadPassThrow,
   cascadeDisabledOutcome,
   dependencyDisabledOutcome,
+  installFailedOutcomes,
   MigrateConfigSaveError,
   sourceMismatchOutcomeSubject,
   sourceMismatchOutcomes,
@@ -54,8 +55,10 @@ import {
   hygieneWarning,
 } from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 
+import type { GitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type { CloneTransportNote } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
 void ({ scope: "project", marketplace: "official" } satisfies OutcomeBase);
 void ({ scope: "user", marketplace: "official", plugin: "formatter" } satisfies PluginOutcomeBase);
@@ -649,7 +652,22 @@ describe("sourceMismatchOutcomes", () => {
   });
 });
 
-describe("installFailureReasonFields", () => {
+describe("installFailedOutcomes: the reasons of a failed row", () => {
+  /** REC-06: the reason fields of the one row a failed install of `error` gives. */
+  function reasonFieldsOf(
+    error: Error,
+    known?: "cross-marketplace",
+  ): { readonly reason: string; readonly reasons?: readonly string[] } {
+    const [row] = installFailedOutcomes(
+      { scope: "project", marketplace: "official", plugin: "formatter" },
+      { error, ...(known !== undefined && { reason: known }) },
+      [],
+      createGitHubCloneNotes(),
+    );
+    assert.ok(row);
+    return { reason: row.reason, ...(row.reasons !== undefined && { reasons: row.reasons }) };
+  }
+
   test("REC-06: narrows a plugin that cannot be installed as install does", () => {
     // arrange
     const error = new PluginShapeError({
@@ -661,7 +679,7 @@ describe("installFailureReasonFields", () => {
     });
 
     // act
-    const fields = installFailureReasonFields(error);
+    const fields = reasonFieldsOf(error);
 
     // assert
     assert.deepStrictEqual(fields, {
@@ -680,7 +698,7 @@ describe("installFailureReasonFields", () => {
     });
 
     // act
-    const fields = installFailureReasonFields(error);
+    const fields = reasonFieldsOf(error);
 
     // assert
     assert.deepStrictEqual(fields, { reason: "no longer installable", reasons: ["lsp"] });
@@ -695,7 +713,7 @@ describe("installFailureReasonFields", () => {
     });
 
     // act
-    const fields = installFailureReasonFields(error);
+    const fields = reasonFieldsOf(error);
 
     // assert
     assert.deepStrictEqual(fields, { reason: "not in manifest" });
@@ -706,7 +724,7 @@ describe("installFailureReasonFields", () => {
     const error = new Error("cross-marketplace dependency");
 
     // act
-    const fields = installFailureReasonFields(error, "cross-marketplace");
+    const fields = reasonFieldsOf(error, "cross-marketplace");
 
     // assert
     assert.deepStrictEqual(fields, { reason: "cross-marketplace" });
@@ -717,7 +735,7 @@ describe("installFailureReasonFields", () => {
     const error = new StateLockHeldError("project", "/work/project/.state-lock");
 
     // act
-    const fields = installFailureReasonFields(error);
+    const fields = reasonFieldsOf(error);
 
     // assert
     assert.deepStrictEqual(fields, { reason: "lock held" });
@@ -1438,6 +1456,238 @@ describe("stagingDiagnosticsOf", () => {
       diagnostics.map(({ plugin }) => plugin),
       ["linter", "formatter"],
     );
+  });
+});
+
+describe("installFailedOutcomes", () => {
+  const op = { scope: "project", marketplace: "mp", plugin: "app" } as const;
+  const APP_CLONE = {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/app.git",
+  } as const satisfies CloneTransportNote;
+  const LIB_CLONE = {
+    note: "via-ssh",
+    url: "git@github.com:acme/lib.git",
+  } as const satisfies CloneTransportNote;
+  const SECRET = "/home/someone/secret";
+
+  /** The clone notes of one install call, holding `entries` by subject. */
+  function notesOf(entries: Readonly<Record<string, CloneTransportNote>>): GitHubCloneNotes {
+    const notes = createGitHubCloneNotes();
+    for (const [subject, note] of Object.entries(entries)) {
+      notes.record(subject, note);
+    }
+
+    return notes;
+  }
+
+  /** A dependency cascade failure of `key` whose cause names an absolute path. */
+  function cascadeError(key: string): DependencyCascadeError {
+    return new DependencyCascadeError(`${key} failed at ${SECRET}`, key, {
+      cause: new Error(`unlink ${SECRET}/data.txt`),
+    });
+  }
+
+  /** The plugin, reason, and clone of each row, the fields this suite reads. */
+  function summary(
+    outcomes: readonly PluginInstallFailedOutcome[],
+  ): readonly { readonly plugin: string; readonly reason: string; readonly clone?: unknown }[] {
+    return outcomes.map((outcome) => ({
+      plugin: outcome.plugin,
+      reason: outcome.reason,
+      ...("clone" in outcome && { clone: outcome.clone }),
+    }));
+  }
+
+  test("D-SG-22, T-04-72: a dependency whose undo could not finish names its own clone, and the requested plugin keeps its own", () => {
+    // arrange
+    const notes = notesOf({ "app@mp": APP_CLONE, "lib@mp": LIB_CLONE });
+    const result = {
+      error: cascadeError("lib@mp"),
+      rollbackPartials: [{ phase: "skills", cause: new Error(`EACCES ${SECRET}`) }],
+    };
+
+    // act
+    const outcomes = installFailedOutcomes(op, result, [], notes);
+
+    // assert
+    assert.deepStrictEqual(summary(outcomes), [
+      { plugin: "app", reason: "dependency failed", clone: APP_CLONE },
+      { plugin: "lib", reason: "rollback partial", clone: LIB_CLONE },
+    ]);
+    const [requested, dependency] = outcomes;
+    assert.equal(requested !== undefined && "rollbackPartials" in requested, false);
+    assert.ok(dependency);
+    assert.equal(dependency.marketplace, "mp");
+    assert.deepStrictEqual(
+      dependency.rollbackPartials?.map((partial) => partial.phase),
+      ["skills"],
+    );
+    assert.equal(JSON.stringify(dependency.rollbackPartials).includes(SECRET), false);
+    assert.ok(dependency.cause instanceof DependencyCascadeError);
+    assert.equal(dependency.cause.key, "lib@mp");
+    assert.equal(dependency.cause.message.includes(SECRET), false);
+    assert.equal(String(dependency.cause.cause).includes(SECRET), false);
+  });
+
+  test("D-SG-22, OQ-3: an install call that cloned nothing gives neither row a clone", () => {
+    // arrange
+    const result = {
+      error: cascadeError("lib@mp"),
+      rollbackPartials: [{ phase: "skills" }],
+    };
+
+    // act
+    const outcomes = installFailedOutcomes(op, result, [], notesOf({}));
+
+    // assert
+    assert.deepStrictEqual(summary(outcomes), [
+      { plugin: "app", reason: "dependency failed" },
+      { plugin: "lib", reason: "rollback partial" },
+    ]);
+  });
+
+  test("D-PL6-15: the dependency's row of another marketplace keeps the name order, under its own marketplace", () => {
+    // arrange
+    const notes = notesOf({ "app@mp": APP_CLONE, "aaa@other": LIB_CLONE });
+    const result = { error: cascadeError("aaa@other"), rollbackPartials: [{ phase: "skills" }] };
+
+    // act
+    const outcomes = installFailedOutcomes(op, result, [], notes);
+
+    // assert
+    assert.deepStrictEqual(summary(outcomes), [
+      { plugin: "aaa", reason: "rollback partial", clone: LIB_CLONE },
+      { plugin: "app", reason: "dependency failed", clone: APP_CLONE },
+    ]);
+    assert.deepStrictEqual(
+      outcomes.map((outcome) => outcome.marketplace),
+      ["other", "mp"],
+    );
+  });
+
+  test("MIM-03: a dependency an earlier row shows with its phases gets no second row", () => {
+    // arrange
+    const shown: PluginInstallFailedOutcome = {
+      kind: "plugin-install-failed",
+      scope: "project",
+      marketplace: "mp",
+      plugin: "lib",
+      reason: "rollback partial",
+      rollbackPartials: [{ phase: "skills" }],
+    };
+    const { rollbackPartials: _phases, ...withoutPhases } = shown;
+    const nearMisses: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "lib",
+        dependencies: [],
+      },
+      withoutPhases,
+      { ...shown, scope: "user" },
+      { ...shown, marketplace: "other" },
+      { ...shown, plugin: "lab" },
+    ];
+    const result = { error: cascadeError("lib@mp"), rollbackPartials: [{ phase: "skills" }] };
+    const notes = notesOf({});
+
+    // act
+    const beside = installFailedOutcomes(op, result, nearMisses, notes);
+    const after = installFailedOutcomes(op, result, [...nearMisses, shown], notes);
+
+    // assert
+    assert.deepStrictEqual(
+      beside.map((outcome) => outcome.plugin),
+      ["app", "lib"],
+    );
+    assert.deepStrictEqual(
+      after.map((outcome) => outcome.plugin),
+      ["app"],
+    );
+  });
+
+  test("MIM-03: the undo steps of another member ride the requested plugin's row", () => {
+    // arrange
+    const notes = notesOf({ "app@mp": APP_CLONE, "lib@mp": LIB_CLONE });
+    const result = {
+      error: cascadeError("lib@mp"),
+      rollbackPartials: [{ phase: "other@mp", cause: new Error(`EACCES ${SECRET}`) }],
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    } as const;
+
+    // act
+    const outcomes = installFailedOutcomes(op, result, [], notes);
+
+    // assert
+    assert.deepStrictEqual(summary(outcomes), [
+      { plugin: "app", reason: "dependency failed", clone: APP_CLONE },
+    ]);
+    const [requested] = outcomes;
+    assert.ok(requested);
+    assert.deepStrictEqual(
+      requested.rollbackPartials?.map((partial) => partial.phase),
+      ["other@mp"],
+    );
+    assert.deepStrictEqual(requested.mcpConfigNotices, result.mcpConfigNotices);
+  });
+
+  test("RESV-06: a failure with no unfinished undo is one row, with the cause only a cascade or a pin carries", () => {
+    // arrange
+    const notes = notesOf({ "app@mp": APP_CLONE });
+    const pin = new DirectoryPinUnsatisfiedError({
+      plugin: "app",
+      manifestVersion: "1.0.0",
+      ranges: ">=2",
+      requiredBy: [],
+    });
+    const bare = new DependencyCascadeError(`lib failed at ${SECRET}`, "lib@mp");
+
+    // act
+    const [cascade] = installFailedOutcomes(op, { error: bare }, [], notes);
+    const [pinned] = installFailedOutcomes(op, { error: pin }, [], notes);
+    const [plain] = installFailedOutcomes(
+      op,
+      { error: new Error("boom"), reason: "cross-marketplace" },
+      [],
+      notes,
+    );
+
+    // assert
+    assert.ok(cascade);
+    assert.ok(cascade.cause instanceof DependencyCascadeError);
+    assert.equal(cascade.cause.message.includes(SECRET), false);
+    assert.equal(cascade.cause.cause, undefined);
+    assert.deepStrictEqual(cascade.clone, APP_CLONE);
+    assert.ok(pinned);
+    assert.strictEqual(pinned.cause, pin);
+    assert.ok(plain);
+    assert.deepStrictEqual(summary([plain]), [
+      { plugin: "app", reason: "cross-marketplace", clone: APP_CLONE },
+    ]);
+    assert.equal("cause" in plain, false);
+  });
+
+  test("MIM-03 / D-PL6-12: an undo of the plugin's own that could not finish reads rollback partial, redacted", () => {
+    // arrange
+    const notes = notesOf({ "app@mp": APP_CLONE });
+    const result = {
+      error: new Error(`read ${SECRET}`),
+      rollbackPartials: [{ phase: "skills", cause: new Error(`EACCES ${SECRET}`) }],
+    };
+
+    // act
+    const outcomes = installFailedOutcomes(op, result, [], notes);
+
+    // assert
+    assert.deepStrictEqual(summary(outcomes), [
+      { plugin: "app", reason: "rollback partial", clone: APP_CLONE },
+    ]);
+    const [row] = outcomes;
+    assert.ok(row);
+    assert.equal(String(row.cause).includes(SECRET), false);
+    assert.equal(JSON.stringify(row.rollbackPartials).includes(SECRET), false);
   });
 });
 

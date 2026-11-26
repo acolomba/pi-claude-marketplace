@@ -7090,6 +7090,123 @@ test("D-SG-22: an import names the clone of its marketplace add, of each install
   verifyBoundary();
 });
 
+/**
+ * D-SG-22 / T-04-72: an install of `app` whose github dependency `lib` cloned
+ * and then could not finish its undo. The call's own view holds a different
+ * note for each, so a row that read the other's note fails the case.
+ */
+function dependencyRollbackInstall(): Collaborators["installPlugin"] {
+  return (options) => {
+    options.transportContext?.notes.record("app@mp", {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/app.git",
+    });
+    options.transportContext?.notes.record("lib@mp", {
+      note: "via-ssh",
+      url: "git@github.com:acme/lib.git",
+    });
+    const undoFailure = new Error("EACCES: permission denied, unlink 'data.txt'");
+    return Promise.resolve({
+      ...failedInstallOutcome(new DependencyCascadeError("lib failed", "lib@mp"), "lib failed"),
+      rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+    });
+  };
+}
+
+test("D-SG-22 / T-04-72: a dependency whose rollback could not finish names its own clone, and the plugin keeps its own", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "transport-dependency-rollback");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: dependencyRollbackInstall(),
+      loadSettings: () => Promise.resolve(settingsForMp("app")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    importResult.unexpectedPluginFailures.map((outcome) => [
+      outcome.clone,
+      outcome.failedDependency?.clone,
+    ]),
+    [
+      [
+        { note: "ssh-not-configured", url: "https://github.com/acme/app.git" },
+        { note: "via-ssh", url: "git@github.com:acme/lib.git" },
+      ],
+    ],
+  );
+  assert.deepStrictEqual(
+    notifications[0]?.message,
+    "Some plugin operations have failed.\n\n" +
+      "● mp [user] (added)\n" +
+      "  ⊘ app (failed) {dependency failed}\n" +
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/app.git\n" +
+      "  ⊘ lib@mp (failed) {rollback partial}\n" +
+      "    Cloning via SSH: git@github.com:acme/lib.git\n" +
+      "    cause: lib failed\n" +
+      "    [skills] (rollback failed)\n" +
+      "      cause: EACCES: permission denied, unlink 'data.txt'\n\n" +
+      "Import: 2 failures, 1 success",
+  );
+  verifyBoundary();
+});
+
+test("D-SG-22 / T-04-72: the JSON rows of a failed dependency and its plugin each carry their own clone", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "transport-dependency-rollback-json");
+  const capture = createJsonCapture();
+  const ctx = mock<ImportClaudeSettingsOptions["ctx"]>({ exactParams: true, name: "context" });
+  when(() => ctx.mode)
+    .thenReturn("json")
+    .once();
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: dependencyRollbackInstall(),
+      loadSettings: () => Promise.resolve(settingsForMp("app")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  const [entry] = capture.entries;
+  const payload = entry?.payload as
+    | {
+        readonly marketplaces?: readonly {
+          readonly plugins: readonly { readonly name: string; readonly clone?: unknown }[];
+        }[];
+      }
+    | undefined;
+  assert.deepStrictEqual(
+    payload?.marketplaces?.[0]?.plugins.map((row) => [row.name, row.clone]),
+    [
+      ["app", { note: "ssh-not-configured", url: "https://github.com/acme/app.git" }],
+      ["lib@mp", { note: "via-ssh", url: "git@github.com:acme/lib.git" }],
+    ],
+  );
+  capture.assertValid();
+  verify(ctx);
+});
+
 test("D-SG-22: an import names the clone each enable ran on its row, and an enable that cloned nothing names none", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "transport-enable-notes");

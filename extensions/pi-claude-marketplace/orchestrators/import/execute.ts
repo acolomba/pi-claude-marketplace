@@ -292,9 +292,10 @@ export interface UnexpectedPluginFailureOutcome extends CloneNoted {
    * redacted rollback phases. Its cause is the outcome's own `cause` and
    * `causeChain`. The cascade then shows the dependency's row as install does,
    * beside the plugin's bare `{dependency failed}` row. Omitted when the
-   * dependency's undo finished.
+   * dependency's undo finished. D-SG-22: `clone` is the note of the
+   * dependency's own clone, from the install call's own view of the run.
    */
-  readonly failedDependency?: {
+  readonly failedDependency?: CloneNoted & {
     readonly key: string;
     readonly rollbackPartial: NonNullable<PluginFailedMessage["rollbackPartial"]>;
   };
@@ -693,6 +694,7 @@ function unexpectedFailureRows(
   const dependency: PluginFailedMessage = {
     status: "failed",
     name: o.failedDependency.key,
+    ...carriedClone(o.failedDependency),
     reasons: ["rollback partial"],
     cause: failureCause(o),
     rollbackPartial: o.failedDependency.rollbackPartial,
@@ -1248,6 +1250,7 @@ async function installOnePlannedPlugin(
       dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
         clone,
+        notes,
       });
       return "install-failed";
     case "installed":
@@ -1398,6 +1401,7 @@ async function enableOnePlannedPlugin(
       dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
         clone,
+        notes: transportContext.notes,
       });
       return "install-failed";
     case "skipped":
@@ -2313,6 +2317,7 @@ function pushUnexpectedFailure(
   error: Error,
   rollbackPartials: readonly RollbackPartial[] = [],
   clone: CloneNoted = {},
+  dependencyClone: CloneNoted = {},
 ): void {
   const causeChain = redactCauseChain(error.cause);
   const runtimeReason =
@@ -2327,7 +2332,7 @@ function pushUnexpectedFailure(
     ...(runtimeReason !== undefined && { runtimeReason }),
     cause: redactAbsolutePaths(errorMessage(error)),
     ...(causeChain !== undefined && { causeChain }),
-    ...(rollbackPartials.length > 0 && partialMember(error, rollbackPartials)),
+    ...(rollbackPartials.length > 0 && partialMember(error, rollbackPartials, dependencyClone)),
     ...clone,
   });
 }
@@ -2335,11 +2340,13 @@ function pushUnexpectedFailure(
 /**
  * MIM-03: where the redacted rollback phases ride. A dependency's own partial
  * names the dependency (D-PL6-04); any other, including the undo of another
- * member the cascade had materialized, names the plugin (D-PL6-03).
+ * member the cascade had materialized, names the plugin (D-PL6-03). D-SG-22:
+ * the dependency's row carries the note of its own clone, `dependencyClone`.
  */
 function partialMember(
   error: Error,
   rollbackPartials: readonly RollbackPartial[],
+  dependencyClone: CloneNoted,
 ): Pick<UnexpectedPluginFailureOutcome, "rollbackPartial" | "failedDependency"> {
   if (!(error instanceof DependencyCascadeError)) {
     return { rollbackPartial: redactedRollbackPartials(rollbackPartials) };
@@ -2349,7 +2356,11 @@ function partialMember(
   return {
     ...(others.length > 0 && { rollbackPartial: redactedRollbackPartials(others) }),
     ...(dependency.length > 0 && {
-      failedDependency: { key: error.key, rollbackPartial: redactedRollbackPartials(dependency) },
+      failedDependency: {
+        key: error.key,
+        rollbackPartial: redactedRollbackPartials(dependency),
+        ...dependencyClone,
+      },
     }),
   };
 }
@@ -2399,6 +2410,11 @@ function dispatchFailedOutcome(
     readonly rollbackPartials: readonly RollbackPartial[];
     /** D-SG-22: the note of the clone the failed install or enable tried. */
     readonly clone: CloneNoted;
+    /**
+     * D-SG-22: the call's own view of the run's clone notes, where a failed
+     * dependency's row finds the note of its own clone (T-04-72).
+     */
+    readonly notes: GitHubCloneNotes;
   },
 ): void {
   if (error instanceof DependencyCascadeError) {
@@ -2409,6 +2425,7 @@ function dispatchFailedOutcome(
       error,
       options.rollbackPartials,
       options.clone,
+      cloneNoteOf(options.notes, error.key),
     );
     return;
   }
