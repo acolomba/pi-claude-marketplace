@@ -21,7 +21,7 @@ created: "2026-11-25"
 |----------|-------|
 | **Framework** | `node:test` + `node:assert/strict` + `strong-mock` (unit, architecture, integration); `@cucumber/cucumber` (profiles `adapter`, `builtin`) |
 | **Config file** | `package.json` scripts; `cucumber.json` |
-| **Quick run command** | `PATH="/opt/pi-claude-marketplace/bin:$PATH" node --import "$PWD/scripts/isolated-pi-home.mjs" --test <test-path>`; one scenario: `node scripts/cucumber.mjs --profile adapter <feature> --name '<title>'` |
+| **Quick run command** | `PATH="/opt/pi-claude-marketplace/bin:$PATH" node --import "$PWD/scripts/isolated-pi-home.mjs" --test <test-path>`; one scenario: `PATH="$PWD/node_modules/.bin:/opt/pi-claude-marketplace/bin:$PATH" node scripts/cucumber.mjs --profile adapter <feature> --name '<title>'` |
 | **Full suite command** | `npm run check` |
 | **Estimated runtime** | quick ~30 seconds per owner test file; one feature file under both profiles 1 to 10 minutes; full ~40 minutes |
 
