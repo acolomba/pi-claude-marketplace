@@ -263,6 +263,19 @@ export function trackInstallAdds(
 }
 
 /**
+ * D-SG-22 / D-MF-04: the names of the marketplaces one install added to the
+ * target scope, each once, in the order the adds ran: the adds a planning run
+ * carried (WR-E), then the saved adds, then the unsaved ones.
+ */
+export function addedMarketplaceNames(
+  carried: readonly CarriedAdd[],
+  adds?: Pick<InstallAdds, "addedMarketplaces" | "committedAdds">,
+): readonly string[] {
+  const ran = [...carried, ...(adds?.committedAdds ?? []), ...(adds?.addedMarketplaces ?? [])];
+  return [...new Set(ran.map((added) => added.marketplace))];
+}
+
+/**
  * D-03-INV / D-SEED-01: settle each marketplace a saved install added, as
  * `marketplace add` settles one after its save. Each settle is best effort.
  */

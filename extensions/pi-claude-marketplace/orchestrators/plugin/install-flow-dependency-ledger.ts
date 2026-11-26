@@ -39,6 +39,7 @@ import {
 } from "./install-flow-cascade-context.ts";
 import { collectInstallPostCommitWarnings, hydrateInstalledHooks } from "./install-flow-ledger.ts";
 import {
+  addedMarketplaceBlocks,
   handleCaughtInstallFailure,
   marketplaceBlockClone,
   movedMember,
@@ -721,6 +722,8 @@ export function projectFailedInstallDependencyPlanMoves(args: {
   readonly unmaterialized: readonly string[];
   /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
   readonly notes?: GitHubCloneNotes | undefined;
+  /** D-MF-04: the marketplaces the install added to the target scope. */
+  readonly addedMarketplaces?: readonly string[];
 }): InstallPluginOutcome {
   const { opts } = args;
   const rootKey = `${opts.plugin}@${opts.marketplace}`;
@@ -752,6 +755,7 @@ export function projectFailedInstallDependencyPlanMoves(args: {
             ]),
           ],
         },
+        ...addedMarketplaceBlocks(args.notes, opts.scope, opts.marketplace, args.addedMarketplaces),
       ],
       undefined,
       "single",

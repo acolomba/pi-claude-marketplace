@@ -12,7 +12,7 @@ import {
   type MarketplaceInLocalLayerOnlyError,
   type MarketplaceSourceUndeclarableError,
 } from "../../shared/errors.ts";
-import { notifyWithContext } from "../../shared/notify-context.ts";
+import { notifyWithContext, type MarketplaceRows } from "../../shared/notify-context.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
@@ -564,6 +564,8 @@ export function promotedRowOutcome(args: {
   readonly orchestrated: boolean;
   /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
   readonly notes?: GitHubCloneNotes | undefined;
+  /** D-MF-04: the marketplaces the install added to the target scope. */
+  readonly addedMarketplaces?: readonly string[];
 }): InstallPluginOutcome {
   const { ctx, run, marketplace, scope, plugin, promotion, orchestrated } = args;
   const enabled = promotion.materialized.length > 0;
@@ -596,6 +598,7 @@ export function promotedRowOutcome(args: {
             }),
           ],
         },
+        ...addedMarketplaceBlocks(args.notes, scope, marketplace, args.addedMarketplaces),
       ],
       undefined,
       "single",
@@ -631,6 +634,7 @@ function handleInstallThrow(args: {
   readonly moved?: readonly MovedDependency[];
   readonly rootKey: string;
   readonly notes: GitHubCloneNotes | undefined;
+  readonly addedMarketplaces: readonly string[] | undefined;
 }): InstallPluginOutcome {
   const { err, ctx, run, marketplace, scope, plugin, capture, orchestrated } = args;
   const rolledBackPartial = capture.rollbackPartials.length > 0;
@@ -668,6 +672,7 @@ function handleInstallThrow(args: {
         ...marketplaceBlockClone(args.notes, marketplace),
         plugins: [failureMessage, ...movedRows(args.moved)],
       },
+      ...addedMarketplaceBlocks(args.notes, scope, marketplace, args.addedMarketplaces),
     ],
     undefined,
     "single",
@@ -717,8 +722,10 @@ export function handleCaughtInstallFailure(args: {
    * failed row names each attempt of the clone that failed.
    */
   readonly notes?: GitHubCloneNotes | undefined;
+  /** D-MF-04: the marketplaces the install added to the target scope. */
+  readonly addedMarketplaces?: readonly string[];
 }): InstallPluginOutcome {
-  const { err, capture, cascadeFailure, notes, ...target } = args;
+  const { err, capture, cascadeFailure, notes, addedMarketplaces, ...target } = args;
   if (
     capture.rollbackPartials.length === 0 &&
     cascadeFailure.mcpConfigNotices.length === 0 &&
@@ -729,8 +736,8 @@ export function handleCaughtInstallFailure(args: {
 
   const subject = cascadeFailure.subject;
   return subject !== undefined
-    ? handleCascadeThrow({ ...target, subject, notes })
-    : handleInstallThrow({ ...target, err, capture, notes });
+    ? handleCascadeThrow({ ...target, subject, notes, addedMarketplaces })
+    : handleInstallThrow({ ...target, err, capture, notes, addedMarketplaces });
 }
 
 /**
@@ -755,6 +762,7 @@ function handleCascadeThrow(args: {
   readonly orchestrated: boolean;
   readonly moved?: readonly MovedDependency[];
   readonly notes: GitHubCloneNotes | undefined;
+  readonly addedMarketplaces: readonly string[] | undefined;
 }): InstallPluginOutcome {
   const { ctx, run, marketplace, scope, plugin, rootKey, subject, orchestrated, notes } = args;
   // Derived from the SUBJECT rather than from the caught value. The subject is
@@ -795,6 +803,10 @@ function handleCascadeThrow(args: {
           ...moved,
         ],
       },
+      ...addedMarketplaceBlocks(notes, scope, marketplace, [
+        ...(args.addedMarketplaces ?? []),
+        ...failedMemberMarketplace(subject),
+      ]),
     ],
     undefined,
     "single",
@@ -828,6 +840,35 @@ export function marketplaceBlockClone(
 ): { readonly clone?: CloneTransportNote } {
   const clone = notes?.noteFor(marketplace);
   return clone === undefined ? {} : { clone };
+}
+
+/**
+ * D-SG-22 / D-MF-04: one bare block per marketplace the install added to the
+ * target scope, other than its own `marketplace`, whose add recorded a clone
+ * note, in the order of `added`. The note is the one the add kept under the
+ * marketplace's name, and the block lists no plugin rows: each dependency row
+ * stays under the install's own block, named by its key. The install's own
+ * marketplace keeps its add's note on its own block (`marketplaceBlockClone`).
+ */
+export function addedMarketplaceBlocks(
+  notes: GitHubCloneNotes | undefined,
+  scope: Scope,
+  marketplace: string,
+  added: readonly string[] | undefined,
+): readonly MarketplaceRows<never>[] {
+  return [...new Set(added)].flatMap((name) => {
+    const clone = name === marketplace ? undefined : notes?.noteFor(name);
+    return clone === undefined ? [] : [{ name, scope, clone, plugins: [] }];
+  });
+}
+
+/**
+ * D-MF-04: the marketplace of a dependency whose own install failed. An add
+ * of that marketplace that failed is in no add list, and its note is kept
+ * under the marketplace's name all the same.
+ */
+function failedMemberMarketplace(subject: CascadeFailureSubject): readonly string[] {
+  return subject.kind === "member" ? [subject.key.slice(subject.key.lastIndexOf("@") + 1)] : [];
 }
 
 /** UPD-DEP-D1: the rows of the dependencies an install moved into range. */

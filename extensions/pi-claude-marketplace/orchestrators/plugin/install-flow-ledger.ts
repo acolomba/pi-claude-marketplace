@@ -30,6 +30,7 @@ import { runInstallCascade, runInstallCascadeOrPlanMoves } from "./install-casca
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
 import { composeInstallDisableCascade } from "./install-disable-cascade.ts";
 import {
+  addedMarketplaceNames,
   buildInstallLedgerOptions,
   memberLedgerPin,
   settleAddedMarketplaces,
@@ -39,6 +40,7 @@ import {
   withMcpConfigNotices,
 } from "./install-flow-cascade-context.ts";
 import {
+  addedMarketplaceBlocks,
   cascadeStagingDiagnostics,
   collectPostCommitWarnings,
   declareInstalledPlugin,
@@ -1151,6 +1153,7 @@ async function installPluginWithTransaction(
       orchestrated,
       ...(moved !== undefined && { moved }),
       notes,
+      addedMarketplaces: addedMarketplaceNames(carried, adds),
     });
     return withMcpConfigNotices(ctx, run, orchestrated, failed, cascadeFailure.mcpConfigNotices);
   }
@@ -1279,6 +1282,7 @@ async function installPluginWithTransaction(
         promotion: outcome.promotion,
         orchestrated,
         notes,
+        addedMarketplaces: addedMarketplaceNames(carried, adds),
       });
       notices = [...priorNotices, ...outcome.promotion.mcpConfigNotices];
       break;
@@ -1319,6 +1323,12 @@ async function installPluginWithTransaction(
                 ...movedRows(moved),
               ],
             },
+            ...addedMarketplaceBlocks(
+              notes,
+              scope,
+              marketplace,
+              addedMarketplaceNames(carried, adds),
+            ),
           ],
           undefined,
           "single",
@@ -1397,6 +1407,14 @@ async function installPluginWithTransaction(
                 ...(landed !== undefined && { moved: landed.map((entry) => entry.row) }),
               }),
             },
+            // D-SG-22 / D-MF-04: each other marketplace the install added names
+            // its add's clone on a block of its own, after the install's block.
+            ...addedMarketplaceBlocks(
+              notes,
+              scope,
+              marketplace,
+              addedMarketplaceNames(carried, adds),
+            ),
           ],
           undefined,
           "single",

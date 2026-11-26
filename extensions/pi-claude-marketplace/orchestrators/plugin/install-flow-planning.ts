@@ -18,6 +18,7 @@ import { freshDependencyMoveMemos, runDependencyMove } from "./dependency-move.t
 import { planDependencyGraph } from "./dependency-plan.ts";
 import { runDependencySteps, settleDependencies } from "./dependency-settle.ts";
 import { cascadeFailureCause } from "./install-cascade.messaging.ts";
+import { addedMarketplaceNames } from "./install-flow-cascade-context.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
 
@@ -149,6 +150,8 @@ interface InstallPlanningLedgerPort {
     readonly moved?: readonly MovedDependency[];
     /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
     readonly notes?: GitHubCloneNotes | undefined;
+    /** D-MF-04: the marketplaces the install added to the target scope. */
+    readonly addedMarketplaces?: readonly string[];
   }) => InstallPluginOutcome;
   readonly projectFailedMoves: (args: {
     readonly opts: InstallPluginOptions;
@@ -159,6 +162,8 @@ interface InstallPlanningLedgerPort {
     readonly unmaterialized: readonly string[];
     /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
     readonly notes?: GitHubCloneNotes | undefined;
+    /** D-MF-04: the marketplaces the install added to the target scope. */
+    readonly addedMarketplaces?: readonly string[];
   }) => InstallPluginOutcome;
 }
 
@@ -268,7 +273,11 @@ async function installAfterMoves(
       cloneCandidates,
     });
     if ("err" in plan) {
-      return ledger.projectCaughtFailure({ ...failure, ...plan });
+      return ledger.projectCaughtFailure({
+        ...failure,
+        ...plan,
+        addedMarketplaces: addedMarketplaceNames(carried),
+      });
     }
 
     const resolvedMembers = resolvedPlanMemberKeys(plan);
@@ -283,6 +292,7 @@ async function installAfterMoves(
         orchestrated,
         unmaterialized: resolvedMembers.filter((key) => !reported.has(key)),
         notes,
+        addedMarketplaces: addedMarketplaceNames(carried),
       });
     }
 

@@ -13,6 +13,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { probeInstallClone } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import {
+  addedMarketplaceNames,
   authorizeMissingDependency,
   buildInstallLedgerOptions,
   catalogLookup,
@@ -278,6 +279,26 @@ test("keeps the default add seam when no seam is supplied", () => {
 
   // assert
   assert.strictEqual(adds.marketplaceAdd.settle, DEFAULT_MARKETPLACE_ADD.settle);
+});
+
+test("D-SG-22 / D-MF-04: names each added marketplace once, carried adds first, then saved, then unsaved", () => {
+  // arrange
+  const carried = [
+    { marketplace: "first", rawSource: "./first", cloneDir: undefined, record: {} },
+  ] as unknown as Parameters<typeof addedMarketplaceNames>[0];
+  const adds = {
+    committedAdds: [
+      { marketplace: "saved", rawSource: "./saved", cloneDir: undefined },
+      { marketplace: "first", rawSource: "./first", cloneDir: undefined },
+    ],
+    addedMarketplaces: [{ marketplace: "unsaved", rawSource: "./unsaved", cloneDir: undefined }],
+  };
+
+  // act
+  const names = [addedMarketplaceNames(carried, adds), addedMarketplaceNames([])];
+
+  // assert
+  assert.deepStrictEqual(names, [["first", "saved", "unsaved"], []]);
 });
 
 test("moves a saved marketplace addition to the committed list", async (t) => {
