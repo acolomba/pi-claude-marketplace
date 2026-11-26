@@ -257,6 +257,14 @@ Fija un mercado de GitHub a una rama, etiqueta o confirmación con un sufijo `#r
 /claude:plugin marketplace add https://github.com/upstash/context7-marketplace#v1.0.30
 ```
 
+Agrega un mercado por SSH con una dirección de estilo scp. Tu propio `ssh` y sus claves hacen la conexión. Como en Claude Code, la línea de comandos no acepta URL `ssh://`.
+
+```text
+/claude:plugin marketplace add git@github.com:upstash/context7-marketplace.git
+```
+
+Una abreviatura `owner/repo` clona por SSH cuando tu ssh inicia sesión en github.com, y por HTTPS en otro caso. Para usar siempre HTTPS, define `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`.
+
 Agrega un mercado desde otro host git `https://`, como GitLab.
 
 ```text

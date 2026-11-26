@@ -306,6 +306,18 @@ These Claude Code settings have no Pi meaning, or the extension keeps its own be
 - `CLAUDE_CODE_AUTOUPDATER_DISABLED_BY_HOST`. A host that runs Claude Code sets it, and it also turns the background update off. Pi has no such host setting.
 - The hidden toggle. Claude Code hides the auto-update toggle of `/plugin` when the background update is off. Here, `marketplace autoupdate` and `marketplace noautoupdate` stay available, because the value also selects the plugins that a manual `marketplace update` updates.
 
+## Variables that choose the GitHub transport
+
+The extension reads this variable itself. It decides whether a GitHub clone or tag read uses SSH or HTTPS. A truthy value is `1`, `true`, `yes`, or `on`, in any case, with the spaces around it removed, as for the opt-out variables above. The Claude Code ground truth was checked against the Claude Code 2.1.330 and 2.1.332 binaries.
+
+| Variable                          | Claude Code        | Pi rule                                                                                                                                                                                                                                                                                                  |
+| --------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLAUDE_CODE_PLUGIN_PREFER_HTTPS` | Same name and rule | A truthy value makes a GitHub `owner/repo` source, a git-subdir `owner/repo` shorthand, and every GitHub tag read use HTTPS. The extension runs no `ssh -T` probe and makes no SSH attempt. A source that you wrote as an SSH address, such as `git@github.com:owner/repo.git`, still clones as written. |
+
+Without the variable, the extension follows Claude Code. A marketplace `owner/repo` source clones over SSH first only when the probe finds that your ssh signs in to github.com, and over HTTPS first otherwise. If that clone fails, the extension retries it over the other transport. A plugin `owner/repo` source clones over SSH. Off Windows, when the probe finds that your ssh is not set up for github.com and you have no ssh setting of your own, the plugin clones over HTTPS first and retries over SSH. Tag reads use SSH. `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` also makes every GitHub address use HTTPS, with no probe.
+
+The extension does not read `CLAUDE_CODE_REMOTE`. In Claude Code, it also makes every GitHub address use HTTPS, because a Claude Code remote session sends git through its own proxy. Pi has no such proxy, and the variable describes the session around Pi, not Pi (D-SG-24).
+
 ## Not delivered (out of scope)
 
 The following Claude Code variables are recognized but not delivered by the extension. They are listed here so a reader finds a recorded decision rather than silence; they are deliberately kept out of the overview matrix, which reflects delivered behavior.
@@ -316,4 +328,4 @@ The following Claude Code variables are recognized but not delivered by the exte
 
 One absence is recorded affirmatively rather than by silence:
 
-- **`CLAUDE_CODE_REMOTE`** -- intentionally unset on hook spawns; Pi runs locally.
+- **`CLAUDE_CODE_REMOTE`** -- intentionally unset on hook spawns; Pi runs locally. The extension does not read it to choose the GitHub transport either (see "Variables that choose the GitHub transport").

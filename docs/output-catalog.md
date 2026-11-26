@@ -58,6 +58,24 @@ The plugin-row `[<scope>]` bracket is emitted ONLY when the plugin's `scope` fie
 
 This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ctx.ui.notify` boundary, captured **before** any markdown/tui display layer. The interactive pi-tui markdown renderer can add a single leading space when it displays the message, so a header may **appear** at one space and plugin rows at three (a "1/3" visual). That appearance is a display-layer artifact, not a renderer deviation: the binding contract is the pre-tui byte ladder above, which `test/architecture/catalog-uat/catalog-contract.test.ts` (byte-equality against this document) and the renderer indent cases in `test/shared/notification-dispatch.test.ts` (explicit leading whitespace inside the expected strings) both lock at 0 / 2 / 4 / 6 (SNM-38 / G-MIL-03, D-25-09 -- refuted: not a renderer bug).
 
+### Clone transport lines
+
+A marketplace block or a plugin row whose command cloned a GitHub repository names the transport of that clone, as Claude Code's progress lines do (D-SG-22). The first line is one of three:
+
+```text
+Cloning via SSH: <url>
+Cloning via HTTPS: <url>
+SSH not configured, cloning via HTTPS: <url>
+```
+
+`Cloning via SSH` means the clone ran over SSH. `SSH not configured, cloning via HTTPS` means the ssh probe found that the user's ssh does not sign in to github.com. `Cloning via HTTPS` means the clone ran over HTTPS with no such choice: the source was a GitHub https URL, or a transport was forced. Each retry adds one more line:
+
+```text
+<T1> clone failed, retrying with <T2>: <url>
+```
+
+`<T1>` is the transport of the attempt before it, and `<T2>` and `<url>` are those of the retry. A failed block or row keeps the lines of every attempt it made, and a clone that failed over both transports shows both attempts in its cause. The lines sit 2 spaces under a marketplace header, and 4 spaces under a plugin row, after its description and before its hint and cause lines. JSON carries the same note as `clone.note`, `clone.url`, and `clone.retries` (`docs/json-output.md`). A command that cloned nothing (a warm or current clone, a path source, a hosted catalog, a host that is not GitHub) shows no such line.
+
 ### Reasons rendering
 
 Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The `Reason` union in `extensions/pi-claude-marketplace/shared/notification-types.ts` defines the closed set. `test/architecture/notify-closed-set-locks.test.ts` pins its size, and `test/architecture/compat-01-no-expansion.test.ts` pins its membership. `{unsupported mcp}` (ANAME-07) is the one aggregate reason for a plugin whose MCP server uses a Claude Code feature that the active MCP implementation cannot run. Like `{unsupported hooks}`, it comes from a typed kind (`mcpServers`), not from a resolver note. `{options not set}` (D-PG10-06) is the reason for a plugin with a required option that has no default. It comes from the typed kind `userConfig`, and the option keys ride the resolver note and the `info` surface, because a reason token cannot hold a key. `{git missing}` (D-SG-07) is the reason for a git-source operation that found no usable git on PATH, and the requirement text rides the row's cause line. `workflows` carries no unsupported-kind carve-out: the kind is a fully supported bridge, not a probed carve-out like `lspServers`.

@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # Technology Stack
 
-**Analysis Date:** 2026-10-25
+**Analysis Date:** 2026-11-26
 
 ## Languages
 
@@ -58,7 +58,7 @@ last_mapped_at: 2026-10-05
 ## Key Dependencies
 
 **Critical:**
-- System git (not an npm package) - the one git transport. Every `GitOps` operation in `extensions/pi-claude-marketplace/platform/git.ts` (clone, the SHA fetch, checkout, ref reads, `ls-remote`) runs the user's own `git` from PATH through `platform/git-process.ts`, with no fallback (D-SG-01, SG-TRN-01). A clone is `--depth 1 --no-recurse-submodules` (C5). A missing git fails as `{git missing}`. `isomorphic-git` is no longer a dependency, and the rule pack bans it in every extension file
+- System git (not an npm package) - the one git transport. Every `GitOps` operation in `extensions/pi-claude-marketplace/platform/git.ts` (clone, the SHA fetch, checkout, ref reads, `ls-remote`) runs the user's own `git` from PATH through `platform/git-process.ts`, with no fallback (D-SG-01, SG-TRN-01). A clone is `--depth 1 --no-recurse-submodules` (C5). A missing git fails as `{git missing}`. `isomorphic-git` is no longer a dependency, and the rule pack bans it in every extension file. The same module starts the user's own `ssh` (looked up in the absolute PATH entries only) for two fixed launches: the `ssh -T git@github.com` probe of a GitHub clone (TCP 22, 3 seconds) and the `ssh -G git@github.com` settings read of a plugin clone (SG-SSH-02, D-SG-18). A missing ssh starts nothing, and the probe then reads as not configured
 - `typebox` `^1.1.38` (also a peer dep `*`) - runtime schema validation and discriminated-union modeling (e.g. `installable: true | false`)
 - `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json` (`atomicWriteJson`), and atomic text writes for saved hook output (`atomicWriteText`), both in `shared/atomic-json.ts`
 - `proper-lockfile` `^4.1.2` - cross-process file locking for `withStateGuard` concurrent-write detection
@@ -75,7 +75,8 @@ last_mapped_at: 2026-10-05
 - `PI_CM_E2E_REF` - set to `pinned` (default `test:e2e`) or `main` (`test:e2e:nightly`) to select which upstream ref the e2e suite exercises
 - `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` - the time limit of each git command, read again for every command by `platform/git-timeout.ts`: trimmed decimal digits above 0, capped at 2147483647, else 120000 ms (D-SG-13)
 - `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` - when `1`, `true`, `yes`, or `on`, a marketplace update whose freshness `ls-remote` cannot reach the remote keeps the checkout with a warning instead of failing; `marketplace update` and `plugin update`'s marketplace sync (PUP-2) read it, and a plugin mirror is never kept (D-SG-15)
-- `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` - when set, each git request to an `https://github.com/` URL carries `-c url.<base>/.insteadOf=https://github.com/`, built by `shared/github-base-url.ts`; a base that holds `=` is refused; the recorded origin stays canonical (D-SG-16, keeps D-MF-01)
+- `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` - when set, each git request to an `https://github.com/` URL carries `-c url.<base>/.insteadOf=https://github.com/`, built by `shared/github-base-url.ts`, and each SSH spelling of a GitHub address (`git@github.com:`, `ssh://git@github.com/`, and the others) gets its own pair to the base; a base that holds `=` is refused; the recorded origin stays canonical (D-SG-16, D-SG-21, keeps D-MF-01). While it is set, a GitHub clone runs no ssh probe and no SSH attempt
+- `CLAUDE_CODE_PLUGIN_PREFER_HTTPS` - when `1`, `true`, `yes`, or `on` (`shared/upstream-flag.ts`, the reader D-SG-15's variable shares), a GitHub `owner/repo` source, a git-subdir `owner/repo` shorthand, and every GitHub tag read go over HTTPS, with no ssh probe and no SSH attempt; a url source spelled with an ssh address still clones as written (D-SG-24). Claude Code's `CLAUDE_CODE_REMOTE`, which has the same effect there, is not read: Pi has no Claude Code remote-session git proxy (capability gap, D-SG-24)
 - `GIT_TERMINAL_PROMPT=0`, an empty `GIT_ASKPASS`, `GCM_INTERACTIVE=never`, and `credential.interactive=false` - set by `platform/git-process.ts` on every git command it starts, `git credential` included, so git never prompts (D-SG-05)
 
 **Build:**
@@ -112,4 +113,4 @@ Five workflow files in `.github/workflows/`:
 
 ---
 
-*Stack analysis: 2026-10-25*
+*Stack analysis: 2026-11-26*
