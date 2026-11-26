@@ -596,7 +596,7 @@ test("propagates a clone failure silently", async (t) => {
   verifyBoundary();
 });
 
-test("renders a failed add as marketplace add does and never reaches the missing-dependency step", async (t) => {
+test("D-SG-22: renders a failed add as marketplace add does, naming its clone, and never reaches the missing-dependency step", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "missing-source");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -622,7 +622,9 @@ test("renders a failed add as marketplace add does and never reaches the missing
     {
       message:
         "A marketplace operation has failed.\n\n" +
-        "⊘ anthropics/claude-plugins-official [user] (failed) {source missing}",
+        "⊘ anthropics/claude-plugins-official [user] (failed) {source missing}\n" +
+        `  SSH not configured, cloning via HTTPS: ${BOOTSTRAP_REMOTE}\n` +
+        `  HTTPS clone failed, retrying with SSH: ${BOOTSTRAP_SSH_REMOTE}`,
       severity: "error",
     },
   ]);
@@ -635,7 +637,7 @@ test("renders a failed add as marketplace add does and never reaches the missing
   verifyBoundary();
 });
 
-test("MPA-01: refuses a different source under the official name as a duplicate name", async (t) => {
+test("MPA-01 / D-SG-22: refuses a different source under the official name as a duplicate name, naming its clone", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "fork");
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -672,7 +674,9 @@ test("MPA-01: refuses a different source under the official name as a duplicate 
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A marketplace operation has failed.\n\n⊘ claude-plugins-official [user] (failed) {duplicate name}",
+        "A marketplace operation has failed.\n\n" +
+        "⊘ claude-plugins-official [user] (failed) {duplicate name}\n" +
+        `  SSH not configured, cloning via HTTPS: ${BOOTSTRAP_REMOTE}`,
       severity: "error",
     },
   ]);

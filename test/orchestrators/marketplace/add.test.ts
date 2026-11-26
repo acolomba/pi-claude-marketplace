@@ -24,6 +24,7 @@ import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-market
 import {
   addMarketplace as addMarketplaceWithCache,
   addMarketplaceToState,
+  createAddCloneNotes,
   notifyAddFailure,
   parseAddableSource,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
@@ -750,6 +751,138 @@ test("D-SG-22: names the clone of an add whose manifest fails after the clone ab
       },
     ]);
   });
+});
+
+test("D-SG-22: an add given a collector records its clone's note there and reports its added block as before", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const cloneNotes = createAddCloneNotes();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+      cloneNotes,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● valid-marketplace [project] (added)\n  Cloning via SSH: git@github.com:acme/mp.git",
+      },
+    ]);
+    assert.deepStrictEqual(cloneNotes.note(), {
+      note: "via-ssh",
+      url: "git@github.com:acme/mp.git",
+    });
+  });
+});
+
+test("D-SG-22: an orchestrated add given a collector returns the same outcome and records its note there", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const cloneNotes = createAddCloneNotes();
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+      notifications: { mode: "orchestrated" },
+      cloneNotes,
+    });
+
+    // assert
+    const clone = { note: "via-ssh", url: "git@github.com:acme/mp.git" } as const;
+    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace", clone });
+    assert.deepStrictEqual(cloneNotes.note(), clone);
+  });
+});
+
+test("D-SG-22: notifyAddFailure names the clone a caught add ran, as the add's own failure does", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("invalid-manifest"),
+    });
+    const options = {
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "acme/mp",
+      completionCache: createCompletionCache(),
+      gitOps,
+      gitHubSsh: userSsh("configured"),
+      rethrowPreconditionErrors: true,
+      cloneNotes: createAddCloneNotes(),
+    } as const;
+    const failure = await addMarketplace(options).then(
+      () => assert.fail("the add of an invalid manifest must fail"),
+      (error: unknown) => error,
+    );
+
+    // act
+    notifyAddFailure(options, failure);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ acme/mp [project] (failed) {unparseable}\n" +
+          "  Cloning via SSH: git@github.com:acme/mp.git",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22, OQ-3: notifyAddFailure names no clone when its collector holds none", () => {
+  // arrange
+  const { ctx, run, notifications } = makeCtx();
+
+  // act
+  notifyAddFailure(
+    {
+      ctx,
+      run,
+      scope: "user",
+      cwd: "/unused",
+      rawSource: "acme/tools",
+      completionCache: createCompletionCache(),
+      cloneNotes: createAddCloneNotes(),
+    },
+    httpError(404),
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n⊘ acme/tools [user] (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
 });
 
 for (const answer of ["not-configured", "unknown"] as const) {

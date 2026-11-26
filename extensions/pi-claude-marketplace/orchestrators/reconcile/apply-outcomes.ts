@@ -41,6 +41,13 @@ import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts"
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+  splitDependencyPartials,
+} from "../../shared/redact-absolute-paths.ts";
+import { cloneNoteOf } from "../github-transport.ts";
 import { narrowNotInstallableReasons } from "../plugin/install.messaging.ts";
 
 import {
@@ -52,7 +59,7 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { CloneTransportNote, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { CloneNoted } from "../github-transport.ts";
+import type { CloneNoted, GitHubCloneNotes } from "../github-transport.ts";
 import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { StagingDiagnostic } from "../plugin/staging-diagnostics.ts";
@@ -340,9 +347,10 @@ export interface PluginEnableFailedOutcome extends PluginOutcomeBase, CloneNoted
  * install-disabled cascade (DFEN-04 -- the install ran whole and then unstaged
  * because the plugin's own `defaultEnabled` said so). The three optional fields
  * below are what tell the two apart on the rendered row; the toggle path omits
- * all three.
+ * all three. D-SG-22: the install-disabled cascade also carries the note of
+ * the GitHub clone its install ran; a toggle disable clones nothing.
  */
-export interface PluginDisabledOutcome extends PluginOutcomeBase {
+export interface PluginDisabledOutcome extends PluginOutcomeBase, CloneNoted {
   readonly kind: "plugin-disabled";
   readonly version?: string;
   /**
@@ -825,7 +833,7 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
  * reason.
  * A reason the caller already holds (a dependency's `cross-marketplace`) wins.
  */
-export function installFailureReasonFields(
+function installFailureReasonFields(
   err: unknown,
   known?: ContentReason,
 ): {
@@ -897,6 +905,180 @@ export function carriedMcpConfigNotices(carrier: {
   return carrier.mcpConfigNotices === undefined
     ? {}
     : { mcpConfigNotices: carrier.mcpConfigNotices };
+}
+
+/**
+ * RESV-06 / T-55-02-02 / T-53-02-02: rebuild a dependency-cascade failure's
+ * message AND its nested cause chain with every absolute path redacted, so
+ * the reconcile row's cause-chain trailer (`causeChainTrailer`, which walks
+ * `.cause` WITHOUT redacting) never surfaces a leaked path from a
+ * dependency's own ledger failure. `key` rides along unchanged so the
+ * rebuilt value is the same error, not a new one.
+ */
+function redactedDependencyCascadeError(error: DependencyCascadeError): DependencyCascadeError {
+  const message = redactAbsolutePaths(error.message);
+  const cause = redactCauseChain(error.cause);
+  return cause === undefined
+    ? new DependencyCascadeError(message, error.key)
+    : new DependencyCascadeError(message, error.key, { cause });
+}
+
+/** The failed arm of an orchestrated install, as `installFailedOutcomes` reads it. */
+export type FailedPluginInstall = Parameters<typeof carriedMcpConfigNotices>[0] & {
+  readonly error: Error;
+  readonly reason?: "cross-marketplace";
+  readonly rollbackPartials?: readonly { readonly phase: string; readonly cause?: Error }[];
+};
+
+/**
+ * MIM-03 / D-PL6-05: the row of a dependency whose undo could not finish,
+ * under the dependency's own marketplace and by its bare name, as apply's
+ * other dependency rows read. The key splits at its last `@`, as a plugin key
+ * does (T-06-12). D-SG-22: the row names the dependency's own clone, the note
+ * `notes` keeps for its key.
+ */
+function dependencyRollbackOutcome(
+  scope: Scope,
+  error: DependencyCascadeError,
+  rollbackPartials: NonNullable<FailedPluginInstall["rollbackPartials"]>,
+  notes: GitHubCloneNotes,
+): PluginInstallFailedOutcome {
+  const at = error.key.lastIndexOf("@");
+  return {
+    kind: "plugin-install-failed",
+    scope,
+    marketplace: error.key.slice(at + 1),
+    plugin: error.key.slice(0, at),
+    ...cloneNoteOf(notes, error.key),
+    reason: "rollback partial",
+    cause: redactedDependencyCascadeError(error),
+    rollbackPartials,
+  };
+}
+
+/** Whether `outcome` is a failed-install row of `dependency` that lists its rollback phases. */
+function showsFailedDependency(
+  outcome: PerEntryOutcome,
+  dependency: PluginInstallFailedOutcome,
+): boolean {
+  return (
+    outcome.kind === "plugin-install-failed" &&
+    outcome.rollbackPartials !== undefined &&
+    outcome.scope === dependency.scope &&
+    outcome.marketplace === dependency.marketplace &&
+    outcome.plugin === dependency.plugin
+  );
+}
+
+/**
+ * The rows of one failed install in `applyPluginInstalls` and
+ * `applyDependencyInstalls`.
+ *
+ * MIM-03 / D-PL6-05: an install whose undo could not finish reads `(failed)
+ * {rollback partial}` with the per-phase rows, as `install` does, and its
+ * cause is the install error rebuilt with every link redacted (D-PL6-12).
+ * When the undo that could not finish was a dependency's, the dependency gets
+ * that row of its own, and the requested plugin's row reads `{dependency
+ * failed}` with no cause, as `install`'s does.
+ *
+ * RESV-06: otherwise only a dependency-cascade failure carries a cause onto
+ * the row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
+ * closure/constraint arms build their message from keys and version
+ * constraints alone, but a dependency's own ledger failure can carry a path
+ * anywhere in its cause chain. `causeChainTrailer` walks `.cause` without
+ * redacting, so `redactedDependencyCascadeError` rebuilds the FULL chain (via
+ * `redactCauseChain`) with every link redacted, instead of dropping it.
+ *
+ * Two installs can fail on the same dependency, so the dependency's row is
+ * left out when `outcomes` already holds one that carries its rollback phases.
+ * An earlier row for it without phases (its own planned install failed) does
+ * not count, so this row still shows the phases.
+ *
+ * The undo steps of the other members the cascade had materialized ride the
+ * requested plugin's row, because they belong to those members and not to the
+ * dependency that failed.
+ *
+ * D-PL6-15: the requested plugin's row and the dependency's row are ordered by
+ * name, as `install` and import order them. The order shows only when the
+ * dependency comes from the requested plugin's marketplace, because rows of
+ * other marketplaces go to their own blocks.
+ *
+ * AFILE-04: dependencies that committed before the failure rewrote the MCP
+ * config, so their notices ride the requested plugin's failed row.
+ *
+ * D-SG-22: `notes` is the install call's own view of the run's clone notes.
+ * The requested plugin's row names the clone it tried, the note kept for its
+ * `<plugin>@<marketplace>`; a dependency's own row names the dependency's.
+ */
+export function installFailedOutcomes(
+  op: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
+  result: FailedPluginInstall,
+  outcomes: readonly PerEntryOutcome[],
+  notes: GitHubCloneNotes,
+): PluginInstallFailedOutcome[] {
+  const { error, rollbackPartials = [] } = result;
+  const subject = {
+    kind: "plugin-install-failed",
+    scope: op.scope,
+    marketplace: op.marketplace,
+    plugin: op.plugin,
+    ...cloneNoteOf(notes, `${op.plugin}@${op.marketplace}`),
+  } as const;
+  if (rollbackPartials.length === 0) {
+    return [
+      {
+        ...subject,
+        ...installFailureReasonFields(error, result.reason),
+        ...(error instanceof DependencyCascadeError && {
+          cause: redactedDependencyCascadeError(error),
+        }),
+        ...(error instanceof DirectoryPinUnsatisfiedError && { cause: error }),
+        ...carriedMcpConfigNotices(result),
+      },
+    ];
+  }
+
+  if (error instanceof DependencyCascadeError) {
+    const { dependency: own, others } = splitDependencyPartials(error.key, rollbackPartials);
+    const requested: PluginInstallFailedOutcome = {
+      ...subject,
+      reason: "dependency failed",
+      ...(others.length > 0 && { rollbackPartials: redactedRollbackPartials(others) }),
+      ...carriedMcpConfigNotices(result),
+    };
+    if (own.length === 0) {
+      return [requested];
+    }
+
+    const dependency = dependencyRollbackOutcome(
+      op.scope,
+      error,
+      redactedRollbackPartials(own),
+      notes,
+    );
+    if (outcomes.some((outcome) => showsFailedDependency(outcome, dependency))) {
+      return [requested];
+    }
+
+    return [requested, dependency].sort((a, b) =>
+      compareByNameThenScope(
+        { name: a.plugin, scope: a.scope },
+        { name: b.plugin, scope: b.scope },
+      ),
+    );
+  }
+
+  const phases = redactedRollbackPartials(rollbackPartials);
+  const cause = redactCauseChain(error);
+  return [
+    {
+      ...subject,
+      reason: "rollback partial",
+      cause,
+      rollbackPartials: phases,
+      ...carriedMcpConfigNotices(result),
+    },
+  ];
 }
 
 /**

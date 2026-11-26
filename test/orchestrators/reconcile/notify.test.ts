@@ -4224,6 +4224,39 @@ describe("D-SG-22: apply's rows and blocks name the transport of each GitHub clo
     ]);
   });
 
+  test("an install-disabled row names the clone its install ran, and a toggle disable names none", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-disabled",
+        ...where,
+        version: "1.0.0",
+        reasons: ["installs disabled"],
+        enableHint: true,
+        clone: CLONE,
+      },
+      { kind: "plugin-disabled", ...where, plugin: "kit" },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade.marketplaces[0]?.plugins, [
+      {
+        status: "disabled",
+        name: "demo",
+        version: "1.0.0",
+        reasons: ["installs disabled"],
+        enableHint: true,
+        clone: CLONE,
+        severity: "info",
+        needsReload: true,
+      },
+      { status: "disabled", name: "kit", severity: "info", needsReload: true },
+    ]);
+  });
+
   test("a failed uninstall and a failed disable name no clone", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [

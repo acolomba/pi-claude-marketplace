@@ -1496,6 +1496,8 @@ function applyPluginOutcomeToBlock(
         // `undefined`.
         ...(outcome.reasons !== undefined && { reasons: outcome.reasons }),
         ...(outcome.enableHint === true && { enableHint: true }),
+        // D-SG-22: the install-disabled cascade's clone; a toggle has none.
+        ...carriedClone(outcome),
         // D-03/D-06: a realized disable transition -> info, reloads.
         severity: "info",
         needsReload: true,
