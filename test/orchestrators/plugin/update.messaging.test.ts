@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   UPDATE_CONTEXT,
+  withUpdateCloneNote,
   type UpdateMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update.messaging.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
@@ -290,4 +292,64 @@ test("UPDATE_CONTEXT declares complete row policies", () => {
     failed: { markers: false, contentReasons: true },
     installed: { markers: true, contentReasons: true },
   });
+});
+
+/** A collector holding one HTTPS clone note for `alpha@mp`. */
+function alphaCloneNotes(): ReturnType<typeof createGitHubCloneNotes> {
+  const notes = createGitHubCloneNotes();
+  notes.record("alpha@mp", { note: "via-https", url: "https://github.com/acme/alpha.git" });
+  return notes;
+}
+
+test("D-SG-22: an updated row takes the clone note of its own subject", () => {
+  // arrange
+  const row: UpdateMsg = {
+    status: "updated",
+    name: "alpha",
+    from: "1.0.0",
+    to: "2.0.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  };
+
+  // act
+  const noted = withUpdateCloneNote(row, alphaCloneNotes(), "alpha@mp");
+
+  // assert
+  assert.deepStrictEqual(noted, {
+    ...row,
+    clone: { note: "via-https", url: "https://github.com/acme/alpha.git" },
+  });
+});
+
+test("D-SG-22: a row whose subject cloned nothing stays unchanged", () => {
+  // arrange
+  const row: UpdateMsg = {
+    status: "failed",
+    name: "beta",
+    reasons: ["network error"],
+    severity: "error",
+    needsReload: false,
+  };
+
+  // act
+  const noted = withUpdateCloneNote(row, alphaCloneNotes(), "beta@mp");
+
+  // assert
+  assert.strictEqual(noted, row);
+});
+
+test("D-SG-22: skipped and partially-upgradable rows have no clone field and stay unchanged", () => {
+  // arrange
+  const rows: readonly UpdateMsg[] = [
+    { status: "skipped", name: "alpha", reasons: ["up-to-date"], severity: "info" },
+    { status: "partially-upgradable", name: "alpha", reasons: ["lsp"], partialHint: true },
+  ];
+
+  // act
+  const noted = rows.map((row) => withUpdateCloneNote(row, alphaCloneNotes(), "alpha@mp"));
+
+  // assert
+  assert.deepStrictEqual(noted, rows);
 });

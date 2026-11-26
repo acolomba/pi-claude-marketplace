@@ -12,14 +12,16 @@ import {
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
+import { withCloneNote } from "./install.messaging.ts";
 import { constraintCauseFor, revisionVersionSlot, updatedRowFromOutcome } from "./update-row.ts";
-import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
+import { UPDATE_CONTEXT, withUpdateCloneNote, type UpdateMsg } from "./update.messaging.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ContentReason } from "../../shared/notification-types.ts";
+import type { CloneTransportNote, ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 import type { PluginUpdateSkippedOutcome } from "../types.ts";
 import type { DirectRenderableOutcome } from "./update-swap.ts";
 
@@ -33,6 +35,18 @@ export type UpdateHooksRouting = Pick<
 export interface UpdateCascadeTarget {
   readonly marketplace: string;
   readonly scope: Scope;
+}
+
+/**
+ * D-SG-22: the clone notes an update command's rows read. `plugins` holds the
+ * notes of the plugin clones, keyed by `<plugin>@<marketplace>`, so a moved
+ * dependency's row reads its own key. `marketplace` gives the note of the
+ * PUP-2 sync that re-cloned marketplace `name` in `scope`, and undefined for
+ * a sync that cloned nothing.
+ */
+export interface UpdateCloneNotes {
+  readonly plugins: GitHubCloneNotes;
+  readonly marketplace: (scope: Scope, name: string) => CloneTransportNote | undefined;
 }
 
 /** One update result with the target facts required for exact row composition. */
@@ -151,6 +165,7 @@ function outcomeToCascadePluginMessage(
 interface MarketplaceGroup {
   readonly name: string;
   readonly scope: Scope;
+  readonly clone?: CloneTransportNote;
   readonly plugins: UpdateMsg[];
 }
 
@@ -158,6 +173,7 @@ function groupCascadeOutcomes(
   outcomes: readonly UpdateCascadeOutcome[],
   probe: SoftDepStatus,
   cardinality: "single" | "plural",
+  clones: UpdateCloneNotes | undefined,
 ): Plural<MarketplaceRows<UpdateMsg>> {
   const byMarketplace = new Map<string, MarketplaceGroup>();
   for (const { target, outcome } of outcomes) {
@@ -167,13 +183,25 @@ function groupCascadeOutcomes(
 
     const key = `${target.scope}:${target.marketplace}`;
     // UPD-DEP-D1: the dependencies the update changed render beside its row.
+    // D-SG-22: each row reads the note of its own subject; a dependency row
+    // is named by its full key.
     const rows = [
-      outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
-      ...(outcome.dependencyRows ?? []),
+      withUpdateCloneNote(
+        outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
+        clones?.plugins,
+        `${outcome.name}@${target.marketplace}`,
+      ),
+      ...(outcome.dependencyRows ?? []).map((row) => withCloneNote(row, clones?.plugins, row.name)),
     ];
     const existing = byMarketplace.get(key);
     if (existing === undefined) {
-      byMarketplace.set(key, { name: target.marketplace, scope: target.scope, plugins: rows });
+      const clone = clones?.marketplace(target.scope, target.marketplace);
+      byMarketplace.set(key, {
+        name: target.marketplace,
+        scope: target.scope,
+        ...(clone !== undefined && { clone }),
+        plugins: rows,
+      });
     } else {
       existing.plugins.push(...rows);
     }
@@ -190,6 +218,7 @@ function groupCascadeOutcomes(
     .map((group) => ({
       name: group.name,
       scope: group.scope,
+      ...(group.clone !== undefined && { clone: group.clone }),
       plugins: group.plugins,
     }));
 }
@@ -197,7 +226,8 @@ function groupCascadeOutcomes(
 /**
  * Composes and emits one exact update cascade from ordered plugin outcomes.
  * D-05: the row severity stamps and the emitted markers read the run's one
- * soft-dependency snapshot.
+ * soft-dependency snapshot. D-SG-22: `clones` gives each row and block the
+ * note of the GitHub clone it ran; with none, no row names a clone.
  */
 export function composeUpdateCascade(
   ctx: NotificationContext,
@@ -205,8 +235,9 @@ export function composeUpdateCascade(
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
   abortedByFailure = false,
+  clones?: UpdateCloneNotes,
 ): void {
-  const marketplaces = groupCascadeOutcomes(outcomes, run.softDeps, cardinality);
+  const marketplaces = groupCascadeOutcomes(outcomes, run.softDeps, cardinality, clones);
   const updatedCount = outcomes.filter(({ outcome }) => outcome.partition === "updated").length;
   const hasErrorOrWarningRow = marketplaces.some((marketplace) =>
     marketplace.plugins.some(

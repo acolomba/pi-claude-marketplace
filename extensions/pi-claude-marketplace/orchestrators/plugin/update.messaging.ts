@@ -7,7 +7,10 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 
+import { withCloneNote } from "./install.messaging.ts";
+
 import type { CommandContext } from "../../shared/notify-context.ts";
+import type { GitHubCloneNotes } from "../github-transport.ts";
 
 /**
  * update's private status set. The update cascade emits `updated` rows
@@ -44,3 +47,20 @@ export const UPDATE_CONTEXT = {
     installed: { markers: true, contentReasons: true },
   },
 } as const satisfies CommandContext<UpdateStatus>;
+
+/**
+ * D-SG-22: `row` with the clone note `notes` keeps for `subject`,
+ * `<plugin>@<marketplace>`, so an update row names the transport of the
+ * GitHub clone its plugin ran. A `skipped` or `partially-upgradable` row has
+ * no clone field and stays unchanged, as does a row whose subject cloned
+ * nothing over GitHub.
+ */
+export function withUpdateCloneNote(
+  row: UpdateMsg,
+  notes: GitHubCloneNotes | undefined,
+  subject: string,
+): UpdateMsg {
+  return row.status === "skipped" || row.status === "partially-upgradable"
+    ? row
+    : withCloneNote(row, notes, subject);
+}

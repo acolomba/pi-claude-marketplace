@@ -862,8 +862,8 @@ Feature: MCP server legacy move
       | kind    | severity | needs reload |
       | cascade | info     | true         |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
       """
       {

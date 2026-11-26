@@ -22,8 +22,8 @@ Feature: Plugin git source update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    |
-      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 2.0.0 |
+      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 2.0.0 | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/gits.git/info/refs?service=git-upload-pack | 200    |
@@ -96,8 +96,8 @@ Feature: Plugin git source update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    | from commit    | to commit      |
-      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 1.0.0 | {ghp commit 1} | {ghp commit 2} |
+      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    | from commit    | to commit      | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 1.0.0 | {ghp commit 1} | {ghp commit 2} | via-https  | https://github.com/acme/ghp.git |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
   Scenario: Reinstalling a git-source plugin after a fetch installs the fetched revision with no request
@@ -329,8 +329,8 @@ Feature: Plugin git source update
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons  | scope   | version | leaks | rollback partial | cause chain   | cause truncated |
-      | gits             | project           | ghp@gits | ghp  | failed | <reason> | project | 1.0.0   |       |                  | <cause chain> | false           |
+      | marketplace name | marketplace scope | id       | name | status | reasons  | scope   | version | leaks | rollback partial | cause chain   | cause truncated | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | <reason> | project | 1.0.0   |       |                  | <cause chain> | false           | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status   |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |

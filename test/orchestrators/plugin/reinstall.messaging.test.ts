@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   REINSTALL_CONTEXT,
   narrowReasons,
@@ -1457,4 +1458,88 @@ test("REINSTALL_CONTEXT declares complete row policies", () => {
 
   // assert
   assert.deepStrictEqual(policies, expectedPolicies);
+});
+
+test("D-SG-22: each reinstall row names its own subject's clone, and a skipped or manual-recovery row names none", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● official [project]",
+      "  ● alpha v1.0.0 (reinstalled)",
+      "    Cloning via SSH: git@github.com:acme/alpha.git",
+      "  ⊘ beta (failed) {network error}",
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/beta.git",
+      "    HTTPS clone failed, retrying with SSH: git@github.com:acme/beta.git",
+      "  ⊘ gamma (skipped) {up-to-date}",
+      "  ⊘ delta (manual recovery) {rollback partial}",
+      "",
+      "Plugin reinstall: 1 failure, 1 warning, 2 successes",
+      "",
+      "/reload to pick up changes",
+    ].join("\n"),
+    severity: "error",
+  });
+  const notes = createGitHubCloneNotes();
+  notes.record("alpha@official", { note: "via-ssh", url: "git@github.com:acme/alpha.git" });
+  notes.record("beta@official", {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/beta.git",
+    retries: ["git@github.com:acme/beta.git"],
+  });
+  for (const name of ["gamma", "delta"]) {
+    notes.record(`${name}@official`, {
+      note: "via-https",
+      url: `https://github.com/acme/${name}.git`,
+    });
+  }
+
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "reinstalled",
+      resourcesChanged: true,
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      version: "1.0.0",
+      fromVersion: "1.0.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+    {
+      partition: "failed",
+      name: "beta",
+      marketplace: "official",
+      scope: "project",
+      notes: [],
+      reasons: ["network error"],
+    },
+    {
+      partition: "skipped",
+      name: "gamma",
+      marketplace: "official",
+      scope: "project",
+      notes: ["up-to-date"],
+    },
+    {
+      partition: "failed",
+      name: "delta",
+      marketplace: "official",
+      scope: "project",
+      notes: [],
+      failureClass: "manual-recovery",
+      reasons: [],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "plural", notes);
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
 });

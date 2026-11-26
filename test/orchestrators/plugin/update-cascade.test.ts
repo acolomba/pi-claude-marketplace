@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { rm } from "node:fs/promises";
 import test from "node:test";
 
+import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   composeUpdateCascade,
   type UpdateCascadeOutcome,
@@ -816,5 +817,75 @@ test("SC3: an unconstrained plugin renders the same manual cascade rows as befor
   // disclosure, and the rendered row is byte-identical to the
   // pre-constraint-gate rendering (NREG-01).
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("D-SG-22: each row names its own subject's clone, a dependency row its key's, and the block its sync's", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const plugins = createGitHubCloneNotes();
+  plugins.record("hello@mp", { note: "via-ssh", url: "git@github.com:acme/hello.git" });
+  plugins.record("dep@mp", {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/dep.git",
+    retries: ["git@github.com:acme/dep.git"],
+  });
+  plugins.record("quiet@mp", { note: "via-https", url: "https://github.com/acme/quiet.git" });
+  const root = updated("mp", "project", "hello");
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      ...root,
+      outcome: {
+        ...root.outcome,
+        dependencyRows: [
+          {
+            status: "updated",
+            name: "dep@mp",
+            from: "1.0.0",
+            to: "2.0.0",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    },
+    heldOutcome("mp", "project", "quiet"),
+    updated("other", "user", "world"),
+  ];
+  const expectedMessage = [
+    "A plugin operation needs attention.",
+    "",
+    "● mp [project]",
+    "  Cloning via HTTPS: https://github.com/acme/mp.git",
+    "  ● hello v1.0.0 → v1.1.0 (updated)",
+    "    Cloning via SSH: git@github.com:acme/hello.git",
+    "  ● dep@mp v1.0.0 → v2.0.0 (updated)",
+    "    SSH not configured, cloning via HTTPS: https://github.com/acme/dep.git",
+    "    HTTPS clone failed, retrying with SSH: git@github.com:acme/dep.git",
+    "  ⊘ quiet v1.0.0 (skipped) {dependents constrain}",
+    '    cause: the declared ranges admit no version in common -- required by "alpha@mp"',
+    "",
+    "● other [user]",
+    "  ● world v1.0.0 → v1.1.0 (updated)",
+    "",
+    "Plugin update: 1 warning, 2 updated",
+    "",
+    "/reload to pick up changes",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", false, {
+    plugins,
+    marketplace: (scope, name) =>
+      scope === "project" && name === "mp"
+        ? { note: "via-https", url: "https://github.com/acme/mp.git" }
+        : undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    { message: expectedMessage, severity: "warning" },
+  ]);
   boundary.verifyBoundary();
 });

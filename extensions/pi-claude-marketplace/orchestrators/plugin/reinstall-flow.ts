@@ -60,6 +60,7 @@ import { type LockedStateTransactionDeps } from "../../transaction/with-state-gu
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import { collectPluginClonesLocked } from "./clone-gc.ts";
+import { withCloneNote } from "./install.messaging.ts";
 import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
   discoveryWarningsMember,
@@ -289,8 +290,13 @@ interface ReinstallReached {
 async function reinstallPluginWith(
   owners: ReinstallFlowOwners,
   bindings: ReinstallBindings,
-  opts: ReinstallPluginOptions,
+  given: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
+  // D-SG-19 / D-SG-22: a reinstall run with no context makes its own, so its
+  // row reads the notes its clones left there.
+  const transportContext = given.transportContext ?? defaultPluginTransportContext();
+  const opts: ReinstallPluginOptions = { ...given, transportContext };
+  const { notes } = transportContext;
   const { ctx, run, scope, cwd, marketplace } = opts;
   const render = opts.render ?? "default";
   const locations = locationsFor(scope, cwd);
@@ -312,7 +318,7 @@ async function reinstallPluginWith(
     // CR-02 / D-01: the standalone single-plugin path must emit the row, not
     // return silently. The bulk mapper composes it, so the two agree.
     if (render !== "none") {
-      renderReinstallPartitionAndNotify(ctx, run, [outcome], "single");
+      renderReinstallPartitionAndNotify(ctx, run, [outcome], "single", notes);
       // AFILE-04: a failure after the MCP commit leaves the rewritten file.
       notifyMcpConfigNotices(ctx, run, reached.mcpConfigNotices);
     }
@@ -355,10 +361,10 @@ async function reinstallPluginWith(
   // the orphan-fold scope decision this branch always makes: the row's scope
   // matches its marketplace block. D-05: `run.softDeps` is the snapshot the
   // `{requires pi-...}` markers read, so the severity and the markers agree.
-  const reinstalledRow: PluginReinstalledMessage = reinstalledRowFromOutcome(
-    outcome,
-    undefined,
-    run.softDeps,
+  const reinstalledRow: PluginReinstalledMessage = withCloneNote(
+    reinstalledRowFromOutcome(outcome, undefined, run.softDeps),
+    notes,
+    `${opts.plugin}@${marketplace}`,
   );
   notifyWithContext(
     ctx,
@@ -516,7 +522,13 @@ function failReinstall(
     ...discoveryWarningsMember(candidate.stagingWarnings),
   };
   if (render !== "none") {
-    renderReinstallPartitionAndNotify(opts.ctx, opts.run, [outcome], "single");
+    renderReinstallPartitionAndNotify(
+      opts.ctx,
+      opts.run,
+      [outcome],
+      "single",
+      opts.transportContext?.notes,
+    );
   }
 
   return outcome;
@@ -587,7 +599,8 @@ async function reinstallPluginsWith(
     );
   }
 
-  renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality);
+  // D-SG-22: each row names the transport of the clone its plugin ran.
+  renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality, transportContext.notes);
   surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
   surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
   return Object.freeze(outcomes);

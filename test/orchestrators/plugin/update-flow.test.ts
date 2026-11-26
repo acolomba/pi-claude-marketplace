@@ -1849,7 +1849,7 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
+            "A plugin operation has failed.\n\n● official [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ official (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
           severity: "error",
         },
       ]);
@@ -1945,7 +1945,7 @@ for (const { title, seed, marketplace, failure, message } of [
     marketplace: "official",
     failure: { kind: "network", httpStatus: 503 },
     message:
-      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 503 on https://github.com/test/repo.git -> git clone failed: network, exit code 128\n\nPlugin update: 1 failure",
+      "A plugin operation has failed.\n\n● official [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ official (failed) {network error}\n    cause: 503 on https://github.com/test/repo.git -> git clone failed: network, exit code 128\n\nPlugin update: 1 failure",
   },
   {
     title:
@@ -1954,7 +1954,7 @@ for (const { title, seed, marketplace, failure, message } of [
     marketplace: "official",
     failure: { kind: "repository-not-found", httpStatus: 404 },
     message:
-      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 404 on https://github.com/test/repo.git -> git clone failed: repository-not-found, exit code 128\n\nPlugin update: 1 failure",
+      "A plugin operation has failed.\n\n● official [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ official (failed) {network error}\n    cause: 404 on https://github.com/test/repo.git -> git clone failed: repository-not-found, exit code 128\n\nPlugin update: 1 failure",
   },
   {
     title:
@@ -2049,7 +2049,7 @@ test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier t
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● zzz [project]\n  ⊘ zzz (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
+            "A plugin operation has failed.\n\n● zzz [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ zzz (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
           severity: "error",
         },
         {
@@ -16050,5 +16050,186 @@ test("D-SG-19: a converge move clones over the transport context its target carr
       PROBE_REFUSED,
     );
     assert.strictEqual(probes.count, 1);
+  });
+});
+
+// ─── D-SG-22: an update names the transport of each GitHub clone it ran ──────
+
+/** The line under a notification's line `after`, or undefined when it has none. */
+function lineAfter(notifications: readonly NotifyRecord[], after: string): string | undefined {
+  const lines = notifications.flatMap((n) => n.message.split("\n"));
+  const at = lines.indexOf(after);
+  return at === -1 ? undefined : lines[at + 1];
+}
+
+test("D-SG-22: an update that clones a github.com plugin names the transport under its row", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-clone-note-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+    await seedGitPluginMarketplace({
+      cwd,
+      cloneUrl: "https://github.com/org/repo",
+      fixtureRepoDir,
+      versionTag: "9.9.9",
+      entrySource: { source: "url", url: "https://github.com/org/repo.git", sha: SHA_NEW },
+      recordedSha: SHA_OLD,
+    });
+    const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await updatePlugins({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+      cloneCacheSeam: seamWith(gitOps),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((n) => n.message),
+      [
+        [
+          "● mp [project]",
+          "  ● gp v9.9.9 (1111111) → v9.9.9 (2222222) (updated)",
+          "    Cloning via HTTPS: https://github.com/org/repo.git",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      ],
+    );
+  });
+});
+
+test("D-SG-22: a PUP-2 sync that re-clones a github marketplace names the transport under its block", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-clone-note-");
+    try {
+      // arrange
+      const { manifestPath } = await seedUrlMarketplaceForSync(
+        cwd,
+        { a: "1.0.0" },
+        githubSource("https://github.com/org/repo#main"),
+      );
+      const remoteTree = path.join(cwd, "remote-tree");
+      await cp(path.dirname(path.dirname(manifestPath)), remoteTree, { recursive: true });
+      await rewriteManifest(path.join(remoteTree, ".claude-plugin", "marketplace.json"), "mp", {
+        a: { version: "1.0.10" },
+      });
+      const { gitOps } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        remoteRefs: { "refs/remotes/origin/main": SYNC_REMOTE_COMMIT },
+        fixtureSourceDir: remoteTree,
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.strictEqual(
+        lineAfter(notifications, "● mp [project]"),
+        "  Cloning via HTTPS: https://github.com/org/repo.git",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-22, OQ-3: a PUP-2 sync that finds its github marketplace current names no clone", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-current-note-");
+    try {
+      // arrange
+      const { manifestPath } = await seedUrlMarketplaceForSync(
+        cwd,
+        { a: "1.0.0" },
+        githubSource("https://github.com/org/repo#main"),
+      );
+      await rewriteManifest(manifestPath, "mp", { a: { version: "1.0.1" } });
+      const { gitOps, state: gitState } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        remoteRefs: { "refs/remotes/origin/main": SYNC_LOCAL_COMMIT },
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          clones: gitState.cloneCalls.length,
+          after: lineAfter(notifications, "● mp [project]"),
+        },
+        { clones: 0, after: "  ● a v1.0.0 → v1.0.1 (updated)" },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-SG-22: a PUP-2 sync whose re-clone fails names the clone it tried under its block", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-failed-note-");
+    try {
+      // arrange
+      await seedUrlMarketplaceForSync(
+        cwd,
+        { a: "1.0.0" },
+        githubSource("https://github.com/org/repo#main"),
+      );
+      const { gitOps } = createGitOps({
+        head: SYNC_LOCAL_COMMIT,
+        remoteRefs: { "refs/remotes/origin/main": SYNC_REMOTE_COMMIT },
+        cloneThrows: new GitCommandError(
+          { kind: "network" },
+          { operation: "clone", exitCode: 128 },
+        ),
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.strictEqual(
+        lineAfter(notifications, "● mp [project]"),
+        "  Cloning via HTTPS: https://github.com/org/repo.git",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 });
