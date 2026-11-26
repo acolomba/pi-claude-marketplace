@@ -32,12 +32,14 @@ import {
   CleanupLeakError,
   DeviceFlowUnavailableError,
   GitCommandError,
+  GitHubTransportsFailedError,
   InvalidGitHubBaseUrlError,
   StoredCredentialRejectedError,
   type GitFailure,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
 import type { TransportPlan } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
@@ -1414,6 +1416,110 @@ test("D-SG-15, OQ-4: without the keep variable an unanswered freshness check re-
   );
   assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
   assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
+});
+
+/**
+ * A checkout at commit A whose remote fails every request over both
+ * transports, the https clone with `httpsClone` and every other request with
+ * an ssh failure. `ls-remote` over https fails with `httpsLsRemote` when it
+ * is given.
+ */
+async function failingOverBoth(
+  t: TestContext,
+  failures: { readonly httpsClone: Error; readonly httpsLsRemote?: Error },
+) {
+  const { swap, git } = await unreachableOverBoth(t);
+  const gitOps: GitOps = {
+    ...git.gitOps,
+    resolveRemoteRef: (options) =>
+      options.url === HTTPS_URL && failures.httpsLsRemote !== undefined
+        ? Promise.reject(failures.httpsLsRemote)
+        : git.gitOps.resolveRemoteRef(options),
+    clone: (options) =>
+      options.url === HTTPS_URL ? Promise.reject(failures.httpsClone) : git.gitOps.clone(options),
+  };
+  return { swap, gitOps };
+}
+
+test("D-SG-22, OQ-8: a refresh whose check and re-clone fail over both transports throws the re-clone's error that names both", async (t) => {
+  // arrange
+  const httpsClone = new GitCommandError(
+    { kind: "network" },
+    { operation: "clone --depth", exitCode: 128 },
+  );
+  const { swap, gitOps } = await failingOverBoth(t, { httpsClone });
+
+  // act & assert
+  await assert.rejects(
+    refreshCloneBySwap(swapArgs(swap, gitOps, sshFirstPlans().plans)),
+    (error: unknown) => {
+      assert.ok(error instanceof GitHubTransportsFailedError);
+      assert.deepStrictEqual(
+        { surface: error.surface, attempts: error.attempts },
+        {
+          surface: "marketplace",
+          attempts: [
+            { transport: "ssh", url: SSH_URL, error: sshFailure("clone --depth") },
+            { transport: "https", url: HTTPS_URL, error: httpsClone },
+          ],
+        },
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
+});
+
+test("GAUTH-04: a refresh whose check met a refused stored credential throws that refusal, not the re-clone's error", async (t) => {
+  // arrange
+  const rejected = new StoredCredentialRejectedError("github.com", {
+    cause: lsRemoteFailure({ kind: "https-auth", detail: "rejected" }),
+  });
+  const { swap, gitOps } = await failingOverBoth(t, {
+    httpsClone: new GitCommandError(
+      { kind: "network" },
+      { operation: "clone --depth", exitCode: 128 },
+    ),
+    httpsLsRemote: rejected,
+  });
+  const plan: RefreshPlans["freshness"] = () =>
+    planMarketplaceClone({
+      source: githubSource("acme/tools"),
+      probe: () => Promise.resolve("not-configured"),
+    });
+
+  // act & assert
+  await assert.rejects(
+    refreshCloneBySwap(swapArgs(swap, gitOps, { freshness: plan, reclone: plan })),
+    (error: unknown) => {
+      assert.strictEqual(error, rejected);
+      return true;
+    },
+  );
+});
+
+test("SG-SSH-02: a freshness check logs Claude Code's line when it falls back to the other transport", async (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const git = gitOverBoth({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_A,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+    failing: { lsRemote: [SSH_URL] },
+  });
+
+  // act
+  await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { ...sshFirstPlans().plans, subject: "tools" }),
+  );
+
+  // assert
+  assert.deepStrictEqual(logged, [
+    "[git] Marketplace refresh failed with SSH for tools (git ls-remote failed: ssh-auth, exit code 128), falling back to HTTPS",
+  ]);
 });
 
 test("D-SG-15, OQ-4: one freshness attempt that answers stale keeps nothing under the keep variable", async (t) => {

@@ -54,6 +54,26 @@ Feature: Marketplace github refresh
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
+  Scenario: A github marketplace refresh that fails over both transports reports both attempts
+    Given the marketplace "tools" is published as a github source
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the user has run "/claude:plugin marketplace add acme/tools --scope user"
+    Given the git host answers 404 for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace update tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                                                                                | cause truncated | marketplace clone note | marketplace clone url             | marketplace clone retries     |
+      | tools            | user              | failed             | tools | tools | failed | authentication required | user  |       |                  | Failed to update marketplace "tools"., Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: repository-not-found, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           | ssh-not-configured     | https://github.com/acme/tools.git | git@github.com:acme/tools.git |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
+
   Scenario: A github marketplace added over https refreshes over ssh once the user's ssh authenticates
     Given the marketplace "tools" is published as a github source
     Given pi runs with github's requests routed to the git host

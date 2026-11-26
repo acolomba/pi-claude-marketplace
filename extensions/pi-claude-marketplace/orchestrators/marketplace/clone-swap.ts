@@ -38,11 +38,15 @@ import {
   appendLeakToError,
   errorMessage,
   GitCommandError,
+  GITHUB_TRANSPORT_LABELS,
+  GitHubTransportsFailedError,
   isErrnoException,
   StoredCredentialRejectedError,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { redactCredentials } from "../../shared/redact-credentials.ts";
 import { upstreamFlagIsTrue } from "../../shared/upstream-flag.ts";
 import {
   cloneOverGitHubTransports,
@@ -54,7 +58,6 @@ import {
 import type { TransportAttempt, TransportPlan } from "../../domain/github-transport.ts";
 import type { GitHubSource, UrlSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { GitHubTransportsFailedError } from "../../shared/errors.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "./shared.ts";
 
 /**
@@ -266,13 +269,18 @@ async function readLocalHead(args: CloneSwapArgs): Promise<string | undefined> {
 }
 
 /**
- * D-SG-10: the freshness of the checkout. `unreachable` carries the
- * `ls-remote` failure.
+ * D-SG-10: the freshness of the checkout. `unreachable` carries the last
+ * attempt's `ls-remote` failure, and `rejected` the refused stored credential
+ * of any attempt (GAUTH-04).
  */
-type Freshness =
-  | { readonly kind: "current" }
-  | { readonly kind: "stale" }
-  | { readonly kind: "unreachable"; readonly cause: unknown };
+type Freshness = { readonly kind: "current" } | { readonly kind: "stale" } | Unreachable;
+
+/** D-SG-10: a freshness check that no attempt answered. */
+interface Unreachable {
+  readonly kind: "unreachable";
+  readonly cause: unknown;
+  readonly rejected?: StoredCredentialRejectedError;
+}
 
 const CURRENT: Freshness = { kind: "current" };
 const STALE: Freshness = { kind: "stale" };
@@ -315,20 +323,21 @@ function attemptAuth(
 }
 
 /** What the freshness `ls-remote` over a plan found. */
-type RemoteAnswer =
-  | { readonly kind: "answered"; readonly oid: string | undefined }
-  | { readonly kind: "unreachable"; readonly cause: unknown };
+type RemoteAnswer = { readonly kind: "answered"; readonly oid: string | undefined } | Unreachable;
 
 /**
  * SG-SSH-02, OQ-4: `ls-remote` over `attempt`, then over each attempt the
  * plan gives after a failure, until one answers, as Claude Code's refresh
- * walks its URL list. A failure that says nothing about the remote is thrown
- * at once; when no attempt answers, the last failure is the cause.
+ * walks its URL list, with Claude Code's debug line for each fallback. A
+ * failure that says nothing about the remote is thrown at once; when no
+ * attempt answers, the last failure is the cause, and a refused stored
+ * credential of any attempt is kept as `rejected` (GAUTH-04).
  */
 async function listRemoteHead(
   args: CloneSwapArgs,
   plan: TransportPlan,
   attempt: TransportAttempt,
+  rejected?: StoredCredentialRejectedError,
 ): Promise<RemoteAnswer> {
   try {
     const oid = await args.gitOps.resolveRemoteRef({
@@ -342,11 +351,27 @@ async function listRemoteHead(
       throw err;
     }
 
+    const refused = err instanceof StoredCredentialRejectedError ? err : rejected;
     const next = await plan.after(err, attempt);
-    return next === undefined
-      ? { kind: "unreachable", cause: err }
-      : listRemoteHead(args, plan, next);
+    if (next === undefined) {
+      return {
+        kind: "unreachable",
+        cause: err,
+        ...(refused !== undefined && { rejected: refused }),
+      };
+    }
+
+    hookDebugLog(
+      `Marketplace refresh failed with ${GITHUB_TRANSPORT_LABELS[attempt.transport]} for ${args.subject ?? plan.first.url} (${debugMessage(err)}), falling back to ${GITHUB_TRANSPORT_LABELS[next.transport]}`,
+      "git",
+    );
+    return listRemoteHead(args, plan, next, refused);
   }
+}
+
+// A failure's message for a debug line, with no credential and no absolute path.
+function debugMessage(error: unknown): string {
+  return redactCredentials(redactAbsolutePaths(errorMessage(error)));
 }
 
 /**
@@ -411,15 +436,33 @@ async function restoreInterruptedBackup(args: CloneSwapArgs): Promise<void> {
 }
 
 /**
+ * The failure a refresh whose re-clone failed with `cloneFailure` throws.
+ * After an unreachable check the clone fails the same way, so the check's
+ * failure is thrown: it names the cause before git's own credential helpers
+ * acted on it, and a stored credential the host refused in any attempt is
+ * thrown first (GAUTH-04). A re-clone that failed over both transports throws
+ * its own error, which names both attempts, as Claude Code's refresh does
+ * (D-SG-22, OQ-8, upstream `wqo`).
+ */
+function refreshFailure(freshness: Freshness, cloneFailure: unknown): unknown {
+  if (freshness.kind !== "unreachable") {
+    return cloneFailure;
+  }
+
+  if (freshness.rejected !== undefined) {
+    return freshness.rejected;
+  }
+
+  return cloneFailure instanceof GitHubTransportsFailedError ? cloneFailure : freshness.cause;
+}
+
+/**
  * D-SG-10 / MA-12: clone into the staging directory over the re-clone plan
  * and mark it as this extension's own. SG-SSH-02: the staging directory is
  * removed before the plan's next attempt, so each attempt starts with none
  * (NFR-1), and the plan's note goes to `notes` under `subject`. A failed clone
  * removes the staging directory and leaves the live checkout untouched (MA-9:
- * a leak is appended, not masked). After an unreachable check the clone fails
- * the same way, so the check's failure is the one thrown: it names the cause
- * before git's own credential helpers acted on it, as a stored credential the
- * host rejected (GAUTH-04).
+ * a leak is appended, not masked). `refreshFailure` picks what is thrown.
  */
 async function cloneIntoStaging(args: CloneSwapArgs, freshness: Freshness): Promise<string> {
   const { stagingDir, removalOps } = args;
@@ -445,7 +488,7 @@ async function cloneIntoStaging(args: CloneSwapArgs, freshness: Freshness): Prom
 
     return stagingDir;
   } catch (err) {
-    const failure = freshness.kind === "unreachable" ? freshness.cause : err;
+    const failure = refreshFailure(freshness, err);
     const leak = await cleanupStaging(args.removalOps, stagingDir, "marketplace clone staging");
     if (leak !== undefined) {
       throw appendLeakToError(failure, leak);
