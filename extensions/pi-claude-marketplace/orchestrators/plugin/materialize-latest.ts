@@ -94,8 +94,8 @@ export function reportedStagingWarnings(
  * D-SG-19: `args.transportContext`, the calling command's one GitHub
  * transport context, reaches the preflight and the dependency settle, so the
  * candidate's clones and the moves its dependencies need follow one probe for
- * the whole command. A caller with no context clones each source once on its
- * wire URL.
+ * the whole command. A caller with no context gets a new one, with the full
+ * skip checks and probe, from the preflight.
  */
 export async function materializeLatestVersion(
   args: ThreePhaseArgs,

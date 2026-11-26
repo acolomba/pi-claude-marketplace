@@ -222,7 +222,7 @@ export function createGitOps(options: {
  */
 export function seamWith(gitOps: GitOps): InstallCloneCacheSeam {
   return {
-    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    resolvePluginPin,
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),

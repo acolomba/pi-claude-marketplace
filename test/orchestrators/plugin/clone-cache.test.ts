@@ -28,6 +28,7 @@ import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplac
 import { DEFAULT_GIT_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   canonicalCloneUrl,
+  isPinnedSource,
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -60,7 +61,6 @@ import {
   recordingGitProcess,
   systemGitOps,
 } from "../../platform/system-git-ops.ts";
-import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { marketplaceRecord, pluginRecord } from "../scope-state-seeds.ts";
 
 import type {
@@ -81,6 +81,7 @@ import type {
   GitAuthBundle,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { PinnedGitSource } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -274,7 +275,7 @@ void test("PURL-02: a warm cache uses the default git surface without making a g
 
 void test("D-77-04: a pinned source uses the default git surface without remote resolution", async () => {
   // arrange
-  const source: UrlSource = {
+  const source: PinnedGitSource = {
     kind: "url",
     raw: `https://example.com/pinned.git#${PIN_40}`,
     sha: PIN_40,
@@ -282,7 +283,7 @@ void test("D-77-04: a pinned source uses the default git surface without remote 
   };
 
   // act
-  const resolved = await resolvePluginPin({ source, transport: asWritten(source) });
+  const resolved = await resolvePluginPin({ source });
 
   // assert
   assert.deepEqual(resolved, {
@@ -954,290 +955,65 @@ void test("MA-9: a clone failure cleans staging and rethrows with the leak suffi
   );
 });
 
-void test("D-77-05: resolvePluginPin resolves an unpinned source's remote HEAD to the pin", async () => {
-  const HEAD = "cccccccccccccccccccccccccccccccccccccccc";
-  const { gitOps, state } = createGitOps({ remoteHead: HEAD });
-  const source: UrlSource = {
+void test("D-77-05: resolvePluginPin gives a pinned source's ref as the fetch hint and its sha as the pin", async () => {
+  // arrange
+  const source: PinnedGitSource = {
     kind: "url",
-    raw: "https://example.com/repo",
+    raw: "https://example.com/repo#v1.0.0",
     url: "https://example.com/repo",
-  };
-
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  assert.equal(resolved.cloneUrl, "https://example.com/repo");
-  assert.equal(resolved.pin, HEAD, "unpinned pin = remote HEAD");
-  assert.equal(resolved.ref, undefined);
-  assert.equal(
-    state.resolveRemoteRefCalls.length,
-    1,
-    "resolveRemoteRef fired on the unpinned path",
-  );
-});
-
-void test("PROV-03 (Q1): resolvePluginPin forwards an auth bundle into resolveRemoteRef for an unpinned private HEAD resolution", async () => {
-  const HEAD = "ffffffffffffffffffffffffffffffffffffffff";
-  const { gitOps, state } = createGitOps({ remoteHead: HEAD });
-  const auth: GitAuthBundle = {
-    credentialOps: {
-      fill: async (): Promise<null> => Promise.resolve(null),
-      approve: async (): Promise<void> => Promise.resolve(),
-      reject: async (): Promise<void> => Promise.resolve(),
-    },
-    host: "gitlab.example.com",
-    kind: "stored-credential",
-  };
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://gitlab.example.com/o/r",
-    url: "https://gitlab.example.com/o/r",
-  };
-
-  const resolved = await resolvePluginPin({ source, gitOps, auth, transport: asWritten(source) });
-
-  assert.equal(resolved.pin, HEAD);
-  assert.equal(state.resolveRemoteRefCalls.length, 1);
-  assert.equal(
-    state.resolveRemoteRefCalls[0]?.auth,
-    auth,
-    "the auth bundle threads into resolveRemoteRef by reference",
-  );
-});
-
-void test("PROV-02: resolvePluginPin with NO auth records a bare resolveRemoteRef call (public-only, byte-identical)", async () => {
-  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://example.com/repo",
-    url: "https://example.com/repo",
-  };
-
-  await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  assert.equal(state.resolveRemoteRefCalls.length, 1, "MURL-09: exactly one attempt");
-  assert.deepEqual(state.resolveRemoteRefCalls, [{ url: "https://example.com/repo" }]);
-});
-
-void test("Pitfall: resolvePluginPin does NOT call resolveRemoteRef when a sha is set", async () => {
-  const { gitOps, state } = createGitOps({
-    remoteHead: "dddddddddddddddddddddddddddddddddddddddd",
-  });
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://example.com/repo",
-    url: "https://example.com/repo",
+    ref: "v1.0.0",
     sha: PIN2_40,
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  assert.equal(resolved.pin, PIN2_40, "pin = the source sha");
-  assert.equal(state.resolveRemoteRefCalls.length, 0, "no remote resolution when sha is pinned");
-});
-
-void test("D-77-05: resolvePluginPin resolves a ref (no sha) to its remote sha", async () => {
-  const TAG = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0";
-  const { gitOps, state } = createGitOps({
-    remoteHead: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    remoteResolveMap: { "v1.0.0": TAG },
-  });
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://example.com/repo",
-    url: "https://example.com/repo",
-    ref: "v1.0.0",
-  };
-
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  assert.equal(resolved.pin, TAG, "pin = the ref's resolved sha");
-  assert.equal(resolved.ref, "v1.0.0", "ref returned as the fetch hint");
-  assert.deepEqual(state.resolveRemoteRefCalls, [
-    { url: "https://example.com/repo", ref: "v1.0.0" },
-  ]);
-});
-
-void test("PROV-03: resolvePluginPin forwards auth while resolving a named private ref", async () => {
-  // arrange
-  const refPin = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee0";
-  const { gitOps, state } = createGitOps({ remoteResolveMap: { private: refPin } });
-  const auth: GitAuthBundle = {
-    credentialOps: {
-      approve: async (): Promise<void> => Promise.resolve(),
-      fill: async (): Promise<null> => Promise.resolve(null),
-      reject: async (): Promise<void> => Promise.resolve(),
-    },
-    host: "gitlab.example.com",
-    kind: "stored-credential",
-  };
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://gitlab.example.com/o/r#private",
-    ref: "private",
-    url: "https://gitlab.example.com/o/r",
-  };
-
   // act
-  const resolved = await resolvePluginPin({ source, gitOps, auth, transport: asWritten(source) });
+  const resolved = await resolvePluginPin({ source });
 
   // assert
-  assert.deepEqual(resolved, {
-    cloneUrl: "https://gitlab.example.com/o/r",
-    pin: refPin,
-    ref: "private",
+  assert.deepStrictEqual(resolved, {
+    cloneUrl: "https://example.com/repo",
+    pin: PIN2_40,
+    ref: "v1.0.0",
   });
-  assert.deepEqual(state.resolveRemoteRefCalls, [
-    { auth, ref: "private", url: "https://gitlab.example.com/o/r" },
-  ]);
 });
 
-void test("D-77-06: resolvePluginPin reconstructs the canonical github url", async () => {
-  const { gitOps } = createGitOps({ remoteHead: PIN_40 });
-  const source = githubSource("owner/repo");
+void test("D-77-06 / MURL-01: resolvePluginPin gives a pinned github source its suffix-less canonical url", async () => {
+  // act
+  const resolved = await resolvePluginPin({
+    source: { ...githubSource("owner/repo"), sha: PIN_40 },
+  });
 
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  assert.equal(resolved.cloneUrl, "https://github.com/owner/repo");
-  assert.equal(resolved.pin, PIN_40);
+  // assert
+  assert.deepStrictEqual(resolved, { cloneUrl: "https://github.com/owner/repo", pin: PIN_40 });
 });
 
-void test("D-77-04: resolvePluginPin returns the git-subdir url verbatim as the clone url", async () => {
-  const { gitOps } = createGitOps({ remoteHead: PIN_40 });
-  const source: GitSubdirSource = {
-    kind: "git-subdir",
-    raw: "https://example.com/mono",
-    url: "https://example.com/mono",
-    path: "packages/plugin-a",
-  };
-
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  // The clone url is the repo root; the subdir path is resolved later by the
-  // resolver (git-subdir pluginRoot = cloneRoot + path).
-  assert.equal(resolved.cloneUrl, "https://example.com/mono");
-  assert.equal(resolved.pin, PIN_40);
-});
-
-void test("MURL-08 / PURL-09: resolvePluginPin sends the url as typed and still returns the canonical cache-key identity", async () => {
-  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://gitlab.example.com/o/r.git",
-    url: "https://gitlab.example.com/o/r",
-  };
-
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  assert.equal(
-    state.resolveRemoteRefCalls[0]?.url,
-    "https://gitlab.example.com/o/r.git",
-    "the wire url is sent as typed, keeping the user's .git decision",
-  );
-  assert.equal(
-    resolved.cloneUrl,
-    "https://gitlab.example.com/o/r",
-    "the returned cloneUrl stays the cache-key identity form",
-  );
-});
-
-void test("MURL-08 / PURL-04: resolvePluginPin sends the git-subdir url to the wire verbatim, suffix and all", async () => {
-  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
-  const source: GitSubdirSource = {
+void test("D-77-04: resolvePluginPin returns a pinned git-subdir url verbatim as the clone url", async () => {
+  // arrange
+  const source: PinnedGitSource = {
     kind: "git-subdir",
     raw: "https://example.com/mono.git",
     url: "https://example.com/mono.git",
     path: "packages/plugin-a",
+    sha: PIN_40,
   };
 
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
+  // act
+  const resolved = await resolvePluginPin({ source });
 
-  assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://example.com/mono.git");
-  assert.equal(resolved.cloneUrl, "https://example.com/mono.git");
+  // assert
+  // The clone url is the repo root; the subdir path is resolved later by the
+  // resolver (git-subdir pluginRoot = cloneRoot + path).
+  assert.deepStrictEqual(resolved, { cloneUrl: "https://example.com/mono.git", pin: PIN_40 });
 });
 
-void test("MURL-01 / PURL-09: resolvePluginPin sends the suffixed github url and returns the suffix-less canonical one", async () => {
-  const { gitOps, state } = createGitOps({ remoteHead: PIN_40 });
-  const source = githubSource("owner/repo");
+void test("isPinnedSource tells a source pinned to a commit from one that is not", () => {
+  // act
+  const answers = [
+    isPinnedSource({ ...githubSource("owner/repo"), sha: PIN_40 }),
+    isPinnedSource({ ...githubSource("owner/repo"), ref: "main" }),
+  ];
 
-  const resolved = await resolvePluginPin({ source, gitOps, transport: asWritten(source) });
-
-  assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://github.com/owner/repo.git");
-  assert.equal(resolved.cloneUrl, "https://github.com/owner/repo");
-});
-
-void test("MURL-09: resolvePluginPin makes exactly one resolveRemoteRef attempt and a 404 keeps its original identity", async () => {
-  const notFound = Object.assign(new Error("HTTP Error: 404"), {
-    code: "HttpError",
-    data: { statusCode: 404 },
-  });
-  const { gitOps, state } = createGitOps({ resolveRemoteRefThrows: notFound });
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://example.com/repo",
-    url: "https://example.com/repo",
-  };
-
-  await assert.rejects(
-    () => resolvePluginPin({ source, gitOps, transport: asWritten(source) }),
-    (error: unknown) => error === notFound,
-  );
-  assert.equal(state.resolveRemoteRefCalls.length, 1, "no retry after the 404");
-  assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://example.com/repo");
-});
-
-void test("D-77-05: resolvePluginPin refuses a ref the remote does not advertise", async () => {
-  // arrange
-  const { gitOps } = createGitOps({ remoteHead: PIN_40 });
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://example.com/repo#dev",
-    url: "https://example.com/repo",
-    ref: "dev",
-  };
-
-  // act & assert
-  await assert.rejects(() => resolvePluginPin({ source, gitOps, transport: asWritten(source) }), {
-    name: "Error",
-    message: 'remote https://example.com/repo has no ref "dev"',
-  });
-});
-
-void test("D-77-05: resolvePluginPin refuses a remote that advertises no HEAD", async () => {
-  // arrange
-  const { gitOps: baseGitOps } = createGitOps();
-  const gitOps: GitOps = { ...baseGitOps, resolveRemoteRef: () => Promise.resolve(undefined) };
-  const source: UrlSource = {
-    kind: "url",
-    raw: "https://example.com/repo",
-    url: "https://example.com/repo",
-  };
-
-  // act & assert
-  await assert.rejects(() => resolvePluginPin({ source, gitOps, transport: asWritten(source) }), {
-    name: "Error",
-    message: "remote https://example.com/repo advertised no HEAD ref",
-  });
-});
-
-void test("GHB-01: resolvePluginPin names the base URL when the base advertises no HEAD", async (t) => {
-  // arrange
-  setGitHubBaseUrl(t, "https://git.example.invalid");
-  const { gitOps: baseGitOps } = createGitOps();
-  const gitOps: GitOps = { ...baseGitOps, resolveRemoteRef: () => Promise.resolve(undefined) };
-
-  // act & assert
-  await assert.rejects(
-    () =>
-      resolvePluginPin({
-        source: githubSource("owner/repo"),
-        gitOps,
-        transport: asWritten(githubSource("owner/repo")),
-      }),
-    {
-      name: "Error",
-      message: "remote https://git.example.invalid/owner/repo.git advertised no HEAD ref",
-    },
-  );
+  // assert
+  assert.deepStrictEqual(answers, [true, false]);
 });
 
 void test("MURL-08 / PURL-04: materializePluginClone forwards the caller's wire url and keys the dir off the identity url", async (t) => {
@@ -1432,8 +1208,6 @@ void ({} satisfies Pick<Parameters<typeof materializeOrRefreshPluginMirror>[0], 
 void ({} satisfies Pick<Parameters<typeof materializePluginCommitCopy>[0], "transport">);
 // @ts-expect-error materializeUnpinnedSource requires a transport
 void ({} satisfies Pick<Parameters<typeof materializeUnpinnedSource>[1], "transport">);
-// @ts-expect-error resolvePluginPin requires a transport
-void ({} satisfies Pick<Parameters<typeof resolvePluginPin>[0], "transport">);
 
 /**
  * D-SG-18: a clone transport whose plan starts with `first` and, when `then`
@@ -4252,170 +4026,4 @@ void test("GIT-04: an unpinned source copies the mirror's commit and anchors its
     { step: "copy", sha: PIN_40, auth },
   ]);
   assert.deepStrictEqual(created, ["mirror", "copy"]);
-});
-
-/** A stored-credential bundle for the github.com requests of a pin's `ls-remote`. */
-const PIN_AUTH: GitAuthBundle = {
-  credentialOps: {
-    fill: async (): Promise<null> => Promise.resolve(null),
-    approve: async (): Promise<void> => Promise.resolve(),
-    reject: async (): Promise<void> => Promise.resolve(),
-  },
-  host: "github.com",
-  kind: "stored-credential",
-};
-
-/**
- * A `resolveRemoteRef` double that records each request, fails a request to a
- * url in `failing`, and answers every other with `advertised`.
- */
-function pinRemote(
-  failing: ReadonlySet<string>,
-  advertised: string | undefined,
-): {
-  readonly gitOps: GitOps;
-  readonly requests: Array<{ url: string; ref: string | undefined; auth: boolean }>;
-} {
-  const requests: Array<{ url: string; ref: string | undefined; auth: boolean }> = [];
-  return {
-    requests,
-    gitOps: {
-      ...createGitOps().gitOps,
-      resolveRemoteRef(options) {
-        requests.push({ url: options.url, ref: options.ref, auth: options.auth !== undefined });
-        return failing.has(options.url)
-          ? Promise.reject(
-              new GitCommandError({ kind: "network" }, { operation: "ls-remote", exitCode: 128 }),
-            )
-          : Promise.resolve(advertised);
-      },
-    },
-  };
-}
-
-void test("OQ-4: resolvePluginPin over a transport asks ssh for HEAD after its https attempt fails, with no auth over ssh", async () => {
-  // arrange
-  const { gitOps, requests } = pinRemote(new Set([GITHUB_HTTPS.url]), PIN_40);
-  const { transport } = cloneTransport(GITHUB_HTTPS, GITHUB_SSH);
-
-  // act
-  const resolved = await resolvePluginPin({
-    source: githubSource("owner/repo"),
-    gitOps,
-    auth: PIN_AUTH,
-    transport,
-  });
-
-  // assert
-  assert.deepStrictEqual(resolved, { cloneUrl: "https://github.com/owner/repo", pin: PIN_40 });
-  assert.deepStrictEqual(requests, [
-    { url: GITHUB_HTTPS.url, ref: undefined, auth: true },
-    { url: GITHUB_SSH.url, ref: undefined, auth: false },
-  ]);
-});
-
-void test("OQ-4: resolvePluginPin over a transport asks a named ref of its first attempt only, once it answers", async () => {
-  // arrange
-  const { gitOps, requests } = pinRemote(new Set(), PIN2_40);
-  const { transport } = cloneTransport(GITHUB_SSH, GITHUB_HTTPS);
-
-  // act
-  const resolved = await resolvePluginPin({
-    source: { ...githubSource("owner/repo"), ref: "main" },
-    gitOps,
-    auth: PIN_AUTH,
-    transport,
-  });
-
-  // assert
-  assert.deepStrictEqual(resolved, {
-    cloneUrl: "https://github.com/owner/repo",
-    pin: PIN2_40,
-    ref: "main",
-  });
-  assert.deepStrictEqual(requests, [{ url: GITHUB_SSH.url, ref: "main", auth: false }]);
-});
-
-void test("OQ-4: resolvePluginPin over a transport rethrows the last failure when the plan gives no other attempt", async () => {
-  // arrange
-  const { gitOps, requests } = pinRemote(new Set([GITHUB_SSH.url, GITHUB_HTTPS.url]), PIN_40);
-  const { transport } = cloneTransport(GITHUB_SSH, GITHUB_HTTPS);
-
-  // act
-  const resolving = resolvePluginPin({ source: githubSource("owner/repo"), gitOps, transport });
-
-  // assert
-  await assert.rejects(resolving, (err: unknown) => {
-    assert.ok(err instanceof GitCommandError);
-    assert.strictEqual(err.kind, "network");
-    return true;
-  });
-  assert.deepStrictEqual(
-    requests.map((request) => request.url),
-    [GITHUB_SSH.url, GITHUB_HTTPS.url],
-  );
-});
-
-void test("GHB-01, OQ-4: resolvePluginPin over a transport names the url of the attempt that answered without the ref", async () => {
-  // arrange
-  const { gitOps } = pinRemote(new Set([GITHUB_HTTPS.url]), undefined);
-  const { transport } = cloneTransport(GITHUB_HTTPS, GITHUB_SSH);
-
-  // act
-  const resolving = resolvePluginPin({
-    source: { ...githubSource("owner/repo"), ref: "gone" },
-    gitOps,
-    transport,
-  });
-
-  // assert
-  await assert.rejects(resolving, {
-    message: `remote ${GITHUB_SSH.url} has no ref "gone"`,
-  });
-});
-
-void test("SG-SSH-05, OQ-4: resolvePluginPin over a transport stops after three attempts", async () => {
-  // arrange
-  const { gitOps, requests } = pinRemote(new Set([GITHUB_SSH.url, GITHUB_HTTPS.url]), PIN_40);
-  const plan: TransportPlan = {
-    first: GITHUB_SSH,
-    after: (_failure, failed) =>
-      Promise.resolve(failed.transport === "ssh" ? GITHUB_HTTPS : GITHUB_SSH),
-  };
-  const transport: CloneTransport = {
-    plan: () => Promise.resolve(plan),
-    notes: createGitHubCloneNotes(),
-    subject: "repo@gits",
-  };
-
-  // act
-  const resolving = resolvePluginPin({ source: githubSource("owner/repo"), gitOps, transport });
-
-  // assert
-  await assert.rejects(resolving, GitCommandError);
-  assert.deepStrictEqual(
-    requests.map((request) => request.url),
-    [GITHUB_SSH.url, GITHUB_HTTPS.url, GITHUB_SSH.url],
-  );
-});
-
-void test("NFR-5: resolvePluginPin over a transport with a pinned sha makes no plan and sends nothing", async () => {
-  // arrange
-  const { gitOps, requests } = pinRemote(new Set(), PIN2_40);
-  const transport: CloneTransport = {
-    plan: () => Promise.reject(new Error("a pinned sha needs no plan")),
-    notes: createGitHubCloneNotes(),
-    subject: "repo@gits",
-  };
-
-  // act
-  const resolved = await resolvePluginPin({
-    source: { ...githubSource("owner/repo"), sha: PIN_40 },
-    gitOps,
-    transport,
-  });
-
-  // assert
-  assert.deepStrictEqual(resolved, { cloneUrl: "https://github.com/owner/repo", pin: PIN_40 });
-  assert.deepStrictEqual(requests, []);
 });

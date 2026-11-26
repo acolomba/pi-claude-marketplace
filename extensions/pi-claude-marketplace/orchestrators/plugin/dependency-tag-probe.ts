@@ -180,9 +180,12 @@ function httpsRetryOf(
  * wire form a clone of it sends (D-2-03). A failed SSH listing of a `github`
  * source lists once more over HTTPS (`httpsRetryOf`), and when that fails too
  * the failure arm carries the HTTPS attempt's cause and classification. Each
- * attempt reads and writes the memo under the URL it sends. The credential
- * bundle is the host bundle every other clone path already builds, which an
- * SSH listing never sends -- this adds no second credential acquisition path.
+ * attempt reads and writes the memo under the URL it sends, and a successful
+ * HTTPS retry is also kept under the SSH address, so the run tries SSH for
+ * that repository once (D-10-18 shares the memo across a bulk run). The
+ * credential bundle is the host bundle every other clone path already builds,
+ * which an SSH listing never sends -- this adds no second credential
+ * acquisition path.
  */
 export async function probeDependencyTags(
   options: DependencyTagProbeOptions,
@@ -207,6 +210,12 @@ export async function probeDependencyTags(
       : undefined;
   if (retryAt !== undefined) {
     listing = await listAt(retryAt);
+    // The HTTPS answer is kept under the SSH address too, so a later
+    // dependency on this repository in the same run reads it at once instead
+    // of trying SSH again, which can wait out the git time limit each time.
+    if (listing.kind === "listed") {
+      options.tagMemo?.set(listedAt, listing.tags);
+    }
   }
 
   if (listing.kind === "tag-listing-failed") {

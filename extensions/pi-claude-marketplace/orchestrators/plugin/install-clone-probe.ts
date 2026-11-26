@@ -4,6 +4,7 @@ import { pluginCloneTransport } from "../github-transport.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import {
+  isPinnedSource,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
   materializePluginCommitCopy,
@@ -94,7 +95,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
 
   const transport = installCloneTransport(options);
 
-  if (source.sha === undefined) {
+  if (!isPinnedSource(source)) {
     // GIT-01 / GIT-04: install already holds the scope's state lock, so the
     // mirror step and the copy run under it (GIT-03).
     const result = await materializeUnpinnedSource(seam, {
@@ -110,7 +111,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     };
   }
 
-  const pin = await seam.resolvePluginPin({ source, transport });
+  const pin = await seam.resolvePluginPin({ source });
   const cloneRoot = await seam.materializePluginClone({
     locations,
     cloneUrl: pin.cloneUrl,

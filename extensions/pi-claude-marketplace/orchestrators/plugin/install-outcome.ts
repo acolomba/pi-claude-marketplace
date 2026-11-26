@@ -307,8 +307,9 @@ export interface InstallLedgerOptions {
   readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * D-SG-18: the command's GitHub transport context, which every git clone of
-   * the ledger runs through, so one command probes once. Omitted (enable), a
-   * GitHub clone stays on SSH unless the environment forces HTTPS.
+   * the ledger runs through, so one command probes once. Every command root,
+   * enable included, passes one; omitted, the clone probe makes a new context
+   * with the full skip checks and probe (`installCloneTransport`).
    */
   readonly transportContext?: PluginTransportContext;
   /**

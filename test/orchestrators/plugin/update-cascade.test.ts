@@ -889,3 +889,38 @@ test("D-SG-22: each row names its own subject's clone, a dependency row its key'
   ]);
   boundary.verifyBoundary();
 });
+
+test("D-SG-22: a target that carries its own notes reads them in place of the command's", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const command = createGitHubCloneNotes();
+  command.record("hello@mp", { note: "via-https", url: "https://github.com/acme/hello.git" });
+  const projectNotes = createGitHubCloneNotes();
+  projectNotes.record("hello@mp", { note: "via-ssh", url: "git@github.com:acme/hello.git" });
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    { ...updated("mp", "project", "hello"), notes: projectNotes },
+    { ...updated("mp", "user", "hello"), notes: createGitHubCloneNotes() },
+  ];
+  const expectedMessage = [
+    "● mp [project]",
+    "  ● hello v1.0.0 → v1.1.0 (updated)",
+    "    Cloning via SSH: git@github.com:acme/hello.git",
+    "",
+    "● mp [user]",
+    "  ● hello v1.0.0 → v1.1.0 (updated)",
+    "",
+    "Plugin update: 2 updated",
+    "",
+    "/reload to pick up changes",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", false, {
+    plugins: command,
+    marketplace: () => undefined,
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});

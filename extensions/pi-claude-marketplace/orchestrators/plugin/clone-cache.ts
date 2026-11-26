@@ -16,8 +16,8 @@
 // tree materialization (no manifest read / duplicate-name / state mutation;
 // the resolver reads the manifest afterward).
 //
-// `resolvePluginPin` canonicalizes the clone url and resolves the pin
-// (sha over ref; unpinned resolves remote HEAD via resolveRemoteRef, D-77-05).
+// `resolvePluginPin` canonicalizes the clone url of a pinned source and gives
+// its sha as the pin; an unpinned source takes the mirror path (D-77-05).
 
 import { randomUUID } from "node:crypto";
 import { cp, mkdir, readFile, rename, rm } from "node:fs/promises";
@@ -48,7 +48,6 @@ import {
   resolveGitSubdirRoot,
   type RemovalOps,
 } from "../../shared/fs-utils.ts";
-import { gitHubWireUrl } from "../../shared/github-base-url.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { cloneOverGitHubTransports } from "../github-transport.ts";
 import {
@@ -60,7 +59,6 @@ import {
 } from "../marketplace/clone-swap.ts";
 import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "../marketplace/shared.ts";
 
-import type { TransportAttempt, TransportPlan } from "../../domain/github-transport.ts";
 import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type {
   GitBackedSource,
@@ -992,117 +990,36 @@ export async function seedSameRepoPluginMirrors(args: {
   }
 }
 
+/** A git plugin source pinned to one commit by its `sha`. */
+export type PinnedGitSource = GitBackedSource & { readonly sha: string };
+
+/** Whether `source` is pinned to a commit, so its clone needs no remote read for the pin. */
+export function isPinnedSource(source: GitBackedSource): source is PinnedGitSource {
+  return source.sha !== undefined;
+}
+
 /**
- * D-77-04..06 / PURL-09: canonicalize the clone url and resolve the pin for a
- * git plugin source.
+ * D-77-04..06 / PURL-09: canonicalize the clone url and give the pin of a
+ * pinned git plugin source. The pin is the source's `sha` (a moving ref never
+ * overrides it), so nothing is sent (NFR-5). An unpinned source goes through
+ * the mirror path instead (`materializeOrRefreshPluginMirror`), which reads the
+ * remote HEAD itself, so every caller asks only for a pinned source.
  *
  * cloneUrl reconstruction is single-sourced through `canonicalCloneUrl`
- * (domain/clone-key.ts, which owns the clone-key identity invariant).
- *
- * pin resolution (sha over ref):
- *   - source.sha set: that is the pin (a moving ref never overrides it), and
- *     nothing is sent.
- *   - else source.ref set: resolveRemoteRef({ url, ref }) (D-77-05).
- *   - else unpinned: resolveRemoteRef({ url }) resolves remote HEAD (D-77-05).
- *
- * OQ-4: the request walks the `transport`'s plan, the plan of the clone that
- * follows, as that clone does: the first attempt, then the attempt the plan
- * gives after a failure. An HTTPS attempt carries `auth`, an SSH attempt
- * none. A remote that answers without the ref is refused, and the refusal
- * names the URL that attempt sent (GHB-01). A pinned sha makes no plan.
- *
- * `ref` is returned as the clone's singleBranch fetch hint.
+ * (domain/clone-key.ts, which owns the clone-key identity invariant); it is
+ * the cache-key identity, not a wire form (MURL-01, D-2-03). `ref` is
+ * returned as the clone's singleBranch fetch hint.
  */
-export async function resolvePluginPin(args: {
-  source: UrlSource | GitSubdirSource | GitHubSource;
-  gitOps?: GitOps;
-  auth?: GitAuthBundle;
-  transport: CloneTransport;
+export function resolvePluginPin(args: {
+  readonly source: PinnedGitSource;
 }): Promise<{ cloneUrl: string; pin: string; ref?: string }> {
-  const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const { source } = args;
-
-  // MURL-01 / PURL-09: `cloneUrl` is the cache-key identity and is what this
-  // function RETURNS; the request goes to a wire form only (D-2-03).
   const cloneUrl = canonicalCloneUrl(source);
-  const pin = source.sha ?? (await resolveRemotePin(gitOps, args));
-
-  return source.ref === undefined ? { cloneUrl, pin } : { cloneUrl, pin, ref: source.ref };
-}
-
-/** What a remote answered for a pin's ref, and the URL whose request it answered. */
-interface PinAnswer {
-  readonly url: string;
-  readonly advertised: string | undefined;
-}
-
-/**
- * PROV-03 (Q1): the commit the remote advertises for the source's ref, or
- * for `HEAD` with none. The optional auth bundle goes with the request, so an
- * unpinned PRIVATE-repo HEAD resolution authenticates; over a transport only
- * an HTTPS attempt carries it, because no bundle answers an ssh failure.
- */
-async function resolveRemotePin(
-  gitOps: GitOps,
-  args: Parameters<typeof resolvePluginPin>[0],
-): Promise<string> {
-  const { source, auth, transport } = args;
-  const ask = async (url: string, withAuth: boolean): Promise<PinAnswer> => ({
-    url,
-    advertised: await gitOps.resolveRemoteRef({
-      url,
-      ...(source.ref !== undefined && { ref: source.ref }),
-      ...(withAuth && auth !== undefined && { auth }),
-    }),
-  });
-  const answer = await askOverPlan(await transport.plan(), (attempt) =>
-    ask(attempt.url, attempt.transport === "https"),
+  return Promise.resolve(
+    source.ref === undefined
+      ? { cloneUrl, pin: source.sha }
+      : { cloneUrl, pin: source.sha, ref: source.ref },
   );
-  return requireRemotePin(answer, source.ref);
-}
-
-// Claude Code's longest clone chain is three attempts (SG-SSH-05); a pin's
-// `ls-remote` walks the same plan, so it stops there too.
-const MAX_PIN_ATTEMPTS = 3;
-
-/**
- * OQ-4: `ask` over the plan's first attempt, then over each attempt the plan
- * gives after a failure, until one answers. The last failure reaches the
- * caller when the plan gives nothing more.
- */
-async function askOverPlan(
-  plan: TransportPlan,
-  ask: (attempt: TransportAttempt) => Promise<PinAnswer>,
-  attempt: TransportAttempt = plan.first,
-  count = 1,
-): Promise<PinAnswer> {
-  try {
-    return await ask(attempt);
-  } catch (err) {
-    const next = count < MAX_PIN_ATTEMPTS ? await plan.after(err, attempt) : undefined;
-    if (next === undefined) {
-      throw err;
-    }
-
-    return askOverPlan(plan, ask, next, count + 1);
-  }
-}
-
-/**
- * The commit a remote advertised, or a refusal when it advertised none. The
- * message names the URL the request sent (GHB-01).
- */
-function requireRemotePin(answer: PinAnswer, ref: string | undefined): string {
-  if (answer.advertised === undefined) {
-    const remote = gitHubWireUrl(answer.url);
-    throw new Error(
-      ref === undefined
-        ? `remote ${remote} advertised no HEAD ref`
-        : `remote ${remote} has no ref "${ref}"`,
-    );
-  }
-
-  return answer.advertised;
 }
 
 // PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` lives in shared/fs-utils.ts

@@ -272,9 +272,9 @@ function cacheBoundary(gitOps: GitOps, renameOps?: RenameOps): CacheBoundary {
     },
     async resolvePluginPin(args) {
       calls.push(
-        `resolve ${args.source.kind} ${sourceIdentity(args.source)} sha=${args.source.sha ?? "-"} ref=${args.source.ref ?? "-"}`,
+        `resolve ${args.source.kind} ${sourceIdentity(args.source)} sha=${args.source.sha} ref=${args.source.ref ?? "-"}`,
       );
-      return resolvePluginPin({ ...args, gitOps });
+      return resolvePluginPin(args);
     },
   };
   return { calls, seam };
@@ -2971,9 +2971,8 @@ function transportRecordingSeam(
       await record("clone", args.transport);
       return path.join(cwd, "not-written");
     },
-    async resolvePluginPin(args) {
-      await record("resolve", args.transport);
-      return { cloneUrl: "https://github.com/acme/pinned", pin: args.source.sha ?? "missing" };
+    resolvePluginPin(args) {
+      return Promise.resolve({ cloneUrl: "https://github.com/acme/pinned", pin: args.source.sha });
     },
   };
 }
@@ -3022,12 +3021,6 @@ test("OQ-7, D-SG-19: a fetch makes one transport context, and every clone-cache 
         made: 1,
         probes: 1,
         seen: [
-          {
-            call: "resolve",
-            subject: "pinned@marketplace",
-            sharesNotes: true,
-            first: "https://github.com/acme/pinned.git",
-          },
           {
             call: "clone",
             subject: "pinned@marketplace",

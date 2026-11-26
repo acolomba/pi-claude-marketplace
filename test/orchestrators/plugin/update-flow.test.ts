@@ -108,6 +108,7 @@ import type {
   SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function createUpdateOperations() {
   return createPluginUpdateOperations(
@@ -418,22 +419,16 @@ function makeDeviceFlowHttp(): ReturnType<typeof createDeviceFlowFake>["http"] {
 function capturingUpdateSeam(gitOps: GitOps): {
   readonly seam: UpdateCloneCacheSeam;
   readonly captured: {
-    pinAuth: GitAuthBundle | undefined;
     cloneAuth: GitAuthBundle | undefined;
   };
 } {
   const captured: {
-    pinAuth: GitAuthBundle | undefined;
     cloneAuth: GitAuthBundle | undefined;
   } = {
-    pinAuth: undefined,
     cloneAuth: undefined,
   };
   const seam: UpdateCloneCacheSeam = {
-    resolvePluginPin: (args) => {
-      captured.pinAuth = args.auth;
-      return resolvePluginPin({ ...args, gitOps });
-    },
+    resolvePluginPin,
     materializePluginClone: (args) => {
       captured.cloneAuth = args.resolveAuth();
       return materializePluginClone({ ...args, gitOps });
@@ -9402,7 +9397,7 @@ const SHA_NEW = "2222222222222222222222222222222222222222";
  */
 function seamWith(gitOps: GitOps): UpdateCloneCacheSeam {
   return {
-    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    resolvePluginPin,
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
@@ -9428,6 +9423,8 @@ async function seedGitPluginMarketplace(opts: {
   recordedSha?: string;
   /** Extra installed git plugins (name -> recordedSha + entrySource) sharing the mp. */
   extraPlugins?: Record<string, { entrySource: unknown; recordedSha: string }>;
+  /** The scope the marketplace and its records land in; project when absent. */
+  scope?: Scope;
 }): Promise<{ marketplaceRoot: string; manifestPath: string; oldCloneRoot?: string }> {
   const marketplaceRoot = path.join(opts.cwd, "mp-src");
   const pluginName = "gp";
@@ -9456,7 +9453,8 @@ async function seedGitPluginMarketplace(opts: {
 
   await writeFile(manifestPath, JSON.stringify({ name: "mp", plugins: entries }));
 
-  const locations = locationsFor("project", opts.cwd);
+  const scope = opts.scope ?? "project";
+  const locations = locationsFor(scope, opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
 
   const plugins: Record<string, PluginRecord> = {};
@@ -9495,7 +9493,7 @@ async function seedGitPluginMarketplace(opts: {
     marketplaces: {
       mp: {
         name: "mp",
-        scope: "project",
+        scope,
         source: pathSource("./mp-src"),
         addedFromCwd: opts.cwd,
         manifestPath,
@@ -11150,7 +11148,6 @@ test("plugin update authentication: an unpinned provider update threads auth to 
       assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
       assert.equal(captured.cloneAuth?.host, "github.com");
       assert.equal(captured.cloneAuth?.kind, "device-flow");
-      assert.equal(captured.pinAuth, undefined);
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -11231,7 +11228,7 @@ test("GHB-03: a GitHub-source plugin update on an invalid base fails the update 
           return true;
         },
       );
-      assert.deepStrictEqual(captured, { pinAuth: undefined, cloneAuth: undefined });
+      assert.deepStrictEqual(captured, { cloneAuth: undefined });
       verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -15987,6 +15984,37 @@ test("D-SG-19: one autoupdate run gives its plugin updates one transport context
   });
 });
 
+test("D-SG-18: an autoupdate run clones over the transport context its command gives and makes none", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-transport-autoupdate-given-");
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await seedUnpinnedGitHubPlugin(cwd);
+    process.chdir(cwd);
+    const probes = { count: 0 };
+    const operations = transportUpdateOperations(() => {
+      throw new Error("a command's context leaves the factory unused");
+    });
+    const transportContext = probeRefusingContext(probes);
+
+    // act
+    const updatePlugin = operations.beginPluginUpdateRun(commandNotification(), transportContext);
+    const outcome = await updatePlugin("gp", "mp", "project");
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.partition === "failed" ? outcome.notes.join(" ") : outcome.partition,
+      PROBE_REFUSED,
+    );
+    assert.strictEqual(probes.count, 1);
+  });
+});
+
 /** The converge target of the unpinned github plugin `gp@mp` in the project scope of `cwd`. */
 function gitHubConvergeTarget(cwd: string): PluginConvergeTarget {
   return {
@@ -16147,6 +16175,65 @@ test("D-SG-22: a PUP-2 sync that re-clones a github marketplace names the transp
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+test("D-SG-22: a bare update of a plugin in both scopes names each scope's clone under its own row only", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-clone-note-scopes-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const cloneUrl = "https://github.com/org/repo";
+    const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+    for (const scope of ["project", "user"] as const) {
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: `${cloneUrl}.git`, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+        scope,
+      });
+    }
+
+    // The user scope already holds the new commit's clone, so only the
+    // project scope clones.
+    const userClone = await locationsFor("user", cwd).pluginCloneDir(
+      pluginCloneKey(cloneUrl, SHA_NEW),
+    );
+    await cp(fixtureRepoDir, userClone, { recursive: true });
+    const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await updatePlugins({
+      ctx,
+      run,
+      cwd,
+      target: { kind: "all" },
+      cloneCacheSeam: seamWith(gitOps),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((n) => n.message),
+      [
+        [
+          "● mp [project]",
+          "  ● gp v9.9.9 (1111111) → v9.9.9 (2222222) (updated)",
+          "    Cloning via HTTPS: https://github.com/org/repo.git",
+          "",
+          "● mp [user]",
+          "  ● gp v9.9.9 (1111111) → v9.9.9 (2222222) (updated)",
+          "",
+          "Plugin update: 2 updated",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      ],
+    );
   });
 });
 

@@ -1056,10 +1056,8 @@ test("D-SG-19: the runner clones the candidate over the transport context its ca
       cascade: true,
       transportContext,
       cloneCacheSeam: {
-        resolvePluginPin: (args) => {
-          transports.push(args.transport);
-          return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha });
-        },
+        resolvePluginPin: () =>
+          Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha }),
         materializePluginClone: (args) => {
           transports.push(args.transport);
           return Promise.reject(new Error("the clone stops here"));
@@ -1075,9 +1073,6 @@ test("D-SG-19: the runner clones the candidate over the transport context its ca
   assert.strictEqual(outcome.partition, "failed");
   assert.deepStrictEqual(
     transports.map((transport) => transport && [transport.notes, transport.subject]),
-    [
-      [transportContext.notes, "hello@mp"],
-      [transportContext.notes, "hello@mp"],
-    ],
+    [[transportContext.notes, "hello@mp"]],
   );
 });

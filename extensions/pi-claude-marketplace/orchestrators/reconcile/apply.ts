@@ -2585,8 +2585,10 @@ export function createApplyReconcile(
  * of an install still reaches the caller. The single production composition
  * lives in the extension entry point, beside `createApplyReconcile`.
  *
- * D-SG-18: each call is one command's step, so its installs clone over one
- * transport context from `newTransportContext`.
+ * D-SG-18: a step's installs clone over the transport context its request
+ * carries, the one of the command that runs it, so a command that runs the
+ * step for several marketplaces probes once. A request with none gets one
+ * context of its own from `newTransportContext`.
  */
 export function createScopeDependencyInstall(
   reader: ReconcileStateReader,
@@ -2606,7 +2608,7 @@ export function createScopeDependencyInstall(
         run: request.run,
         cwd: request.cwd,
         ...lifecycle,
-        transportContext: newTransportContext(),
+        transportContext: request.transportContext ?? newTransportContext(),
       },
       installs,
       outcomes,

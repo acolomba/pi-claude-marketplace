@@ -6582,7 +6582,7 @@ test("NFR-5: info renders an uninstalled git plugin `(remote)` with no plugin-cl
 // `GetPluginInfoOptions.cloneCacheSeam`.
 function fetchSeamWith(gitOps: GitOps): InfoCloneCacheSeam {
   return {
-    resolvePluginPin: (args) => resolvePluginPin({ ...args, gitOps }),
+    resolvePluginPin,
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
@@ -12456,9 +12456,8 @@ function transportRecordingSeam(
       await record("clone", args.transport);
       return path.join(cwd, "not-written");
     },
-    async resolvePluginPin(args) {
-      await record("resolve", args.transport);
-      return { cloneUrl: "https://github.com/acme/alpha", pin: args.source.sha ?? "missing" };
+    resolvePluginPin(args) {
+      return Promise.resolve({ cloneUrl: "https://github.com/acme/alpha", pin: args.source.sha });
     },
   };
 }
@@ -12523,12 +12522,6 @@ test("OQ-7, D-SG-19: info --fetch makes one transport context, and every clone-c
         made: 1,
         probes: 1,
         seen: [
-          {
-            call: "resolve",
-            subject: "alpha@mp",
-            sharesNotes: true,
-            first: "https://github.com/acme/alpha.git",
-          },
           {
             call: "clone",
             subject: "alpha@mp",

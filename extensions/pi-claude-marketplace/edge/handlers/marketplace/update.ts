@@ -20,6 +20,7 @@
 // write-target flag has no meaning for it and `parseCommandArgs` rejects
 // it as an unknown flag like any other (AP-5).
 
+import { defaultPluginTransportContext } from "../../../orchestrators/marketplace/shared.ts";
 import {
   updateAllMarketplaces,
   updateMarketplace,
@@ -59,7 +60,13 @@ export function makeMarketplaceUpdateHandler(
       return;
     }
 
-    const pluginUpdate = deps.beginPluginUpdateRun({ ctx, run });
+    // D-SG-18: one plugin transport context for the command, which its plugin
+    // updates and every marketplace's missing-dependency step share, so the
+    // command probes once. Making it reads nothing.
+    const transportContext = defaultPluginTransportContext();
+    const pluginUpdate = deps.beginPluginUpdateRun({ ctx, run }, transportContext);
+    const installMissingDependencies: EdgeDeps["installMissingDependencies"] = (request) =>
+      deps.installMissingDependencies({ ...request, transportContext });
     if (parsed.name === undefined) {
       await updateAllMarketplaces({
         completionCache: deps.completionCache,
@@ -68,7 +75,7 @@ export function makeMarketplaceUpdateHandler(
         cwd: ctx.cwd,
         gitOps: deps.gitOps,
         pluginUpdate,
-        installMissingDependencies: deps.installMissingDependencies,
+        installMissingDependencies,
         ...(parsed.scope !== undefined && { scope: parsed.scope }),
       });
       return;
@@ -82,7 +89,7 @@ export function makeMarketplaceUpdateHandler(
       cwd: ctx.cwd,
       gitOps: deps.gitOps,
       pluginUpdate,
-      installMissingDependencies: deps.installMissingDependencies,
+      installMissingDependencies,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
     });
   };

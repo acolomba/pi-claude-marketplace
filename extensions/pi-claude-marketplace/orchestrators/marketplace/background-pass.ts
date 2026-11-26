@@ -44,12 +44,15 @@ import { notifyBackgroundUpdate } from "../../shared/notification-dispatch.ts";
 import { openNotificationRun, openNotificationSnapshot } from "../../shared/notification-run.ts";
 import { ownValue } from "../../shared/own-key.ts";
 
+import { defaultPluginTransportContext } from "./shared.ts";
+
 import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationEntrySink, NotificationRun } from "../../shared/notification-run.ts";
 import type { BackgroundUpdatePlugin } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { PluginTransportContext } from "../github-transport.ts";
 import type {
   PluginUpdateFailedOutcome,
   PluginUpdateFn,
@@ -80,10 +83,13 @@ export interface BackgroundPassDeps {
   readonly gate: BackgroundGate;
   readonly completionCache: CompletionCache;
   /** The same shape as the edge's `beginPluginUpdateRun`; `orchestrators/` may not import `edge/`. */
-  readonly beginPluginUpdateRun: (notification: {
-    readonly ctx: NotificationContext;
-    readonly run: NotificationRun;
-  }) => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (
+    notification: {
+      readonly ctx: NotificationContext;
+      readonly run: NotificationRun;
+    },
+    transportContext?: PluginTransportContext,
+  ) => PluginUpdateFn;
   readonly updateMarketplace: (opts: UpdateMarketplaceOptions) => Promise<void>;
   /**
    * D-PL2-10: the missing-dependency step each marketplace's autoupdate cascade
@@ -157,6 +163,8 @@ interface PassStep {
   readonly cwd: string;
   readonly halt: PassHalt;
   readonly pluginUpdate: PluginUpdateFn;
+  /** D-SG-18: the pass's one plugin transport context, which its plugin updates share. */
+  readonly transportContext: PluginTransportContext;
 }
 
 /**
@@ -241,7 +249,9 @@ function yieldingDependencyInstall(step: PassStep, marketplace: string): ScopeDe
         return { rows: [], mcpConfigNotices: [] };
       }
 
-      return await deps.runWithAbortSignal(signal, () => deps.installMissingDependencies(request));
+      return await deps.runWithAbortSignal(signal, () =>
+        deps.installMissingDependencies({ ...request, transportContext: step.transportContext }),
+      );
     } finally {
       halt.noteStepEnded(signal);
       // The marketplace still owns the step until its cascade and reporting settle.
@@ -402,8 +412,12 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
       origin: { kind: "load" },
       entrySink: SILENT_SINK,
     };
-    // D-10-18: one plugin update run, so one tag memo pair, per pass.
-    const updatePlugin = deps.beginPluginUpdateRun({ ctx: SILENT_CONTEXT, run });
+    // D-10-18: one plugin update run, so one tag memo pair, per pass. D-SG-18:
+    // one plugin transport context, which the plugin updates and every
+    // missing-dependency step of the pass share, so the pass probes once.
+    // Making it reads nothing.
+    const transportContext = defaultPluginTransportContext();
+    const updatePlugin = deps.beginPluginUpdateRun({ ctx: SILENT_CONTEXT, run }, transportContext);
     const updated: BackgroundUpdatePlugin[] = [];
     const halt = createPassHalt(isStopped);
     const step: PassStep = {
@@ -411,6 +425,7 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
       run,
       cwd,
       halt,
+      transportContext,
       pluginUpdate: yieldingPluginUpdate({
         gate: deps.gate,
         cwd,

@@ -104,7 +104,7 @@ import {
   buildGitHubAuth,
   hostFromCloneUrl,
 } from "../auth-host.ts";
-import { createGitHubCloneNotes } from "../github-transport.ts";
+import { createGitHubCloneNotes, withOwnCloneNotes } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
@@ -626,12 +626,28 @@ async function updatePluginsWith(
       return;
     }
 
+    // D-SG-22: the target clones through a view of the run's context with
+    // notes of its own, so a plugin installed in both scopes shows each
+    // scope's clone on that scope's row only. The view shares the run's
+    // checks, so the run still probes once (D-SG-19).
+    const targetContext = withOwnCloneNotes(transportContext);
+    const targetScoped: DirectRunScoped = {
+      ...runScoped,
+      clones: { ...clones, plugins: targetContext.notes },
+    };
     let outcome: UpdateRunOutcome;
     const report: CandidateReport = {};
     try {
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
-        buildDirectThreePhaseArgs(runOpts, t, cardinality, bindings, runScoped, report),
+        buildDirectThreePhaseArgs(
+          { ...runOpts, transportContext: targetContext },
+          t,
+          cardinality,
+          bindings,
+          targetScoped,
+          report,
+        ),
       );
     } catch (err) {
       // GHB-03: an invalid GitHub base override fails the whole command.
@@ -652,7 +668,7 @@ async function updatePluginsWith(
         pluginName: t.plugin,
         err,
         report,
-        clones,
+        clones: targetScoped.clones,
       });
       abortUpdateBatch(ctx, run, outcomes, cardinality, { composeCascade, clones }, [
         updateFailedDiagnostic(t.plugin, t.scope, report),
@@ -692,7 +708,7 @@ async function updatePluginsWith(
       return;
     }
 
-    outcomes.push({ target: t, outcome });
+    outcomes.push({ target: t, outcome, notes: targetContext.notes });
   }
 
   composeCascade(ctx, run, outcomes, cardinality, false, clones);
@@ -1623,9 +1639,14 @@ export interface PluginUpdateOperations {
    * `createPluginUpdateOperations`). `notification` is the command's
    * notification context, and it is required: its run names the MCP
    * implementation the cascade reads (D-P3-12), and a dependency install
-   * reports through it (UPD-DEP-D1).
+   * reports through it (UPD-DEP-D1). D-SG-18: `transportContext` is the
+   * command's, which its missing-dependency steps share, so the command
+   * probes once; a run given none makes one of its own.
    */
-  readonly beginPluginUpdateRun: (notification: UpdateNotification) => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (
+    notification: UpdateNotification,
+    transportContext?: PluginTransportContext,
+  ) => PluginUpdateFn;
   /** D-26: materializes one catalog move for `apply` under the converge policy. */
   readonly convergePlugin: PluginConvergeFn;
 }
@@ -1751,12 +1772,16 @@ export function createPluginUpdateOperations(
   // plugin of one run, so a marketplace common to several of them is listed
   // once and the cascade's warm-cache expectation for path sources holds.
   // D-SG-19: the run's one transport context has the same lifetime, so the
-  // plugin clones of one autoupdate run follow one probe.
-  const beginPluginUpdateRun = (notification: UpdateNotification): PluginUpdateFn => {
+  // plugin clones of one autoupdate run follow one probe. D-SG-18: a command
+  // that gives its own context shares it with its missing-dependency steps.
+  const beginPluginUpdateRun = (
+    notification: UpdateNotification,
+    transportContext?: PluginTransportContext,
+  ): PluginUpdateFn => {
     const runScoped = {
       tagMemo: new Map<string, readonly RemoteTag[]>(),
       marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
-      transportContext: newTransportContext(),
+      transportContext: transportContext ?? newTransportContext(),
     };
     const runner = settling(notification);
     // D-P3-12: the run reads the MCP implementation of its command's run.

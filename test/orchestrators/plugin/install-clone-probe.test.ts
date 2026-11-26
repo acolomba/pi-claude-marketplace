@@ -346,17 +346,17 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
   ]);
 });
 
-test("OQ-4: a pinned clone gives its pin resolution the transport its clone runs over", async (testContext) => {
+test("a pinned clone takes its pin from the source alone and clones over the install's transport", async (testContext) => {
   // arrange
   const { locations, root } = await freshLocations(testContext);
   const cloneUrl = "https://example.com/pinned-plugin";
   const rawUrl = "https://example.com/pinned-plugin.git";
   const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl, sha: SHA };
-  const pinTransports: (CloneTransport | undefined)[] = [];
+  const pinRequests: (readonly string[])[] = [];
   const cloneTransports: (CloneTransport | undefined)[] = [];
   const seam: InstallCloneCacheSeam = {
-    resolvePluginPin({ transport }) {
-      pinTransports.push(transport);
+    resolvePluginPin(request) {
+      pinRequests.push(Object.keys(request));
       return Promise.resolve({ cloneUrl, pin: SHA });
     },
     materializePluginClone({ transport }) {
@@ -376,17 +376,14 @@ test("OQ-4: a pinned clone gives its pin resolution the transport its clone runs
 
   // assert
   assert.deepStrictEqual(
+    { pinRequests, clone: await plannedTransport(cloneTransports[0]) },
     {
-      pin: await plannedTransport(pinTransports[0]),
-      sameAsClone: pinTransports[0] === cloneTransports[0],
-    },
-    {
-      pin: {
+      pinRequests: [["source"]],
+      clone: {
         subject: "plugin@market",
         first: { transport: "https", url: rawUrl },
         note: undefined,
       },
-      sameAsClone: true,
     },
   );
 });

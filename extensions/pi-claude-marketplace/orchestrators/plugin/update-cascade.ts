@@ -53,6 +53,13 @@ export interface UpdateCloneNotes {
 export interface UpdateCascadeOutcome {
   readonly target: UpdateCascadeTarget;
   readonly outcome: DirectRenderableOutcome;
+  /**
+   * D-SG-22: the notes of this target's own clones, which its rows read in
+   * place of the command's `plugins` notes. A command that updates one
+   * `<plugin>@<marketplace>` in both scopes keeps each scope's notes here, so
+   * neither row reads the other scope's clone.
+   */
+  readonly notes?: GitHubCloneNotes;
 }
 
 function cascadeSkipSeverity(
@@ -176,22 +183,23 @@ function groupCascadeOutcomes(
   clones: UpdateCloneNotes | undefined,
 ): Plural<MarketplaceRows<UpdateMsg>> {
   const byMarketplace = new Map<string, MarketplaceGroup>();
-  for (const { target, outcome } of outcomes) {
+  for (const { target, outcome, notes } of outcomes) {
     if (cardinality === "plural" && outcome.partition === "unchanged") {
       continue;
     }
 
     const key = `${target.scope}:${target.marketplace}`;
     // UPD-DEP-D1: the dependencies the update changed render beside its row.
-    // D-SG-22: each row reads the note of its own subject; a dependency row
-    // is named by its full key.
+    // D-SG-22: each row reads the note of its own subject from its target's
+    // own notes; a dependency row is named by its full key.
+    const ownNotes = notes ?? clones?.plugins;
     const rows = [
       withUpdateCloneNote(
         outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
-        clones?.plugins,
+        ownNotes,
         `${outcome.name}@${target.marketplace}`,
       ),
-      ...(outcome.dependencyRows ?? []).map((row) => withCloneNote(row, clones?.plugins, row.name)),
+      ...(outcome.dependencyRows ?? []).map((row) => withCloneNote(row, ownNotes, row.name)),
     ];
     const existing = byMarketplace.get(key);
     if (existing === undefined) {

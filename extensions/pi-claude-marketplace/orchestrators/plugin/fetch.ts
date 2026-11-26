@@ -65,6 +65,7 @@ import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import {
   canonicalCloneUrl,
+  isPinnedSource,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
   networkCloneUrl,
@@ -449,8 +450,8 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
  * sources refresh the single mutable URL-keyed mirror in place. Both arms thread
  * the host-keyed auth bundle (once-per-host via the shared authMemo). Mirrors
  * install's `makeInstallCloneProbe` structure; fetch reaches the git surface
- * only through the seam. OQ-7: every call gets `transport`, so the pin's
- * `ls-remote`, the clone, and a mirror refresh walk one plan.
+ * only through the seam. OQ-7: the clone and a mirror refresh get `transport`,
+ * so they walk one plan; a pinned source's pin is its sha and sends nothing.
  */
 async function materializeThroughSeam(
   gitSource: GitBackedSource,
@@ -458,7 +459,7 @@ async function materializeThroughSeam(
   locations: ScopedLocations,
   transport: CloneTransport,
 ): Promise<void> {
-  if (gitSource.sha === undefined) {
+  if (!isPinnedSource(gitSource)) {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const auth = buildCloneAuth(cloneUrl, gitSource.kind, deps);
     await deps.seam.materializeOrRefreshPluginMirror({
@@ -471,10 +472,7 @@ async function materializeThroughSeam(
     return;
   }
 
-  const { cloneUrl, pin, ref } = await deps.seam.resolvePluginPin({
-    source: gitSource,
-    transport,
-  });
+  const { cloneUrl, pin, ref } = await deps.seam.resolvePluginPin({ source: gitSource });
   await deps.seam.materializePluginClone({
     locations,
     cloneUrl,

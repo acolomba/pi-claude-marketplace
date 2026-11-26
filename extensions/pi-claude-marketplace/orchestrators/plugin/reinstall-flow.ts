@@ -57,6 +57,7 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
+import { withOwnCloneNotes } from "../github-transport.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
 import { collectPluginClonesLocked } from "./clone-gc.ts";
@@ -93,7 +94,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { PluginTransportContext } from "../github-transport.ts";
+import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
@@ -318,7 +319,7 @@ async function reinstallPluginWith(
     // CR-02 / D-01: the standalone single-plugin path must emit the row, not
     // return silently. The bulk mapper composes it, so the two agree.
     if (render !== "none") {
-      renderReinstallPartitionAndNotify(ctx, run, [outcome], "single", notes);
+      renderReinstallPartitionAndNotify(ctx, run, [outcome], "single", () => notes);
       // AFILE-04: a failure after the MCP commit leaves the rewritten file.
       notifyMcpConfigNotices(ctx, run, reached.mcpConfigNotices);
     }
@@ -527,7 +528,7 @@ function failReinstall(
       opts.run,
       [outcome],
       "single",
-      opts.transportContext?.notes,
+      () => opts.transportContext?.notes,
     );
   }
 
@@ -572,35 +573,41 @@ async function reinstallPluginsWith(
   // D-79-02: ONE once-per-host memo spans the whole bulk loop so a cold-cache
   // sweep over several private plugins on the same host runs the device flow
   // at most once (the same bulk-storm guard install/update use). D-SG-19:
-  // beside it, ONE transport context, so the command probes once.
+  // beside it, ONE transport context, so the command probes once. D-SG-22:
+  // each target clones through a view of its own, so a plugin installed in
+  // both scopes shows each scope's clone on that scope's row only.
   const authMemo = new Map<string, AuthAttemptResult>();
   const transportContext = opts.transportContext ?? defaultPluginTransportContext();
+  const notesByOutcome = new Map<ReinstallPluginOutcome, GitHubCloneNotes>();
   for (const target of targets) {
-    outcomes.push(
-      // eslint-disable-next-line no-await-in-loop -- each reinstall locks the scope (retries: 0)
-      await reinstallPlugin({
-        ctx,
-        run,
-        scope: target.scope,
-        cwd,
-        marketplace: target.marketplace,
-        plugin: target.plugin,
-        render: "none",
-        ...(opts.local === true && { local: true }),
-        ...(opts.target.kind === "plugin" && { named: true }),
-        ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-        authMemo,
-        transportContext,
-        ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
-        ...(opts.removeDataDir !== undefined && { removeDataDir: opts.removeDataDir }),
-        ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
-      }),
-    );
+    const targetContext = withOwnCloneNotes(transportContext);
+    // eslint-disable-next-line no-await-in-loop -- each reinstall locks the scope (retries: 0)
+    const outcome = await reinstallPlugin({
+      ctx,
+      run,
+      scope: target.scope,
+      cwd,
+      marketplace: target.marketplace,
+      plugin: target.plugin,
+      render: "none",
+      ...(opts.local === true && { local: true }),
+      ...(opts.target.kind === "plugin" && { named: true }),
+      ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
+      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+      authMemo,
+      transportContext: targetContext,
+      ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
+      ...(opts.removeDataDir !== undefined && { removeDataDir: opts.removeDataDir }),
+      ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
+    });
+    notesByOutcome.set(outcome, targetContext.notes);
+    outcomes.push(outcome);
   }
 
-  // D-SG-22: each row names the transport of the clone its plugin ran.
-  renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality, transportContext.notes);
+  // D-SG-22: each row names the transport of the clone its own reinstall ran.
+  renderReinstallPartitionAndNotify(ctx, run, outcomes, cardinality, (outcome) =>
+    notesByOutcome.get(outcome),
+  );
   surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
   surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
   return Object.freeze(outcomes);
