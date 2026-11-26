@@ -320,8 +320,8 @@ Feature: Plugin git source
       | tally failures | 1                              |
       | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | via-https  | https://github.com/acme/ghp.git |
     Then the project scope has no installed plugins
     When the user reloads pi
     Then the session reports these results:

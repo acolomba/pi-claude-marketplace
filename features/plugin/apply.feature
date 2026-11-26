@@ -1336,9 +1336,9 @@ Feature: Plugin apply
       | tally warnings      | 0                         |
       | tally success count | 2                         |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
-      | fixtures         | project           | ghp@fixtures  | ghp  | updated |         | project | 1.0.0 | 2.0.0 |
-      | fixtures         | project           | app@fixtures  | app  | updated |         | project | 1.0.0 | 1.1.0 |
+      | marketplace name | marketplace scope | id           | name | status  | reasons | scope   | from  | to    | clone note | clone url                       |
+      | fixtures         | project           | ghp@fixtures | ghp  | updated |         | project | 1.0.0 | 2.0.0 | via-https  | https://github.com/acme/ghp.git |
+      | fixtures         | project           | app@fixtures | app  | updated |         | project | 1.0.0 | 1.1.0 |            |                                 |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | app@fixtures  | 1.1.0   | true    |

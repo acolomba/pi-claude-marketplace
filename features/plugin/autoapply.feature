@@ -52,8 +52,8 @@ Feature: Plugin autoapply
       | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
       | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-https  | https://github.com/acme/ghp.git |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -293,8 +293,8 @@ Feature: Plugin autoapply
       | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | clone note | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | via-https  | https://github.com/acme/ghp.git |
     Then the project scope has no installed plugins
     When the user runs "/claude:plugin pending --scope project"
     Then the result has these fields:
