@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 39
+open_count: 29
 waived_count: 52
-fixed_count: 48
+fixed_count: 58
 total_count: 139
-last_updated: 2026-11-26T19:09:36.657Z
+last_updated: 2026-11-26T22:21:50.606Z
 ---
 
 # Broken Windows Ledger
@@ -141,18 +141,18 @@ last_updated: 2026-11-26T19:09:36.657Z
 | 124 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts |  | [system-git] a marketplace checkout held open by another process (EBUSY/EPERM on rename) is kept and retried on the next update; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T08:44:49.906Z |  |
 | 125 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts |  | [system-git] a plugin mirror held open by another process (EBUSY/EPERM on rename) fails the plugin's row as permission denied and is retried by the next command; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T10:40:23.053Z |  |
 | 126 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/github-transport.ts |  | [system-git] The 'SSH configured for GitHub, using SSH for <subject>' debug line keys on the via-ssh note, so it now prints for an scp GitHub url add that ran no probe; key it on the probe (04-04 note) | open |  | 2026-11-25T20:05:15.462Z |  |
-| 127 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts |  | [system-git] A bootstrap add that fails after its clone shows no clone note, because notifyAddFailure has no collector; marketplace add of the same source shows it (D-SG-22) | open |  | 2026-11-25T20:05:15.637Z |  |
+| 127 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts |  | [system-git] A bootstrap add that fails after its clone shows no clone note, because notifyAddFailure has no collector; marketplace add of the same source shows it (D-SG-22) | fixed |  | 2026-11-25T20:05:15.637Z | 2026-11-26T22:21:43.164Z |
 | 128 | 4 | unrun-verify | extensions/pi-claude-marketplace/domain/github-plugin-transport.ts |  | [system-git] the Windows SSH-first github plugin install, the ssh -G check run through Git for Windows' sh (git ls-remote with Pi's wrapped GIT_SSH_COMMAND plus ' -G >&2'), and the HTTPS-then-SSH retry after a publickey or host-key failure are proven by fake-platform unit rows only; the manual Windows check at the pull request covers them (SG-SSH-05) | open |  | 2026-11-25T21:29:31.350Z |  |
 | 129 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts |  | [system-git] a url record whose URL now parses as a hosted catalog (pre-D-PL5-04 .json record) still refreshes from its checkout's recorded origin; OQ-5 parity holds for every other source | open |  | 2026-11-25T21:29:31.467Z |  |
-| 130 | 4 | deviation | extensions/pi-claude-marketplace/shared/notification-types.ts |  | [system-git] An install that lands disabled (DFEN-04) shows no clone note: PluginDisabledMessage has no clone field (D-SG-22) | open |  | 2026-11-26T00:08:31.423Z |  |
-| 131 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts |  | [system-git] A failure while an install plans its dependency moves shows no clone note: projectCaughtFailure is called without the install's notes (D-SG-22) | open |  | 2026-11-26T00:08:31.525Z |  |
-| 132 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts |  | [system-git] A D-MF-04 add of a dependency's other marketplace shows no clone note: the install notification has no block for that marketplace (D-SG-22) | open |  | 2026-11-26T00:08:31.629Z |  |
-| 133 | 4 | deviation | extensions/pi-claude-marketplace/shared/notification-types.ts |  | [system-git] A skipped, partially-upgradable, or manual-recovery update or reinstall row that cloned shows no clone note: the row types have no clone field (D-SG-22) | open |  | 2026-11-26T01:23:48.974Z |  |
-| 134 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts |  | [system-git] The autoupdate cascade's plugin rows show no clone note for the plugin clones the cascade runs (D-SG-22) | open |  | 2026-11-26T01:23:49.108Z |  |
-| 135 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts |  | [system-git] A bulk update where every plugin stayed up to date drops its blocks, so a PUP-2 marketplace sync re-clone there shows no clone note (D-SG-22) | open |  | 2026-11-26T01:23:49.245Z |  |
-| 136 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] A failing enable cascade member's re-clone shows no clone note: the enable reports only the root's failed row (D-SG-22) | open |  | 2026-11-26T02:56:01.708Z |  |
-| 137 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] An enable that fails after its ledger (a transaction-level throw) shows no clone note on its failed row (D-SG-22) | open |  | 2026-11-26T02:56:01.845Z |  |
-| 138 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts |  | [system-git] An apply or import install whose dependency's rollback failed shows the dependency's row with no clone note (D-SG-22) | open |  | 2026-11-26T04:22:27.255Z |  |
+| 130 | 4 | deviation | extensions/pi-claude-marketplace/shared/notification-types.ts |  | [system-git] An install that lands disabled (DFEN-04) shows no clone note: PluginDisabledMessage has no clone field (D-SG-22) | fixed |  | 2026-11-26T00:08:31.423Z | 2026-11-26T22:21:49.653Z |
+| 131 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts |  | [system-git] A failure while an install plans its dependency moves shows no clone note: projectCaughtFailure is called without the install's notes (D-SG-22) | fixed |  | 2026-11-26T00:08:31.525Z | 2026-11-26T22:21:49.779Z |
+| 132 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts |  | [system-git] A D-MF-04 add of a dependency's other marketplace shows no clone note: the install notification has no block for that marketplace (D-SG-22) | fixed |  | 2026-11-26T00:08:31.629Z | 2026-11-26T22:21:49.898Z |
+| 133 | 4 | deviation | extensions/pi-claude-marketplace/shared/notification-types.ts |  | [system-git] A skipped, partially-upgradable, or manual-recovery update or reinstall row that cloned shows no clone note: the row types have no clone field (D-SG-22) | fixed |  | 2026-11-26T01:23:48.974Z | 2026-11-26T22:21:50.016Z |
+| 134 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts |  | [system-git] The autoupdate cascade's plugin rows show no clone note for the plugin clones the cascade runs (D-SG-22) | fixed |  | 2026-11-26T01:23:49.108Z | 2026-11-26T22:21:50.132Z |
+| 135 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts |  | [system-git] A bulk update where every plugin stayed up to date drops its blocks, so a PUP-2 marketplace sync re-clone there shows no clone note (D-SG-22) | fixed |  | 2026-11-26T01:23:49.245Z | 2026-11-26T22:21:50.247Z |
+| 136 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] A failing enable cascade member's re-clone shows no clone note: the enable reports only the root's failed row (D-SG-22) | fixed |  | 2026-11-26T02:56:01.708Z | 2026-11-26T22:21:50.365Z |
+| 137 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] An enable that fails after its ledger (a transaction-level throw) shows no clone note on its failed row (D-SG-22) | fixed |  | 2026-11-26T02:56:01.845Z | 2026-11-26T22:21:50.481Z |
+| 138 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts |  | [system-git] An apply or import install whose dependency's rollback failed shows the dependency's row with no clone note (D-SG-22) | fixed |  | 2026-11-26T04:22:27.255Z | 2026-11-26T22:21:50.606Z |
 | 139 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts |  | [system-git] An enable that re-clones a github plugin whose repository is not owner/repo shows no unsupported source: narrowEnableFailure classifies no clone failure (IN-A-01, D-SG-18) | open |  | 2026-11-26T19:09:36.657Z |  |
 
 ````json
@@ -1746,10 +1746,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts",
     "line": null,
     "description": "[system-git] A bootstrap add that fails after its clone shows no clone note, because notifyAddFailure has no collector; marketplace add of the same source shows it (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-25T20:05:15.637Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:43.164Z",
     "milestone": null
   },
   {
@@ -1785,10 +1785,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/shared/notification-types.ts",
     "line": null,
     "description": "[system-git] An install that lands disabled (DFEN-04) shows no clone note: PluginDisabledMessage has no clone field (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T00:08:31.423Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:49.653Z",
     "milestone": null
   },
   {
@@ -1798,10 +1798,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts",
     "line": null,
     "description": "[system-git] A failure while an install plans its dependency moves shows no clone note: projectCaughtFailure is called without the install's notes (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T00:08:31.525Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:49.779Z",
     "milestone": null
   },
   {
@@ -1811,10 +1811,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
     "line": null,
     "description": "[system-git] A D-MF-04 add of a dependency's other marketplace shows no clone note: the install notification has no block for that marketplace (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T00:08:31.629Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:49.898Z",
     "milestone": null
   },
   {
@@ -1824,10 +1824,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/shared/notification-types.ts",
     "line": null,
     "description": "[system-git] A skipped, partially-upgradable, or manual-recovery update or reinstall row that cloned shows no clone note: the row types have no clone field (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T01:23:48.974Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:50.016Z",
     "milestone": null
   },
   {
@@ -1837,10 +1837,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
     "line": null,
     "description": "[system-git] The autoupdate cascade's plugin rows show no clone note for the plugin clones the cascade runs (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T01:23:49.108Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:50.132Z",
     "milestone": null
   },
   {
@@ -1850,10 +1850,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
     "line": null,
     "description": "[system-git] A bulk update where every plugin stayed up to date drops its blocks, so a PUP-2 marketplace sync re-clone there shows no clone note (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T01:23:49.245Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:50.247Z",
     "milestone": null
   },
   {
@@ -1863,10 +1863,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
     "line": null,
     "description": "[system-git] A failing enable cascade member's re-clone shows no clone note: the enable reports only the root's failed row (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T02:56:01.708Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:50.365Z",
     "milestone": null
   },
   {
@@ -1876,10 +1876,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts",
     "line": null,
     "description": "[system-git] An enable that fails after its ledger (a transaction-level throw) shows no clone note on its failed row (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T02:56:01.845Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:50.481Z",
     "milestone": null
   },
   {
@@ -1889,10 +1889,10 @@ last_updated: 2026-11-26T19:09:36.657Z
     "file": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
     "line": null,
     "description": "[system-git] An apply or import install whose dependency's rollback failed shows the dependency's row with no clone note (D-SG-22)",
-    "status": "open",
+    "status": "fixed",
     "reason": "",
     "recorded_at": "2026-11-26T04:22:27.255Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-26T22:21:50.606Z",
     "milestone": null
   },
   {
