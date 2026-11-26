@@ -11,7 +11,11 @@ import {
   transportForce,
   withOwnCloneNotes,
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
-import { GitHubTransportsFailedError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  DeviceFlowUnavailableError,
+  GitCommandError,
+  GitHubTransportsFailedError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
@@ -439,6 +443,45 @@ describe("cloneOverGitHubTransports", () => {
       "[git] SSH clone fallback also failed for marketplace acme/tools: Permission denied (publickey).",
     ]);
   });
+
+  for (const { stop, failure } of [
+    {
+      stop: "an aborted retry",
+      failure: new GitCommandError({ kind: "aborted" }, { operation: "clone --depth" }),
+    },
+    {
+      stop: "a retry that finds no git",
+      failure: new GitCommandError(
+        { kind: "git-missing", detail: "not-found" },
+        { operation: "lookup" },
+      ),
+    },
+    { stop: "a retry whose sign-in print mode refused", failure: new DeviceFlowUnavailableError() },
+  ]) {
+    test(`lets ${stop} reach the caller unchanged after the first attempt failed`, async (t) => {
+      // arrange
+      const logged = captureDebugLog(t);
+
+      // act & assert
+      await assert.rejects(
+        cloneOverGitHubTransports({
+          plan: planOf(SSH_ATTEMPT, undefined, HTTPS_ATTEMPT),
+          notes: createGitHubCloneNotes(),
+          subject: "acme/tools",
+          surface: "marketplace",
+          attempt: (attempt) =>
+            Promise.reject(attempt.transport === "ssh" ? new Error("ssh denied") : failure),
+        }),
+        (error: unknown) => {
+          assert.strictEqual(error, failure);
+          return true;
+        },
+      );
+      assert.deepStrictEqual(logged, [
+        "[git] SSH clone failed for marketplace acme/tools (ssh denied), falling back to HTTPS",
+      ]);
+    });
+  }
 
   test("wqo: throws the second error unchanged when a marketplace clone fails over both with the same message", async () => {
     // arrange

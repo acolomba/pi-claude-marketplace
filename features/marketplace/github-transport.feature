@@ -153,3 +153,27 @@ Feature: Marketplace github transport
     Then the user scope holds no marketplace record
     Then the user scope holds no marketplace checkout
     Then the user scope holds no git clones
+
+  Scenario: Adding a private github marketplace in pi's print mode whose ssh clone fails shows the sign-in remedy, not both attempts (MODE-04)
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given the user's ssh authenticates to "github.com" as "acme" without access to its repositories
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given pi runs with github's requests routed to the stand-ins
+    When the user runs "/claude:plugin marketplace add acme/tools --scope project" in pi's print mode
+    Then pi's print mode exits with code 0 and prints this error:
+      """
+      Extension error (command:claude:plugin): Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.
+      """
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then github's sign-in receives no request
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout

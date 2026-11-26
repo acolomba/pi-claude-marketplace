@@ -1418,8 +1418,10 @@ export interface GitHubTransportAttemptFailure {
  *
  * The message is Claude Code's for the surface. A marketplace names each
  * attempt's transport, URL, and message. A plugin shows the first message,
- * then the SSH retry's, then the remedy that ends `Then install again.` The
- * whole text is redacted, so a URL's userinfo never shows (T-04-06).
+ * then the retry's, named by its transport (Claude Code's `The retry over SSH
+ * failed too` for its HTTPS-then-SSH pair), then the remedy that ends `Then
+ * install again.` The whole text is redacted, so a URL's userinfo never shows
+ * (T-04-06).
  *
  * As Claude Code does, a marketplace clone whose two messages are equal
  * throws the second error unchanged, so a marketplace error of this class
@@ -1453,7 +1455,7 @@ function gitHubTransportsMessage(
 ): string {
   if (surface === "plugin") {
     // eslint-disable-next-line local/no-github-literal -- GHB-02: Claude Code's user-facing remedy names github.com verbatim
-    return `${first.error.message}\nThe retry over SSH failed too: ${last.error.message}\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.`;
+    return `${first.error.message}\nThe retry over ${TRANSPORT_LABELS[last.transport]} failed too: ${last.error.message}\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.`;
   }
 
   return `Fetching the marketplace from GitHub failed on both attempts. ${attemptText(first)}\n\n${attemptText(last)}`;

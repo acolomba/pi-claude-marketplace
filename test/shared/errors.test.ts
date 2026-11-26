@@ -935,6 +935,24 @@ describe("GitHubTransportsFailedError", () => {
     assert.strictEqual(error.cause, sshError);
   });
 
+  test("names the transport of the last attempt in a plugin retry over HTTPS", () => {
+    // arrange
+    const sshError = new Error("ssh refused");
+    const httpsError = new Error("https refused");
+
+    // act
+    const error = new GitHubTransportsFailedError("plugin", [
+      { transport: "ssh", url: "git@github.com:acme/ghp.git", error: sshError },
+      { transport: "https", url: "https://github.com/acme/ghp.git", error: httpsError },
+    ]);
+
+    // assert
+    assert.strictEqual(
+      error.message,
+      "ssh refused\nThe retry over HTTPS failed too: https refused\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.",
+    );
+  });
+
   test("OQ-8: keeps both attempts in order in a frozen list", () => {
     // arrange
     const sshError = new Error("ssh refused");

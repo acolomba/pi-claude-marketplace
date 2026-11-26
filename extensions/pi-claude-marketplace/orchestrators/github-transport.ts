@@ -8,6 +8,7 @@
 // the port, so it stays outside NETWORK_SEAMS (NFR-5).
 
 import { planPluginClone } from "../domain/github-plugin-transport.ts";
+import { stopsTheClone } from "../domain/github-transport.ts";
 import { isGitSubdirShorthand } from "../domain/source.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage, GitHubTransportsFailedError } from "../shared/errors.ts";
@@ -179,7 +180,10 @@ function attemptFailure(failed: FailedAttempt): GitHubTransportAttemptFailure {
  * failed. `earlier` is the failure before `failed`, when there was one, and
  * `retries` the URLs of the retries that ran. With no attempt to give, a
  * first failure reaches the caller unchanged and a retry's failure throws
- * `bothFailedError`'s error over the last two attempts.
+ * `bothFailedError`'s error over the last two attempts. A retry's failure
+ * that stops the clone (`stopsTheClone`: an abort, no git, or print mode's
+ * refused sign-in) reaches the caller unchanged too, so its remedy shows as
+ * it does after a first attempt.
  */
 async function runAfter<T>(
   run: GitHubCloneRun<T>,
@@ -193,7 +197,7 @@ async function runAfter<T>(
       : undefined;
   const label = TRANSPORT_LABELS[failed.attempt.transport];
   if (next === undefined) {
-    if (earlier === undefined) {
+    if (earlier === undefined || stopsTheClone(failed.error)) {
       throw failed.error;
     }
 
@@ -226,7 +230,8 @@ async function runAfter<T>(
  * a retry that fails asks the plan again, up to three attempts in all
  * (SG-SSH-05). A first failure the plan gives no attempt after reaches the
  * caller unchanged. When a retry fails and the plan gives nothing more, the
- * run throws `bothFailedError`'s error over the last two attempts.
+ * run throws `bothFailedError`'s error over the last two attempts, unless the
+ * retry's failure stops the clone, which reaches the caller unchanged.
  */
 export async function cloneOverGitHubTransports<T>(run: GitHubCloneRun<T>): Promise<T> {
   const { plan, subject } = run;
