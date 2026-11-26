@@ -10975,3 +10975,59 @@ test("D-SG-22: a bare reinstall of a plugin in both scopes names each scope's cl
     }
   });
 });
+
+test("D-SG-22: a reinstall a dependent's range holds names the clone its runner ran under its skipped row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-held-clone-note-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        scope: "project",
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "p",
+        resources: { skill: "project-scope skill" },
+        install: true,
+      });
+      const holders =
+        'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"';
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      // The shared runner re-clones the moved revision, then the dependent's
+      // range holds it: the target records the note its clone would.
+      await createNodeReinstallPlugins((options) => {
+        options.transportContext?.notes.record("p@mp", {
+          note: "ssh-not-configured",
+          url: "https://github.com/org/p.git",
+        });
+        return Promise.resolve({
+          partition: "skipped",
+          name: "p",
+          marketplace: "mp",
+          scope: "project",
+          notes: [holders],
+          reasons: ["dependents constrain"],
+        });
+      })({ ctx, run, cwd, target: { kind: "plugin", plugin: "p", marketplace: "mp" } });
+
+      // assert
+      assert.deepStrictEqual(
+        notifications.map((n) => n.message),
+        [
+          [
+            "A plugin operation needs attention.",
+            "",
+            "● mp [project]",
+            "  ⊘ p (skipped) {dependents constrain}",
+            "    SSH not configured, cloning via HTTPS: https://github.com/org/p.git",
+            `    cause: ${holders}`,
+          ].join("\n"),
+        ],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});

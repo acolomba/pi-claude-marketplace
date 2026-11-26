@@ -92,10 +92,9 @@ export type ReinstallCloneNotes = (outcome: ReinstallPluginOutcome) => GitHubClo
  *   marketplaces[] or plugins[].
  * - Callers MUST NOT compose the "/reload to pick up changes" trailer
  *   themselves; notify() aggregates it from the rows.
- * - D-SG-22: `notesFor` gives the clone notes each outcome's row reads. A
- *   reinstalled or failed row names the transport of the GitHub clone its
- *   plugin ran, read by `<plugin>@<marketplace>`; a skipped or manual-recovery
- *   row has no clone field.
+ * - D-SG-22: `notesFor` gives the clone notes each outcome's row reads. Each
+ *   row names the transport of the GitHub clone its plugin ran, read by
+ *   `<plugin>@<marketplace>`, whatever its status.
  */
 export function renderReinstallPartitionAndNotify(
   ctx: NotificationContext,
@@ -161,18 +160,18 @@ export function renderReinstallPartitionAndNotify(
 }
 
 /**
- * D-SG-22: `row` with the clone note `notes` keeps for `subject`. Only the
- * reinstalled and failed rows carry a clone field; any other row, and a row
- * whose subject cloned nothing over GitHub, stays unchanged.
+ * D-SG-22: `row` with the clone note `notes` keeps for `subject`, so every
+ * reinstall row names the transport of the GitHub clone its plugin ran,
+ * whatever its status: a `skipped` row a dependent's range held and a
+ * `manual recovery` row too. A row whose subject cloned nothing over GitHub
+ * is returned unchanged.
  */
 function withReinstallCloneNote(
   row: ReinstallMsg,
   notes: GitHubCloneNotes | undefined,
   subject: string,
 ): ReinstallMsg {
-  return row.status === "reinstalled" || row.status === "failed"
-    ? withCloneNote(row, notes, subject)
-    : row;
+  return withCloneNote(row, notes, subject);
 }
 
 /**

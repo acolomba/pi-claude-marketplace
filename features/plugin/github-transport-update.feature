@@ -41,6 +41,47 @@ Feature: Plugin github transport update
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
+  Scenario: Updating a github plugin whose clone is gone and whose repository has not moved names the clone on its up-to-date row
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    When the user runs "/claude:plugin update ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status  | reasons    | scope   | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | skipped | up-to-date | project | ssh-not-configured | https://github.com/acme/ghp.git |
+
+  @builtin-only
+  Scenario: Updating a github plugin to a revision that adds an sse server names the clone on its partially-upgradable row, under Pi's built-in MCP (MREC-06)
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.1.0   |      |
+    Given the git repository "ghp" adds this .mcp.json to the plugin "ghp":
+      """
+      {"mcpServers": {"events": {"type": "sse", "url": "http://127.0.0.1:9/sse"}}}
+      """
+    When the user runs "/claude:plugin update ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status               | reasons         | hint           | scope   | version | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | partially-upgradable | unsupported mcp | partial-update | project | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version | enabled |
+      | ghp@gits | 1.0.0   | true    |
+
   Scenario: Updating a github plugin when the user's ssh authenticates refreshes it over ssh
     Given the user's ssh authenticates to "github.com" as "acme"
     Given pi runs with github's requests routed to the git host
@@ -126,6 +167,43 @@ Feature: Plugin github transport update
       | tools            | project           | via-ssh                | git@github.com:acme/tools.git | app@tools | app  | updated |         | project | 1.0.0 | 1.1.0 |
     Then the git host receives no request
 
+  Scenario: Updating every plugin when only the github marketplace moved names the marketplace's re-clone
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   |              |
+    Given the user's ssh authenticates to "github.com" as "acme"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" has the description "Tools after the move"
+    When the user runs "/claude:plugin update"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+      | no op        | true    |
+    Then the result lists these marketplaces:
+      | name  | scope   | clone note | clone url                     |
+      | tools | project | via-ssh    | git@github.com:acme/tools.git |
+    Then the git host receives no request
+
+  Scenario: Updating every plugin re-clones a github plugin's gone clone at the same commit and names that clone
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    When the user runs "/claude:plugin update"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+      | no op        | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status  | reasons    | scope   | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | skipped | up-to-date | project | ssh-not-configured | https://github.com/acme/ghp.git |
+
   Scenario: Reinstalling a github plugin with no ssh setting clones it over https first
     Given the user's ssh is denied for "github.com"
     Given pi runs with github's requests routed to the git host
@@ -171,6 +249,36 @@ Feature: Plugin github transport update
       | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version | clone note         | clone url                       |
       | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0   | ssh-not-configured | https://github.com/acme/ghp.git |
       | gits             | user              | ghp@gits | ghp  | reinstalled |         | user    | 1.0.0   |                    |                                 |
+
+  Scenario: Reinstalling a github plugin whose dependent holds its new revision names the clone on its skipped row
+    Given the marketplace "gits" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp@^1.0.0   |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the user has run "/claude:plugin install app@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the cached clones of git plugins in the project scope are deleted
+    When the user runs "/claude:plugin reinstall ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status  | reasons              | scope   | cause chain                                                                                   | cause truncated | leaks | rollback partial | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | skipped | dependents constrain | project | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@gits" | false           |       |                  | ssh-not-configured | https://github.com/acme/ghp.git |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version | enabled |
+      | app@gits | 1.0.0   | true    |
+      | ghp@gits | 1.0.0   | true    |
 
   Scenario: Fetching a github plugin with no ssh setting clones it over https first
     Given the user's ssh is denied for "github.com"

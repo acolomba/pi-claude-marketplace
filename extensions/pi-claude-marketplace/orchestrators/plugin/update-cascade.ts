@@ -176,6 +176,44 @@ interface MarketplaceGroup {
   readonly plugins: UpdateMsg[];
 }
 
+/**
+ * The rows of one outcome. UPD-DEP-D1: the dependencies the update changed
+ * render beside its row. D-SG-22: each row reads the note of its own subject
+ * from `notes`; a dependency row is named by its full key. A bulk update
+ * drops an up-to-date row unless its update ran a GitHub clone the row names.
+ */
+function cascadeRows(
+  target: UpdateCascadeTarget,
+  outcome: DirectRenderableOutcome,
+  probe: SoftDepStatus,
+  cardinality: "single" | "plural",
+  notes: GitHubCloneNotes | undefined,
+): UpdateMsg[] {
+  const subject = `${outcome.name}@${target.marketplace}`;
+  if (
+    cardinality === "plural" &&
+    outcome.partition === "unchanged" &&
+    notes?.noteFor(subject) === undefined
+  ) {
+    return [];
+  }
+
+  return [
+    withUpdateCloneNote(
+      outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
+      notes,
+      subject,
+    ),
+    ...(outcome.dependencyRows ?? []).map((row) => withCloneNote(row, notes, row.name)),
+  ];
+}
+
+/**
+ * Groups the rows of `outcomes` by marketplace and scope. D-SG-22: every
+ * outcome makes its marketplace's group, so the group carries the note of the
+ * PUP-2 sync that re-cloned that marketplace; a group with no rows is kept
+ * only when it carries that note.
+ */
 function groupCascadeOutcomes(
   outcomes: readonly UpdateCascadeOutcome[],
   probe: SoftDepStatus,
@@ -184,23 +222,9 @@ function groupCascadeOutcomes(
 ): Plural<MarketplaceRows<UpdateMsg>> {
   const byMarketplace = new Map<string, MarketplaceGroup>();
   for (const { target, outcome, notes } of outcomes) {
-    if (cardinality === "plural" && outcome.partition === "unchanged") {
-      continue;
-    }
-
     const key = `${target.scope}:${target.marketplace}`;
-    // UPD-DEP-D1: the dependencies the update changed render beside its row.
-    // D-SG-22: each row reads the note of its own subject from its target's
-    // own notes; a dependency row is named by its full key.
-    const ownNotes = notes ?? clones?.plugins;
-    const rows = [
-      withUpdateCloneNote(
-        outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
-        ownNotes,
-        `${outcome.name}@${target.marketplace}`,
-      ),
-      ...(outcome.dependencyRows ?? []).map((row) => withCloneNote(row, ownNotes, row.name)),
-    ];
+    // D-SG-22: a target's own notes win over the command's.
+    const rows = cascadeRows(target, outcome, probe, cardinality, notes ?? clones?.plugins);
     const existing = byMarketplace.get(key);
     if (existing === undefined) {
       const clone = clones?.marketplace(target.scope, target.marketplace);
@@ -216,7 +240,7 @@ function groupCascadeOutcomes(
   }
 
   return [...byMarketplace.values()]
-    .filter((group) => group.plugins.length > 0)
+    .filter((group) => group.plugins.length > 0 || group.clone !== undefined)
     .sort((left, right) =>
       compareByNameThenScope(
         { name: left.name, scope: left.scope },

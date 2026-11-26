@@ -340,16 +340,26 @@ test("D-SG-22: a row whose subject cloned nothing stays unchanged", () => {
   assert.strictEqual(noted, row);
 });
 
-test("D-SG-22: skipped and partially-upgradable rows have no clone field and stay unchanged", () => {
-  // arrange
-  const rows: readonly UpdateMsg[] = [
-    { status: "skipped", name: "alpha", reasons: ["up-to-date"], severity: "info" },
-    { status: "partially-upgradable", name: "alpha", reasons: ["lsp"], partialHint: true },
-  ];
+for (const row of [
+  { status: "skipped", name: "alpha", reasons: ["up-to-date"], severity: "info" },
+  { status: "partially-upgradable", name: "alpha", reasons: ["lsp"], partialHint: true },
+] satisfies readonly UpdateMsg[]) {
+  test(`D-SG-22: a ${row.status} row takes the clone note of its own subject`, () => {
+    // act
+    const noted = withUpdateCloneNote(row, alphaCloneNotes(), "alpha@mp");
 
-  // act
-  const noted = rows.map((row) => withUpdateCloneNote(row, alphaCloneNotes(), "alpha@mp"));
+    // assert
+    assert.deepStrictEqual(noted, {
+      ...row,
+      clone: { note: "via-https", url: "https://github.com/acme/alpha.git" },
+    });
+  });
 
-  // assert
-  assert.deepStrictEqual(noted, rows);
-});
+  test(`D-SG-22: a ${row.status} row whose subject cloned nothing stays unchanged`, () => {
+    // act
+    const noted = withUpdateCloneNote(row, alphaCloneNotes(), "beta@mp");
+
+    // assert
+    assert.strictEqual(noted, row);
+  });
+}

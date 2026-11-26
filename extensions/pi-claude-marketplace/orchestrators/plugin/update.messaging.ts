@@ -50,17 +50,15 @@ export const UPDATE_CONTEXT = {
 
 /**
  * D-SG-22: `row` with the clone note `notes` keeps for `subject`,
- * `<plugin>@<marketplace>`, so an update row names the transport of the
- * GitHub clone its plugin ran. A `skipped` or `partially-upgradable` row has
- * no clone field and stays unchanged, as does a row whose subject cloned
- * nothing over GitHub.
+ * `<plugin>@<marketplace>`, so every update row names the transport of the
+ * GitHub clone its plugin ran, whatever its status: an up-to-date or held
+ * `skipped` row and a `partially-upgradable` row too. A row whose subject
+ * cloned nothing over GitHub is returned unchanged.
  */
 export function withUpdateCloneNote(
   row: UpdateMsg,
   notes: GitHubCloneNotes | undefined,
   subject: string,
 ): UpdateMsg {
-  return row.status === "skipped" || row.status === "partially-upgradable"
-    ? row
-    : withCloneNote(row, notes, subject);
+  return withCloneNote(row, notes, subject);
 }
