@@ -20,7 +20,6 @@
 // `github-transport.ts`.
 
 import { GitCommandError } from "../shared/errors.ts";
-import { gitHubAddressOf } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
 import {
@@ -30,10 +29,10 @@ import {
   noRetry,
   shorthandSource,
   stopsTheClone,
+  writtenAddressNote,
 } from "./github-transport.ts";
 import { isGitSubdirShorthand } from "./source.ts";
 
-import type { CloneNoteKind } from "../shared/notification-types.ts";
 import type { TransportAttempt, TransportForce, TransportPlan } from "./github-transport.ts";
 import type { GitBackedSource, GitHubSource } from "./source.ts";
 
@@ -76,15 +75,14 @@ export interface PluginClonePlanInput {
   readonly platform?: NodeJS.Platform | undefined;
 }
 
-// One attempt as written, with no retry. A GitHub address, however it is
-// spelled, notes the transport its scheme uses; any other address notes
-// nothing.
+// One attempt as written, with no retry, and the note the marketplace plan
+// gives the same address (`writtenAddressNote`).
 function asWritten(url: string): TransportPlan {
   const transport = addressTransport(url);
-  const note: CloneNoteKind = transport === "ssh" ? "via-ssh" : "via-https";
+  const note = writtenAddressNote(url, transport);
   return {
     first: { transport, url },
-    ...(gitHubAddressOf(url) !== undefined && { note }),
+    ...(note !== undefined && { note }),
     after: noRetry,
   };
 }
@@ -226,8 +224,10 @@ async function ownerRepoPlan(
 /**
  * D-SG-18, D-SG-20, OQ-1: the plan of a plugin clone of `source`.
  *
- * - A url source gives one attempt as written. Its note is the transport of
- *   its scheme when the address folds to GitHub, and none otherwise.
+ * - A url source gives one attempt as written. When the address folds to
+ *   GitHub, its note names its scheme: `via-ssh` over ssh, `via-https` for
+ *   `https:`, and `via-http` for `http:` (IN-A-02). Any other address has
+ *   none.
  * - A git-subdir shorthand gives one SSH attempt of
  *   `git@github.com:<owner>/<repo>.git`, or one HTTPS attempt when forced.
  *   Any other git-subdir url gives one attempt as written.

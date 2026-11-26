@@ -33,9 +33,13 @@ import type {
 import type {
   MarketplaceInfoMessage,
   MarketplaceStatus,
+  PluginDisabledMessage,
   PluginInfoMessage,
+  PluginManualRecoveryMessage,
   PluginNotificationMessage,
+  PluginPartiallyUpgradableMessage,
   PluginStatus,
+  PluginUpdateSkippedMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -1367,6 +1371,132 @@ test("D-SG-22: copies the clone retries so the payload shares no array with the 
     retries: ["https://github.com/acme/tools.git"],
   });
   assert.notStrictEqual(clone?.retries, retries);
+});
+
+const FOLLOWING_ROW_CLONE = {
+  note: "ssh-not-configured",
+  url: "https://github.com/acme/ghp.git",
+  retries: ["git@github.com:acme/ghp.git"],
+} as const;
+
+for (const row of [
+  {
+    status: "skipped",
+    name: "ghp",
+    reasons: ["dependents constrain"],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginUpdateSkippedMessage>,
+  {
+    status: "partially-upgradable",
+    name: "ghp",
+    reasons: ["lsp"],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginPartiallyUpgradableMessage>,
+  {
+    status: "manual recovery",
+    name: "ghp",
+    reasons: ["rollback partial"],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginManualRecoveryMessage>,
+  {
+    status: "disabled",
+    severity: "info",
+    needsReload: true,
+    name: "ghp",
+    reasons: [],
+    clone: FOLLOWING_ROW_CLONE,
+  } satisfies ResolvedRow<PluginDisabledMessage>,
+]) {
+  test(`D-SG-22: carries the clone note of a ${row.status} row, and no clone member without one`, () => {
+    // arrange
+    const { clone: _clone, ...withoutNote } = row;
+    const origin = { kind: "command", commandId: "plugin", invocationId: "test-run" } as const;
+    const blockOf = (plugin: ResolvedRow): ResolvedMarketplace => ({
+      name: "tools",
+      scope: "user",
+      plugins: [plugin],
+    });
+
+    // act
+    const payload = toWirePayload(presentationOf([blockOf(row)]), origin);
+    const bare = toWirePayload(presentationOf([blockOf(withoutNote)]), origin);
+
+    // assert
+    assert.ok("marketplaces" in payload && "marketplaces" in bare);
+    assert.deepStrictEqual(payload.marketplaces[0]?.plugins[0]?.clone, FOLLOWING_ROW_CLONE);
+    assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
+    const bareRow = bare.marketplaces[0]?.plugins[0];
+    assert.ok(bareRow !== undefined);
+    assert.strictEqual("clone" in bareRow, false);
+  });
+}
+
+test("D-SG-22: carries the plugin a row's clone note names as clone.plugin", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "gits",
+      scope: "user",
+      plugins: [
+        {
+          status: "failed",
+          severity: "error",
+          name: "app",
+          reasons: ["dependency failed"],
+          clone: {
+            note: "ssh-not-configured",
+            url: "https://github.com/acme/dep.git",
+            plugin: "dep@gits",
+          },
+          failure: { leaks: [], rollbackPartial: [] },
+        },
+      ],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.ok("marketplaces" in payload);
+  assert.deepStrictEqual(payload.marketplaces[0]?.plugins[0]?.clone, {
+    note: "ssh-not-configured",
+    url: "https://github.com/acme/dep.git",
+    plugin: "dep@gits",
+  });
+  assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
+});
+
+test("IN-A-02: carries the via-http clone note of a block unchanged", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "tools",
+      scope: "user",
+      status: "added",
+      clone: { note: "via-http", url: "http://github.com/acme/tools.git" },
+      plugins: [],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.ok("marketplaces" in payload);
+  assert.deepStrictEqual(payload.marketplaces[0]?.clone, {
+    note: "via-http",
+    url: "http://github.com/acme/tools.git",
+  });
+  assert.strictEqual(Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload), true);
 });
 
 test("gives a failed row whose subject is a marketplace its name alone as the id", () => {

@@ -239,9 +239,12 @@
                       "type": "object",
                       "required": ["note", "url"],
                       "properties": {
-                        "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                        "note": {
+                          "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
+                        },
                         "url": { "type": "string" },
-                        "retries": { "type": "array", "items": { "type": "string" } }
+                        "retries": { "type": "array", "items": { "type": "string" } },
+                        "plugin": { "type": "string" }
                       },
                       "additionalProperties": false
                     }
@@ -364,9 +367,10 @@
                 "type": "object",
                 "required": ["note", "url"],
                 "properties": {
-                  "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                  "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                   "url": { "type": "string" },
-                  "retries": { "type": "array", "items": { "type": "string" } }
+                  "retries": { "type": "array", "items": { "type": "string" } },
+                  "plugin": { "type": "string" }
                 },
                 "additionalProperties": false
               }
@@ -624,9 +628,12 @@
                       "type": "object",
                       "required": ["note", "url"],
                       "properties": {
-                        "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                        "note": {
+                          "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
+                        },
                         "url": { "type": "string" },
-                        "retries": { "type": "array", "items": { "type": "string" } }
+                        "retries": { "type": "array", "items": { "type": "string" } },
+                        "plugin": { "type": "string" }
                       },
                       "additionalProperties": false
                     }
@@ -749,9 +756,10 @@
                 "type": "object",
                 "required": ["note", "url"],
                 "properties": {
-                  "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                  "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                   "url": { "type": "string" },
-                  "retries": { "type": "array", "items": { "type": "string" } }
+                  "retries": { "type": "array", "items": { "type": "string" } },
+                  "plugin": { "type": "string" }
                 },
                 "additionalProperties": false
               }
@@ -1031,9 +1039,10 @@
                   "type": "object",
                   "required": ["note", "url"],
                   "properties": {
-                    "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                    "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                     "url": { "type": "string" },
-                    "retries": { "type": "array", "items": { "type": "string" } }
+                    "retries": { "type": "array", "items": { "type": "string" } },
+                    "plugin": { "type": "string" }
                   },
                   "additionalProperties": false
                 },
@@ -1244,9 +1253,10 @@
                   "type": "object",
                   "required": ["note", "url"],
                   "properties": {
-                    "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                    "note": { "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"] },
                     "url": { "type": "string" },
-                    "retries": { "type": "array", "items": { "type": "string" } }
+                    "retries": { "type": "array", "items": { "type": "string" } },
+                    "plugin": { "type": "string" }
                   },
                   "additionalProperties": false
                 },
@@ -1532,9 +1542,12 @@
                         "type": "object",
                         "required": ["note", "url"],
                         "properties": {
-                          "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                          "note": {
+                            "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
+                          },
                           "url": { "type": "string" },
-                          "retries": { "type": "array", "items": { "type": "string" } }
+                          "retries": { "type": "array", "items": { "type": "string" } },
+                          "plugin": { "type": "string" }
                         },
                         "additionalProperties": false
                       },
@@ -1751,9 +1764,12 @@
                         "type": "object",
                         "required": ["note", "url"],
                         "properties": {
-                          "note": { "enum": ["via-ssh", "via-https", "ssh-not-configured"] },
+                          "note": {
+                            "enum": ["via-ssh", "via-https", "via-http", "ssh-not-configured"]
+                          },
                           "url": { "type": "string" },
-                          "retries": { "type": "array", "items": { "type": "string" } }
+                          "retries": { "type": "array", "items": { "type": "string" } },
+                          "plugin": { "type": "string" }
                         },
                         "additionalProperties": false
                       },

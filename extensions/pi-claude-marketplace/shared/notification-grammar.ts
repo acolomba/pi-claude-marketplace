@@ -1097,12 +1097,14 @@ function isDescriptionBearingRow(
 }
 
 /**
- * D-SG-22: Claude Code's line for the first transport a GitHub clone chose.
- * SG-ERR-01 settles the final wording.
+ * D-SG-22: Claude Code's line for the first transport a GitHub clone chose,
+ * and IN-A-02's line for a GitHub address written with `http://`. SG-ERR-01
+ * settles the final wording.
  */
 const CLONE_NOTE_LEADS = {
   "via-ssh": "Cloning via SSH",
   "via-https": "Cloning via HTTPS",
+  "via-http": "Cloning via HTTP",
   "ssh-not-configured": "SSH not configured, cloning via HTTPS",
 } as const satisfies Record<CloneNoteKind, string>;
 
@@ -1112,27 +1114,40 @@ const SSH_SCHEME_URL = /^(?:ssh|git\+ssh|ssh\+git):\/\//i;
 /** An scp address such as `git@github.com:owner/repo.git`: no slash before its first colon. */
 const SCP_ADDRESS = /^[^/:]+:(?!\/\/)/;
 
-/** The transport a clone of `url` runs over, in Claude Code's words. */
-function cloneTransport(url: string): "SSH" | "HTTPS" {
-  return SSH_SCHEME_URL.test(url) || SCP_ADDRESS.test(url) ? "SSH" : "HTTPS";
+/** An `http:` URL. */
+const HTTP_SCHEME_URL = /^http:/i;
+
+/**
+ * The transport a clone of `url` runs over, in Claude Code's words. A plain
+ * `http:` URL is `HTTP`, so a retry line never calls it HTTPS (IN-A-02).
+ */
+function cloneTransport(url: string): "SSH" | "HTTPS" | "HTTP" {
+  if (SSH_SCHEME_URL.test(url) || SCP_ADDRESS.test(url)) {
+    return "SSH";
+  }
+
+  return HTTP_SCHEME_URL.test(url) ? "HTTP" : "HTTPS";
 }
 
 /**
  * D-SG-22: the lines of a clone note, each after `indent`: Claude Code's line
  * for the first attempt, then one `<T1> clone failed, retrying with <T2>:
  * <url>` line per later attempt, where `<T1>` is the transport of the attempt
- * before it. A row or block without a note has no lines.
+ * before it. A note that names the plugin whose clone it reports starts each
+ * line with `<plugin>: ` after the indent. A row or block without a note has
+ * no lines.
  */
 function composeCloneNoteLines(clone: CloneTransportNote | undefined, indent: string): string[] {
   if (clone === undefined) {
     return [];
   }
 
-  const lines = [`${indent}${CLONE_NOTE_LEADS[clone.note]}: ${clone.url}`];
+  const start = clone.plugin === undefined ? indent : `${indent}${clone.plugin}: `;
+  const lines = [`${start}${CLONE_NOTE_LEADS[clone.note]}: ${clone.url}`];
   let previous = clone.url;
   for (const url of clone.retries ?? []) {
     const retry = `${cloneTransport(previous)} clone failed, retrying with ${cloneTransport(url)}`;
-    lines.push(`${indent}${retry}: ${url}`);
+    lines.push(`${start}${retry}: ${url}`);
     previous = url;
   }
 

@@ -21,13 +21,17 @@ import {
   type MarketplaceStatus,
   type NotificationMessage,
   type PluginAvailableMessage,
+  type PluginDisabledMessage,
   type PluginFailedMessage,
   type PluginInfoRow,
   type PluginInstalledMessage,
+  type PluginManualRecoveryMessage,
   type PluginNotificationMessage,
   type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
   type PluginPathSkippedSurface,
   type PluginReinstalledMessage,
+  type PluginRemoteMessage,
   type PluginSkippedMessage,
   type PluginUninstallSkippedMessage,
   type PluginUpdatedMessage,
@@ -369,8 +373,11 @@ void ({
   reasons: ["lock held"],
   severity: "error",
 } satisfies PluginFailedMessage);
-// D-SG-22: the clone note kinds are exactly upstream's three transport lines.
-void (true satisfies IsExact<CloneNoteKind, "via-ssh" | "via-https" | "ssh-not-configured">);
+// D-SG-22, IN-A-02: the clone note kinds are upstream's three transport lines and the http line.
+void (true satisfies IsExact<
+  CloneNoteKind,
+  "via-ssh" | "via-https" | "via-http" | "ssh-not-configured"
+>);
 // D-SG-22: a marketplace block and each row a GitHub clone produces carry a clone note.
 void ({
   name: "tools",
@@ -411,6 +418,37 @@ void ({
   // @ts-expect-error D-SG-22: a skipped row ran no clone, so it carries no clone note
   clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
 } satisfies PluginSkippedMessage);
+// D-SG-22: the update and reinstall skipped row, the partially-upgradable row,
+// the manual recovery row, and the disabled row can follow a clone.
+void ({
+  ...skippedMessage,
+  clone: { note: "via-ssh", url: "git@github.com:acme/ghp.git" },
+} satisfies PluginUpdateSkippedMessage);
+void ({
+  status: "partially-upgradable",
+  name: "ghp",
+  reasons: ["unsupported component"],
+  clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginPartiallyUpgradableMessage);
+void ({
+  status: "manual recovery",
+  name: "ghp",
+  reasons: ["rollback partial"],
+  clone: { note: "via-http", url: "http://github.com/acme/ghp.git" },
+} satisfies PluginManualRecoveryMessage);
+void ({
+  status: "disabled",
+  name: "ghp",
+  severity: "warning",
+  needsReload: false,
+  clone: { note: "ssh-not-configured", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginDisabledMessage);
+void ({
+  status: "remote",
+  name: "ghp",
+  // @ts-expect-error D-SG-22: a remote row is read after no clone, so it carries no clone note
+  clone: { note: "via-https", url: "https://github.com/acme/ghp.git" },
+} satisfies PluginRemoteMessage);
 void ({
   // @ts-expect-error D-SG-22: a clone note kind outside the closed set is no CloneTransportNote
   note: "via-git",

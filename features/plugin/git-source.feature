@@ -87,6 +87,39 @@ Feature: Plugin git source
       | command          | description           |
       | /skill:ghp-skill | A skill of ghp 1.0.0. |
 
+  Scenario: Installing a plugin from an http:// github address names its clone as http
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" publishes this manifest:
+      """
+      {
+        "name": "gits",
+        "owner": { "name": "features" },
+        "plugins": [
+          {
+            "name": "ghp",
+            "source": { "source": "url", "url": "http://github.com/acme/ghp.git" }
+          }
+        ]
+      }
+      """
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version | clone note | clone url                      |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   | via-http   | http://github.com/acme/ghp.git |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
   Scenario: A plugin pinned to the commit another installed plugin was cloned at installs with no request
     Given the git repository "mono" holds these plugins:
       | name | version | path         |

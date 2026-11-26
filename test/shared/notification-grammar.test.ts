@@ -30,11 +30,15 @@ import type {
   MarketplaceNotAddedMessage,
   MarketplaceNotificationMessage,
   McpServerSummaryEntry,
+  PluginDisabledMessage,
   PluginFailedMessage,
   PluginInfoMessage,
   PluginInstalledMessage,
+  PluginManualRecoveryMessage,
   PluginNotificationMessage,
   PluginPartiallyInstalledMessage,
+  PluginPartiallyUpgradableMessage,
+  PluginUpdateSkippedMessage,
   PruneEmptyMessage,
   Reason,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
@@ -512,7 +516,8 @@ for (const { retry, transport } of [
   { retry: "ssh+git://git@github.com/acme/ghp.git", transport: "SSH" },
   { retry: "SSH://git@github.com/acme/ghp.git", transport: "SSH" },
   { retry: "https://github.com/acme/ghp.git", transport: "HTTPS" },
-  { retry: "http://git.example/acme/ghp.git", transport: "HTTPS" },
+  { retry: "http://git.example/acme/ghp.git", transport: "HTTP" },
+  { retry: "HTTP://github.com/acme/ghp.git", transport: "HTTP" },
 ]) {
   test(`D-SG-22: names ${transport} as the transport of a retry over ${retry}`, () => {
     // arrange
@@ -534,6 +539,175 @@ for (const { retry, transport } of [
       "    Cloning via HTTPS: https://github.com/acme/ghp.git",
       `    HTTPS clone failed, retrying with ${transport}: ${retry}`,
     ]);
+  });
+}
+
+test("IN-A-02: renders the via-http note of a marketplace block under its header", () => {
+  // arrange
+  const marketplace = {
+    ...MARKETPLACE_BASE,
+    name: "tools",
+    status: "added",
+    clone: { note: "via-http", url: "http://github.com/acme/tools.git" },
+  } as const satisfies ResolvedMarketplace;
+
+  // act
+  const rendered = composeReconcileAppliedBody([marketplace]);
+
+  // assert
+  assert.equal(
+    rendered,
+    ["● tools [user] (added)", "  Cloning via HTTP: http://github.com/acme/tools.git"].join("\n"),
+  );
+});
+
+test("IN-A-02: renders the via-http note of a plugin row and names an http attempt HTTP in its retry", () => {
+  // arrange
+  const plugin = {
+    status: "installed",
+    severity: "info",
+    needsReload: true,
+    name: "ghp",
+    reasons: [],
+    clone: {
+      note: "via-http",
+      url: "http://github.com/acme/ghp.git",
+      retries: ["git@github.com:acme/ghp.git"],
+    },
+  } satisfies ResolvedRow<PluginInstalledMessage>;
+
+  // act
+  const lines = composePluginLines(plugin, "user");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ● ghp (installed)",
+    "    Cloning via HTTP: http://github.com/acme/ghp.git",
+    "    HTTP clone failed, retrying with SSH: git@github.com:acme/ghp.git",
+  ]);
+});
+
+test("D-SG-22: starts each line of a labelled clone note with the plugin it names", () => {
+  // arrange
+  const plugin = {
+    status: "failed",
+    severity: "error",
+    name: "app",
+    reasons: ["dependency failed"],
+    clone: {
+      note: "ssh-not-configured",
+      url: "https://github.com/acme/dep.git",
+      retries: ["git@github.com:acme/dep.git"],
+      plugin: "dep@gits",
+    },
+    failure: {
+      cause: { causeChain: ["both failed"], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } satisfies ResolvedRow<PluginFailedMessage>;
+
+  // act
+  const lines = composePluginLines(plugin, "user");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ⊘ app (failed) {dependency failed}",
+    "    dep@gits: SSH not configured, cloning via HTTPS: https://github.com/acme/dep.git",
+    "    dep@gits: HTTPS clone failed, retrying with SSH: git@github.com:acme/dep.git",
+    "    cause: both failed",
+  ]);
+});
+
+const ROW_CLONE = { note: "via-ssh", url: "git@github.com:acme/ghp.git" } as const;
+
+/** The resolved failure of a row whose only failure detail is the cause `text`. */
+function causeFailure(text: string): NonNullable<ResolvedRow["failure"]> {
+  return { cause: { causeChain: [text], truncated: false }, leaks: [], rollbackPartial: [] };
+}
+
+for (const { title, row, expectedLines } of [
+  {
+    title: "an update skipped row before its cause line",
+    row: {
+      status: "skipped",
+      name: "ghp",
+      reasons: ["dependents constrain"],
+      failure: causeFailure("held by beta@mp"),
+      clone: ROW_CLONE,
+    } satisfies ResolvedRow<PluginUpdateSkippedMessage>,
+    expectedLines: [
+      "  ⊘ ghp (skipped) {dependents constrain}",
+      "    Cloning via SSH: git@github.com:acme/ghp.git",
+      "    cause: held by beta@mp",
+    ],
+  },
+  {
+    title: "a partially-upgradable row after its description and before its hint",
+    row: {
+      status: "partially-upgradable",
+      name: "ghp",
+      reasons: ["lsp"],
+      description: "summary",
+      hint: "partial-update",
+      clone: ROW_CLONE,
+    } satisfies ResolvedRow<PluginPartiallyUpgradableMessage>,
+    expectedLines: [
+      "  ● ghp (partially-upgradable) {lsp}",
+      "    summary",
+      "    Cloning via SSH: git@github.com:acme/ghp.git",
+      "    Re-run with --partial to update with the supported components.",
+    ],
+  },
+  {
+    title: "a manual recovery row before its cause line",
+    row: {
+      status: "manual recovery",
+      name: "ghp",
+      reasons: ["rollback partial"],
+      failure: causeFailure("restore failed"),
+      clone: ROW_CLONE,
+    } satisfies ResolvedRow<PluginManualRecoveryMessage>,
+    expectedLines: [
+      "  ⊘ ghp (manual recovery) {rollback partial}",
+      "    Cloning via SSH: git@github.com:acme/ghp.git",
+      "    cause: restore failed",
+    ],
+  },
+  {
+    title: "a disabled row after its description and before its hint",
+    row: {
+      status: "disabled",
+      severity: "info",
+      needsReload: true,
+      name: "ghp",
+      reasons: [],
+      description: "summary",
+      hint: "enable",
+      clone: ROW_CLONE,
+    } satisfies ResolvedRow<PluginDisabledMessage>,
+    expectedLines: [
+      "  ◍ ghp (disabled)",
+      "    summary",
+      "    Cloning via SSH: git@github.com:acme/ghp.git",
+      "    Run enable on this plugin to use its components.",
+    ],
+  },
+]) {
+  test(`D-SG-22: renders the clone note of ${title}, and no note line without one`, () => {
+    // arrange
+    const { clone: _clone, ...withoutNote } = row;
+
+    // act
+    const lines = composePluginLines(row, "user");
+    const bare = composePluginLines(withoutNote, "user");
+
+    // assert
+    assert.deepStrictEqual(lines, expectedLines);
+    assert.deepStrictEqual(
+      bare,
+      expectedLines.filter((line) => !line.startsWith("    Cloning via")),
+    );
   });
 }
 

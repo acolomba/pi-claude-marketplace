@@ -9,6 +9,7 @@ import {
   mcpConfigNoticeSurfaces,
   RAW_SURFACE_SEVERITY,
   resolveEnvelope,
+  redactCloneNote,
   resolveNotAddedReason,
   resolveRawSurface,
   resolveRows,
@@ -1314,6 +1315,53 @@ describe("resolveRows", () => {
         ],
       },
     ] satisfies readonly ResolvedMarketplace[]);
+  });
+
+  test("PMOD-04, CR-A-01: redacts a clone note's plugin as the row name it names, and an http url", () => {
+    // arrange
+    const label = "foo@https://alice:s3cret@github.com/o/r.git";
+    const marketplaces: readonly MarketplaceNotificationMessage[] = [
+      {
+        name: "gits",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            severity: "error",
+            name: label,
+            reasons: ["dependency failed"],
+            clone: {
+              note: "via-http",
+              url: "http://alice:s3cret@github.com/o/r.git",
+              plugin: label,
+            },
+          },
+        ],
+      },
+    ];
+
+    // act
+    const resolved = resolveRows(marketplaces, allLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    const row = resolved[0]?.plugins[0];
+    assert.deepStrictEqual(row !== undefined && "clone" in row ? row.clone : undefined, {
+      note: "via-http",
+      url: "http://***@github.com/o/r.git",
+      plugin: "foo@https://***@github.com/o/r.git",
+    });
+    assert.strictEqual(row?.name, "foo@https://***@github.com/o/r.git");
+  });
+
+  test("D-SG-22: keeps a clone note with no plugin free of a plugin member", () => {
+    // arrange
+    const clone = { note: "via-ssh", url: "git@github.com:acme/ghp.git" } as const;
+
+    // act
+    const redacted = redactCloneNote(clone);
+
+    // assert
+    assert.deepStrictEqual(redacted, clone);
   });
 
   test("copies a non-failure row without a failure or dependencies key", () => {

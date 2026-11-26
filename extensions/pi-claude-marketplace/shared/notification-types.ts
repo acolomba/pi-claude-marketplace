@@ -423,9 +423,12 @@ export interface TransitionMessageBase extends MessageBase {
  * D-SG-22: how a GitHub clone chose its first transport, in Claude Code's
  * words. `via-ssh` is its `Cloning via SSH`, `via-https` its `Cloning via
  * HTTPS`, and `ssh-not-configured` its `SSH not configured, cloning via HTTPS`.
- * A bare literal union like the other closed sets.
+ * Claude Code has no line for plain http. `via-http`, `Cloning via HTTP`, is
+ * the maintainer's choice for a GitHub address written with `http://` and
+ * cloned as written (IN-A-02). A bare literal union like the other closed
+ * sets.
  */
-export type CloneNoteKind = "via-ssh" | "via-https" | "ssh-not-configured";
+export type CloneNoteKind = "via-ssh" | "via-https" | "via-http" | "ssh-not-configured";
 
 /**
  * D-SG-22: the transport note of a row whose command ran a GitHub clone. `url`
@@ -438,6 +441,14 @@ export interface CloneTransportNote {
   readonly note: CloneNoteKind;
   readonly url: string;
   readonly retries?: readonly string[];
+  /**
+   * The `<plugin>@<marketplace>` whose clone the note reports, when the row
+   * reports another plugin: a failed enable's row names the clone of the
+   * cascade member whose phase failed (WINDOWS #136, maintainer decision
+   * 2026-11-26). The enable failure keeps its shape, and only this labelled
+   * line is new. The text strategy starts each of the note's lines with it.
+   */
+  readonly plugin?: string;
 }
 
 /** Installed plugin row. */
@@ -561,6 +572,8 @@ export interface PluginUninstalledMessage extends TransitionMessageBase {
 export interface PluginDisabledMessage extends TransitionMessageBase {
   readonly status: "disabled";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
@@ -653,6 +666,8 @@ export interface PluginPartiallyInstalledMessage extends MessageBase, RevisionMo
 export interface PluginPartiallyUpgradableMessage extends MessageBase {
   readonly status: "partially-upgradable";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;
@@ -725,6 +740,11 @@ export interface PluginSkippedMessage extends MessageBase {
 export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
   /**
+   * D-SG-22: the transport note of the GitHub clone that produced this row.
+   * The base `PluginSkippedMessage` follows no clone and has none.
+   */
+  readonly clone?: CloneTransportNote;
+  /**
    * D-PL5-12 / D-SG-10: the row stands for the marketplace whose checkout a
    * `marketplace update` kept, so its JSON id is its name alone, as on the
    * failed row of a refresh.
@@ -746,6 +766,8 @@ export interface PluginUninstallSkippedMessage extends PluginSkippedMessage {
 export interface PluginManualRecoveryMessage extends MessageBase {
   readonly status: "manual recovery";
   readonly name: string;
+  /** D-SG-22: the transport note of the GitHub clone that produced this row. */
+  readonly clone?: CloneTransportNote;
   readonly reasons: readonly ContentReason[];
   readonly version?: string;
   readonly scope?: Scope;

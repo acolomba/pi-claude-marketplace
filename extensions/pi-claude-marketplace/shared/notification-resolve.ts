@@ -424,7 +424,8 @@ export function resolveRows(
  * PMOD-04 / T-04-06: `clone` with the userinfo of its first URL and of each
  * retry URL redacted. A url source can carry a credential in its userinfo,
  * and the D-SG-22 note quotes the URL it cloned, so both strategies read the
- * redacted form.
+ * redacted form. CR-A-01: the plugin the note names is redacted as the row
+ * name it names (`redactRowName`).
  */
 export function redactCloneNote(clone: CloneTransportNote): CloneTransportNote {
   return {
@@ -433,6 +434,7 @@ export function redactCloneNote(clone: CloneTransportNote): CloneTransportNote {
     ...(clone.retries !== undefined && {
       retries: clone.retries.map((url) => redactCredentials(url)),
     }),
+    ...(clone.plugin !== undefined && { plugin: redactRowName(clone.plugin) }),
   };
 }
 

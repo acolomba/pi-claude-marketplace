@@ -6,9 +6,10 @@
 // first; any other answer clones over HTTPS first (OQ-1). A forced transport
 // clones once over HTTPS and asks nothing (D-SG-24, D-SG-21). Every other
 // source clones once, as written. A url source whose address names a GitHub
-// repository notes the transport of its scheme (D-SG-22, OQ-3); Claude Code
-// notes no url clone, so this is the recorded decision that every GitHub
-// clone names its transport.
+// repository notes the transport of its scheme (D-SG-22, OQ-3): `via-ssh`
+// over ssh, `via-https` for `https:`, and `via-http` for `http:` (IN-A-02).
+// Claude Code notes no url clone, so this is the recorded decision that every
+// GitHub clone names its transport.
 //
 // The module is pure: the probe is a function the caller passes, called at
 // most once, and only when the plan needs its answer.
@@ -82,8 +83,11 @@ export interface MarketplaceClonePlanInput {
 // An `ssh:`, `git+ssh:`, or `ssh+git:` URL, which git reaches over ssh.
 const SSH_URL = /^(?:ssh|git\+ssh|ssh\+git):/i;
 
-// An `https:` or `http:` URL.
-const HTTPS_URL = /^https?:/i;
+// An `https:` URL.
+const HTTPS_URL = /^https:/i;
+
+// An `http:` URL.
+const HTTP_URL = /^http:/i;
 
 /**
  * OQ-1: whether a GitHub source was written as `owner/repo` (with a ref or
@@ -156,12 +160,18 @@ export function addressTransport(url: string): GitHubTransport {
 }
 
 /**
- * D-SG-22, OQ-3: the note of a url source clone of `url` over `transport`.
- * An address that folds to a GitHub repository (`gitHubAddressOf`) is noted
- * by its scheme: `via-ssh` for an scp address or an ssh scheme, `via-https`
- * for `https:` or `http:`. Any other scheme, and any other host, has none.
+ * D-SG-22, OQ-3: the note of a clone of `url`, an address cloned as written,
+ * over `transport`. An address that folds to a GitHub repository
+ * (`gitHubAddressOf`) is noted by its scheme: `via-ssh` for an scp address or
+ * an ssh scheme, `via-https` for `https:`, and `via-http` for `http:`
+ * (IN-A-02). Any other scheme, and any other host, has none. The marketplace
+ * plan and the plugin plan both read it, so they cannot name one address two
+ * ways.
  */
-function urlSourceNote(url: string, transport: GitHubTransport): CloneNoteKind | undefined {
+export function writtenAddressNote(
+  url: string,
+  transport: GitHubTransport,
+): CloneNoteKind | undefined {
   if (gitHubAddressOf(url) === undefined) {
     return undefined;
   }
@@ -170,7 +180,11 @@ function urlSourceNote(url: string, transport: GitHubTransport): CloneNoteKind |
     return "via-ssh";
   }
 
-  return HTTPS_URL.test(url) ? "via-https" : undefined;
+  if (HTTPS_URL.test(url)) {
+    return "via-https";
+  }
+
+  return HTTP_URL.test(url) ? "via-http" : undefined;
 }
 
 /**
@@ -180,8 +194,8 @@ function urlSourceNote(url: string, transport: GitHubTransport): CloneNoteKind |
  * asks the probe: `configured` puts SSH first with the `via-ssh` note, and any
  * other answer puts HTTPS first with the `ssh-not-configured` note. Either
  * order has the other transport behind its first attempt. A url source gives
- * one attempt as written, with the note `urlSourceNote` gives it, even while
- * a transport is forced: the address clones as written (D-SG-21).
+ * one attempt as written, with the note `writtenAddressNote` gives it, even
+ * while a transport is forced: the address clones as written (D-SG-21).
  */
 export async function planMarketplaceClone(
   input: MarketplaceClonePlanInput,
@@ -190,7 +204,7 @@ export async function planMarketplaceClone(
   const written = networkCloneUrl(source);
   if (source.kind === "url") {
     const transport = addressTransport(written);
-    const note = urlSourceNote(written, transport);
+    const note = writtenAddressNote(written, transport);
     return {
       first: { transport, url: written },
       ...(note !== undefined && { note }),

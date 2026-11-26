@@ -183,6 +183,7 @@ const SCOPES = {
 const CLONE_NOTE_KINDS = {
   "via-ssh": true,
   "via-https": true,
+  "via-http": true,
   "ssh-not-configured": true,
 } as const satisfies Record<CloneNoteKind, true>;
 
@@ -294,10 +295,17 @@ const CAUSE = Type.Object(
 /**
  * D-SG-22: the transport note of a GitHub clone. `url` is the first attempt's
  * URL in github.com terms (GHB-04); `retries` lists the URL of each later
- * attempt, in order, and is absent when one attempt ran.
+ * attempt, in order, and is absent when one attempt ran. `plugin` is the
+ * `<plugin>@<marketplace>` whose clone the note reports, present only when the
+ * row reports another plugin.
  */
 const CLONE = Type.Object(
-  { note: CLONE_NOTE_KIND, url: Type.String(), retries: Type.Optional(Type.Array(Type.String())) },
+  {
+    note: CLONE_NOTE_KIND,
+    url: Type.String(),
+    retries: Type.Optional(Type.Array(Type.String())),
+    plugin: Type.Optional(Type.String()),
+  },
   { additionalProperties: false },
 );
 

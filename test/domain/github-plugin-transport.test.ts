@@ -295,6 +295,11 @@ for (const { url, first, note } of [
     first: { transport: "https", url: "https://github.com/acme/ghp.git" },
     note: "via-https",
   },
+  {
+    url: "http://github.com/acme/ghp.git",
+    first: { transport: "https", url: "http://github.com/acme/ghp.git" },
+    note: "via-http",
+  },
 ] satisfies ReadonlyArray<{ url: string; first: TransportAttempt; note: string }>) {
   test(`OQ-1: clones the GitHub url source ${url} once as written, noted by its scheme`, async () => {
     // arrange
@@ -311,24 +316,34 @@ for (const { url, first, note } of [
   });
 }
 
-test("OQ-1: clones a non-GitHub url source once as written with no note", async () => {
-  // arrange
-  const { checks, calls } = checksAnswering({});
-  const source: GitBackedSource = {
-    kind: "url",
-    raw: "git@git.example.com:acme/ghp.git",
-    url: "git@git.example.com:acme/ghp",
-  };
-
-  // act
-  const plan = await planPluginClone({ source, checks });
-
-  // assert
-  assert.deepStrictEqual(orderOf(plan), {
+for (const { url, first } of [
+  {
+    url: "git@git.example.com:acme/ghp.git",
     first: { transport: "ssh", url: "git@git.example.com:acme/ghp.git" },
+  },
+  {
+    url: "http://127.0.0.1:9/acme/ghp.git",
+    first: { transport: "https", url: "http://127.0.0.1:9/acme/ghp.git" },
+  },
+  // A GitHub repository over a scheme that is neither https, http, nor ssh.
+  {
+    url: "git://github.com/acme/ghp.git",
+    first: { transport: "https", url: "git://github.com/acme/ghp.git" },
+  },
+] satisfies ReadonlyArray<{ url: string; first: TransportAttempt }>) {
+  test(`OQ-1, IN-A-02: clones the url source ${url} once as written with no note`, async () => {
+    // arrange
+    const { checks, calls } = checksAnswering({});
+    const source: GitBackedSource = { kind: "url", raw: url, url: url.replace(/\.git$/, "") };
+
+    // act
+    const plan = await planPluginClone({ source, checks });
+
+    // assert
+    assert.deepStrictEqual(orderOf(plan), { first });
+    assert.deepStrictEqual(calls, []);
   });
-  assert.deepStrictEqual(calls, []);
-});
+}
 
 test("D-SG-20: clones a git-subdir owner/repo shorthand once over ssh and runs no check", async () => {
   // arrange
@@ -387,6 +402,26 @@ test("D-SG-20: clones a git-subdir address once as written and runs no check", a
   assert.deepStrictEqual(orderOf(plan), {
     first: { transport: "https", url: "https://git.example.com/acme/mono.git" },
   });
+  assert.deepStrictEqual(calls, []);
+});
+
+test("IN-A-02: clones an http GitHub git-subdir address once as written with the via-http note", async () => {
+  // arrange
+  const { checks, calls } = checksAnswering({});
+  const source: GitBackedSource = {
+    kind: "git-subdir",
+    raw: "http://github.com/acme/mono.git",
+    url: "http://github.com/acme/mono.git",
+    path: "plugins/one",
+  };
+
+  // act
+  const plan = await planPluginClone({ source, checks });
+
+  // assert
+  const http = { transport: "https", url: "http://github.com/acme/mono.git" } as const;
+  assert.deepStrictEqual(orderOf(plan), { first: http, note: "via-http" });
+  assert.deepStrictEqual(await attemptsAfter(plan, CLONE_FAILURE), [http]);
   assert.deepStrictEqual(calls, []);
 });
 

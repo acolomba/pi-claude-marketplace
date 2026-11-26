@@ -919,11 +919,12 @@ A GitHub clone names the transport it used first. `retries` names each later att
 
 <!-- fields: clone-note -->
 
-| Field path | Type          | Presence | Meaning                                                           |
-| ---------- | ------------- | -------- | ----------------------------------------------------------------- |
-| `note`     | CloneNoteKind | required | How the first attempt chose its transport.                        |
-| `url`      | string        | required | URL of the first attempt, in github.com terms.                    |
-| `retries`  | string[]      | optional | URL of each later attempt, in order. Absent when one attempt ran. |
+| Field path | Type          | Presence | Meaning                                                                                     |
+| ---------- | ------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `note`     | CloneNoteKind | required | How the first attempt chose its transport.                                                  |
+| `url`      | string        | required | URL of the first attempt, in github.com terms.                                              |
+| `retries`  | string[]      | optional | URL of each later attempt, in order. Absent when one attempt ran.                           |
+| `plugin`   | string        | optional | `<plugin>@<marketplace>` whose clone the note reports, when the row reports another plugin. |
 
 <!-- /fields -->
 
@@ -976,7 +977,7 @@ These are native wire values, including spaces and hyphens. They are not the lab
 
 `RowHint`: `partial-install`, `partial-update`, `catalog-partial-update`, `stale-gate-update`, `enable`.
 
-`CloneNoteKind`: `via-ssh` (`Cloning via SSH`), `via-https` (`Cloning via HTTPS`), `ssh-not-configured` (`SSH not configured, cloning via HTTPS`).
+`CloneNoteKind`: `via-ssh` (`Cloning via SSH`), `via-https` (`Cloning via HTTPS`), `via-http` (`Cloning via HTTP`), `ssh-not-configured` (`SSH not configured, cloning via HTTPS`).
 
 `Reason`: `up-to-date`, `not found`, `already installed`, `already added`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`, `marketplace in local layer only`, `marketplace in base layer only`, `plugin in local layer only`, `plugin in base layer only`, `already installed in base layer`, `already installed in local layer`, `still installed in base layer`, `still installed in local layer`, `disabled in local layer`, `enabled in local layer`, `network error`, `requires mcp`, `requires builtin mcp`, `options not set`, `git missing`.
 

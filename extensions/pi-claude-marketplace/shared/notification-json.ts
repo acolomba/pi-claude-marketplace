@@ -491,6 +491,7 @@ function wireClone(clone: CloneTransportNote | undefined) {
       note: clone.note,
       url: clone.url,
       ...(clone.retries === undefined ? {} : { retries: [...clone.retries] }),
+      ...(clone.plugin === undefined ? {} : { plugin: clone.plugin }),
     },
   };
 }
