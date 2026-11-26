@@ -162,19 +162,21 @@ Feature: Plugin info
       | ghp  | 2.0.0   |      |
     When the user runs "/claude:plugin info ghp@gits --fetch"
     Then the result has these fields:
-      | kind                           | plugin-info |
-      | marketplace details autoupdate | false       |
-      | marketplace name               | gits        |
-      | marketplace scope              | project     |
-      | needs reload                   | false       |
-      | plugin components resolved     | true        |
-      | plugin components skills       | ghp-skill   |
-      | plugin id                      | ghp@gits    |
-      | plugin name                    | ghp         |
-      | plugin reasons                 |             |
-      | plugin status                  | available   |
-      | plugin version                 | 2.0.0       |
-      | severity                       | info        |
+      | kind                           | plugin-info                     |
+      | marketplace details autoupdate | false                           |
+      | marketplace name               | gits                            |
+      | marketplace scope              | project                         |
+      | needs reload                   | false                           |
+      | plugin clone note              | via-https                       |
+      | plugin clone url               | https://github.com/acme/ghp.git |
+      | plugin components resolved     | true                            |
+      | plugin components skills       | ghp-skill                       |
+      | plugin id                      | ghp@gits                        |
+      | plugin name                    | ghp                             |
+      | plugin reasons                 |                                 |
+      | plugin status                  | available                       |
+      | plugin version                 | 2.0.0                           |
+      | severity                       | info                            |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -228,20 +230,22 @@ Feature: Plugin info
       | ghp  | 2.0.0   |      |
     When the user runs "/claude:plugin info ghp@gits --fetch"
     Then the result has these fields:
-      | kind                           | plugin-info |
-      | marketplace details autoupdate | false       |
-      | marketplace name               | gits        |
-      | marketplace scope              | project     |
-      | needs reload                   | false       |
-      | plugin components resolved     | true        |
-      | plugin components skills       | ghp-skill   |
-      | plugin id                      | ghp@gits    |
-      | plugin name                    | ghp         |
-      | plugin reasons                 |             |
-      | plugin scope                   | project     |
-      | plugin status                  | installed   |
-      | plugin version                 | 1.0.0       |
-      | severity                       | info        |
+      | kind                           | plugin-info                     |
+      | marketplace details autoupdate | false                           |
+      | marketplace name               | gits                            |
+      | marketplace scope              | project                         |
+      | needs reload                   | false                           |
+      | plugin clone note              | via-https                       |
+      | plugin clone url               | https://github.com/acme/ghp.git |
+      | plugin components resolved     | true                            |
+      | plugin components skills       | ghp-skill                       |
+      | plugin id                      | ghp@gits                        |
+      | plugin name                    | ghp                             |
+      | plugin reasons                 |                                 |
+      | plugin scope                   | project                         |
+      | plugin status                  | installed                       |
+      | plugin version                 | 1.0.0                           |
+      | severity                       | info                            |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -339,19 +343,21 @@ Feature: Plugin info
     Given the marketplace "gits" is added to the project scope
     When the user runs "/claude:plugin info ghp@gits --fetch"
     Then the result has these fields:
-      | kind                           | plugin-info |
-      | marketplace details autoupdate | false       |
-      | marketplace name               | gits        |
-      | marketplace scope              | project     |
-      | needs reload                   | false       |
-      | plugin components resolved     | true        |
-      | plugin components skills       | ghp-skill   |
-      | plugin id                      | ghp@gits    |
-      | plugin name                    | ghp         |
-      | plugin reasons                 |             |
-      | plugin status                  | available   |
-      | plugin version                 | 1.0.0       |
-      | severity                       | info        |
+      | kind                           | plugin-info                     |
+      | marketplace details autoupdate | false                           |
+      | marketplace name               | gits                            |
+      | marketplace scope              | project                         |
+      | needs reload                   | false                           |
+      | plugin clone note              | via-https                       |
+      | plugin clone url               | https://github.com/acme/ghp.git |
+      | plugin components resolved     | true                            |
+      | plugin components skills       | ghp-skill                       |
+      | plugin id                      | ghp@gits                        |
+      | plugin name                    | ghp                             |
+      | plugin reasons                 |                                 |
+      | plugin status                  | available                       |
+      | plugin version                 | 1.0.0                           |
+      | severity                       | info                            |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
@@ -370,17 +376,19 @@ Feature: Plugin info
     Given the git host answers 404 for the plugin "ghp"
     When the user runs "/claude:plugin info ghp@gits --fetch"
     Then the result has these fields:
-      | kind                           | plugin-info    |
-      | marketplace details autoupdate | false          |
-      | marketplace name               | gits           |
-      | marketplace scope              | project        |
-      | needs reload                   | false          |
-      | plugin components resolved     | false          |
-      | plugin id                      | ghp@gits       |
-      | plugin name                    | ghp            |
-      | plugin reasons                 | source missing |
-      | plugin status                  | remote         |
-      | severity                       | info           |
+      | kind                           | plugin-info                     |
+      | marketplace details autoupdate | false                           |
+      | marketplace name               | gits                            |
+      | marketplace scope              | project                         |
+      | needs reload                   | false                           |
+      | plugin clone note              | via-https                       |
+      | plugin clone url               | https://github.com/acme/ghp.git |
+      | plugin components resolved     | false                           |
+      | plugin id                      | ghp@gits                        |
+      | plugin name                    | ghp                             |
+      | plugin reasons                 | source missing                  |
+      | plugin status                  | remote                          |
+      | severity                       | info                            |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 404    |
