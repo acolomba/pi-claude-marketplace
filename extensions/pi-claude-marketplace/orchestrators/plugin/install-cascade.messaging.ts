@@ -298,7 +298,8 @@ export function composeCascadeMemberRow(
  *
  * D-SG-22: the requesting plugin's row and each materialized member's row
  * carry the note `notes` keeps for its own key, so each names the transport of
- * the clone it made. A disabled row has no note field, and a skipped member
+ * the clone it made. The requesting row reads its note whatever its status, so
+ * a DFEN-04 disabled row names the clone the install made too. A skipped member
  * cloned nothing.
  */
 export function composeCascadeMemberRows(args: {
@@ -313,10 +314,7 @@ export function composeCascadeMemberRows(args: {
   /** D-SG-22: the command's clone notes, by `<plugin>@<marketplace>`. */
   readonly notes?: GitHubCloneNotes | undefined;
 }): readonly CascadeMsg[] {
-  const rootRow =
-    args.rootRow.status === "disabled"
-      ? args.rootRow
-      : withCloneNote(args.rootRow, args.notes, args.rootKey);
+  const rootRow = withCloneNote(args.rootRow, args.notes, args.rootKey);
   const rows: CascadeMsg[] = [rootRow, ...(args.moved ?? [])];
   for (const member of args.installed) {
     if (member.key === args.rootKey) {

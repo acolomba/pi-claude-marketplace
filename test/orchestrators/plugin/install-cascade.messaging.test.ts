@@ -1903,16 +1903,19 @@ describe("D-SG-22: clone notes on the cascade's rows", () => {
     });
   });
 
-  test("a disabled requesting plugin's row stays without a clone field", () => {
+  test("DFEN-04: a disabled requesting plugin's row names its own clone and keeps its reason and hint", () => {
     // arrange
     const notes = createGitHubCloneNotes();
     notes.record(ROOT_KEY, { note: "via-ssh", url: "git@github.com:acme/helper.git" });
+    notes.record("formatter@tools", { note: "via-https", url: "https://github.com/acme/f.git" });
     const disabled: InstallMsg = {
       status: "disabled",
       name: "helper",
       version: "1.0.0",
+      reasons: ["installs disabled"],
       severity: "info",
-      needsReload: true,
+      needsReload: false,
+      enableHint: true,
     };
 
     // act
@@ -1927,7 +1930,39 @@ describe("D-SG-22: clone notes on the cascade's rows", () => {
     });
 
     // assert
-    assert.deepStrictEqual(rows, [disabled]);
+    assert.deepStrictEqual(rows, [
+      { ...disabled, clone: { note: "via-ssh", url: "git@github.com:acme/helper.git" } },
+    ]);
+  });
+
+  test("DFEN-04: a disabled requesting plugin's row stays the same row when its key has no note", () => {
+    // arrange
+    const notes = createGitHubCloneNotes();
+    notes.record("formatter@tools", { note: "via-https", url: "https://github.com/acme/f.git" });
+    const disabled: InstallMsg = {
+      status: "disabled",
+      name: "helper",
+      version: "1.0.0",
+      reasons: ["installs disabled"],
+      severity: "info",
+      needsReload: false,
+      enableHint: true,
+    };
+
+    // act
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: disabled,
+      installed: [],
+      alreadyInstalled: [],
+      probe: PROBE_BOTH_LOADED,
+      notes,
+    });
+
+    // assert
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0], disabled);
   });
 
   test("a dependency whose clone failed names its attempts under its own failed row", () => {
