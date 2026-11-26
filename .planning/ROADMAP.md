@@ -331,7 +331,7 @@ Plans:
   2. For an `owner/repo` marketplace source the user sees upstream's progress lines: SSH first only when the probe reports SSH configured, HTTPS first otherwise, a retry with the other transport on failure, and upstream's error when both fail; with `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` no probe runs and every GitHub clone uses HTTPS, and `CLAUDE_CODE_REMOTE` changes nothing; cucumber scenarios pin each path (SG-SSH-02, SG-SSH-03).
   3. A `github` plugin source on install, update, and dependency install follows the probe, fallback, and skip rules of the upstream surface discuss chose (Q7), with cucumber scenarios for each, and on Windows a plugin install retries an SSH failure over HTTPS as upstream does (SG-SSH-04, SG-SSH-05).
   4. A marketplace or plugin cloned over SSH is the same source as its HTTPS form: a later update, reinstall, or install never refuses it as a stale clone, and its `plugin-clones/<key>/` directory does not move (SG-SSH-06).
-**Plans**: 18/26 plans executed in 11 waves; 8 gap-closure plans (04-19 to 04-26) planned in 4 waves
+**Plans**: 20/26 plans executed in 11 waves; 8 gap-closure plans (04-19 to 04-26) planned in 4 waves
 
 Plans:
 **Wave 1**
@@ -377,8 +377,8 @@ Plans:
 **Gap closure** (04-VERIFICATION.md truth 5, D-SG-22; review IN-A-01 and IN-A-02, maintainer decisions 2026-11-26)
 
 **Gap wave 1**
-- [ ] 04-19-PLAN.md — Notification vocabulary: the `via-http` clone note (IN-A-02) end to end, the clone member on the skipped, partially-upgradable, manual-recovery, and disabled rows, and the plugin label of a clone note (for WINDOWS #136)
-- [ ] 04-20-PLAN.md — Claude Code's `zHi` refusal of a github repository that is not owner/repo, typed and read as `unsupported source`, with its D-SG-18 outcome sentence (IN-A-01; no dependents)
+- [x] 04-19-PLAN.md — Notification vocabulary: the `via-http` clone note (IN-A-02) end to end, the clone member on the skipped, partially-upgradable, manual-recovery, and disabled rows, and the plugin label of a clone note (for WINDOWS #136)
+- [x] 04-20-PLAN.md — Claude Code's `zHi` refusal of a github repository that is not owner/repo, typed and read as `unsupported source`, with its D-SG-18 outcome sentence (IN-A-01; no dependents)
 
 **Gap wave 2** *(blocked on 04-19)*
 - [ ] 04-21-PLAN.md — Install notes: the disabled install row, the dependency planning failure, and the bare block of a D-MF-04 add of a dependency's marketplace (WINDOWS #130, #131, #132)
@@ -458,7 +458,7 @@ Plans:
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
-| 4. SSH Sources and Transport Selection | 18/18 | In Progress | - |
+| 4. SSH Sources and Transport Selection | 20/26 | In Progress | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |

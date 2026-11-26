@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 38
+open_count: 39
 waived_count: 52
 fixed_count: 48
-total_count: 138
-last_updated: 2026-11-26T04:22:27.255Z
+total_count: 139
+last_updated: 2026-11-26T19:09:36.657Z
 ---
 
 # Broken Windows Ledger
@@ -153,6 +153,7 @@ last_updated: 2026-11-26T04:22:27.255Z
 | 136 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] A failing enable cascade member's re-clone shows no clone note: the enable reports only the root's failed row (D-SG-22) | open |  | 2026-11-26T02:56:01.708Z |  |
 | 137 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] An enable that fails after its ledger (a transaction-level throw) shows no clone note on its failed row (D-SG-22) | open |  | 2026-11-26T02:56:01.845Z |  |
 | 138 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts |  | [system-git] An apply or import install whose dependency's rollback failed shows the dependency's row with no clone note (D-SG-22) | open |  | 2026-11-26T04:22:27.255Z |  |
+| 139 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts |  | [system-git] An enable that re-clones a github plugin whose repository is not owner/repo shows no unsupported source: narrowEnableFailure classifies no clone failure (IN-A-01, D-SG-18) | open |  | 2026-11-26T19:09:36.657Z |  |
 
 ````json
 [
@@ -1891,6 +1892,19 @@ last_updated: 2026-11-26T04:22:27.255Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-26T04:22:27.255Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 139,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts",
+    "line": null,
+    "description": "[system-git] An enable that re-clones a github plugin whose repository is not owner/repo shows no unsupported source: narrowEnableFailure classifies no clone failure (IN-A-01, D-SG-18)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T19:09:36.657Z",
     "resolved_at": null,
     "milestone": null
   }
