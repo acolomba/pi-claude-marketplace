@@ -102,6 +102,7 @@ import {
   type EnableCascadeMemberRow,
   type EnableMsg,
 } from "./enable-disable.messaging.ts";
+import { withCloneNote } from "./install.messaging.ts";
 import { mcpDependencyOf } from "./mcp-verdict.ts";
 import {
   absentTargetReasons,
@@ -2686,22 +2687,31 @@ async function runSetEnabledOutcome(
       // marketplace) carries the reason that names the fact its cause line
       // states. FLR-01 / D-02: a held state lock reads `lock held`. Every other
       // transaction throw keeps the brace-less `(failed)` row.
+      //
+      // D-SG-22: an enable that threw after its ledger re-cloned the root (a
+      // failed save, for instance) names that clone, read under the root's
+      // key. A throw before the ledger finds no note, and a disable clones
+      // nothing, so both rows keep their bytes.
       emitEnableDisableFailedRow({
         ctx,
         run,
         enable,
         marketplace,
         scope,
-        row: {
-          status: "failed",
-          name: plugin,
-          reasons: standaloneTransactionThrowReasons(cause),
-          cause,
-          // D-03/D-06: a transaction-throw enable/disable failure -> error, no
-          // reload.
-          severity: "error",
-          needsReload: false,
-        },
+        row: withCloneNote<PluginFailedMessage>(
+          {
+            status: "failed",
+            name: plugin,
+            reasons: standaloneTransactionThrowReasons(cause),
+            cause,
+            // D-03/D-06: a transaction-throw enable/disable failure -> error, no
+            // reload.
+            severity: "error",
+            needsReload: false,
+          },
+          enable ? opts.transportContext.notes : undefined,
+          `${plugin}@${marketplace}`,
+        ),
       });
       // AFILE-04: a throw after a rewrite (a config write or the save) still
       // reports the comments that rewrite removed.

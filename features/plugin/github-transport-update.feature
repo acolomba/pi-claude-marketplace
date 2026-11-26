@@ -392,3 +392,21 @@ Feature: Plugin github transport update
       | id       | version | enabled |
       | app@gits | 1.0.0   | false   |
       | ghp@gits | 1.0.0   | false   |
+
+  Scenario: Enabling a github plugin whose installation record can be read but no longer saved names its clone on the failed row
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the user has run "/claude:plugin disable ghp@gits --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    Given the installation record of the project scope can be read but no longer saved
+    When the user runs "/claude:plugin enable ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons | scope   | cause chain                      | cause truncated | leaks | rollback partial | clone note         | clone url                       |
+      | gits             | project           | ghp@gits | ghp  | failed |         | project | {installation record save error} | false           |       |                  | ssh-not-configured | https://github.com/acme/ghp.git |

@@ -10416,3 +10416,151 @@ test("D-SG-22: an enable whose config write fails after every re-clone names onl
     ]);
   });
 });
+
+/**
+ * D-SG-22: `transaction` with a locked state transaction whose save rejects
+ * with `fail` after the run reached it.
+ */
+function savingFailsTransaction(
+  transaction: EnableDisableTransaction,
+  fail: Error,
+): EnableDisableTransaction {
+  return {
+    ...transaction,
+    async withLockedStateTransaction(locations, run) {
+      return withLockedStateTransaction(locations, async (tx) =>
+        run({ state: tx.state, save: () => Promise.reject(fail) }),
+      );
+    },
+  };
+}
+
+test("D-SG-22: an enable whose save fails after its re-clone names that clone on its failed row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const enable = enableOver(
+      savingFailsTransaction(
+        cloningTransaction({
+          "a@official": { note: "ssh-not-configured", url: "https://github.com/acme/a.git" },
+          "b@official": { note: "via-ssh", url: "git@github.com:acme/b.git" },
+        }),
+        new Error("state.json could not be saved"),
+      ),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a (failed)",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/a.git",
+          "    cause: state.json could not be saved",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: an enable whose transaction fails before any clone keeps its failed row", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [{ name: "a", version: "1.0.0", enabled: false }]);
+    const given = unplannedTransportContext();
+    given.notes.record("b@official", { note: "via-ssh", url: "git@github.com:acme/b.git" });
+    const enable = enableOver({
+      ...cloningTransaction({}),
+      withLockedStateTransaction() {
+        return rejectUnknown(new Error("state lock unavailable"));
+      },
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+      transportContext: given,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a (failed)",
+          "    cause: state lock unavailable",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: a disable whose transaction fails keeps its failed row, whatever clone the context holds", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedEdepGraph(home, [{ name: "a", version: "1.0.0", enabled: true }]);
+    const given = unplannedTransportContext();
+    given.notes.record("a@official", { note: "via-ssh", url: "git@github.com:acme/a.git" });
+    const disable = enableOver({
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      withLockedStateTransaction() {
+        return rejectUnknown(new Error("state lock unavailable"));
+      },
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await disable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: false,
+      scope: "user",
+      transportContext: given,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "A plugin operation has failed.",
+          "",
+          "● official [user]",
+          "  ⊘ a (failed)",
+          "    cause: state lock unavailable",
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+  });
+});
