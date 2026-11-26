@@ -104,7 +104,7 @@ import {
   buildGitHubAuth,
   hostFromCloneUrl,
 } from "../auth-host.ts";
-import { createGitHubCloneNotes, withOwnCloneNotes } from "../github-transport.ts";
+import { cloneNoteOf, createGitHubCloneNotes, withOwnCloneNotes } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
   installedRootsInside,
@@ -960,9 +960,38 @@ function abortUpdateBatch(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * D-SG-22: `outcome` with the note of its own clone, the one `notes` keeps
+ * for `subject` (`<plugin>@<marketplace>`), and each dependency row with the
+ * note of its own key, as the direct update's cascade names them. The
+ * autoupdate cascade's rows read the outcome, so `orchestrators/marketplace/`
+ * reads no plugin collector. A subject that cloned nothing over GitHub gets
+ * no member (NREG-01, OQ-3).
+ */
+function withTargetCloneNotes(
+  outcome: PluginUpdateOutcome,
+  notes: GitHubCloneNotes,
+  subject: string,
+): PluginUpdateOutcome {
+  const { dependencyRows } = outcome;
+  return {
+    ...outcome,
+    ...cloneNoteOf(notes, subject),
+    ...(dependencyRows !== undefined && {
+      dependencyRows: dependencyRows.map((row) => withCloneNote(row, notes, row.name)),
+    }),
+  };
+}
+
+/**
  * D-09 corollary: the `PluginUpdateFn` impl (D-05). The marketplace
  * autoupdate cascade wires this in. Its cascade-safe contract is
  * `runCascadeTarget`'s.
+ *
+ * D-SG-22, CR-B-02: the target clones over its own view of the run's
+ * transport context, so its outcome names its own clone only, even when the
+ * run updates the same `<plugin>@<marketplace>` in both scopes. The view
+ * shares the run's checks, so the run still probes once (D-SG-19, WR-B-01).
+ * A failed target's outcome names the attempts its clone made.
  */
 async function updateSinglePluginWith(
   bindings: UpdateBindings,
@@ -982,7 +1011,8 @@ async function updateSinglePluginWith(
   // already operates in the user's session cwd. Future wiring may add a
   // dependency-injection seam if needed.
   const cwd = process.cwd();
-  return runCascadeTarget(runPluginUpdate, {
+  const targetContext = withOwnCloneNotes(runScoped.transportContext);
+  const outcome = await runCascadeTarget(runPluginUpdate, {
     plugin,
     marketplace,
     scope,
@@ -1009,10 +1039,11 @@ async function updateSinglePluginWith(
     // and not beside the binding.
     constraintTagMemo: runScoped.tagMemo,
     constraintMarketplaceTagMemo: runScoped.marketplaceTagMemo,
-    // D-SG-19: the run's one transport context.
-    transportContext: runScoped.transportContext,
+    // D-SG-19: the run's one transport context, through the target's view.
+    transportContext: targetContext,
     cleanupClones: collectPluginClonesLocked,
   });
+  return withTargetCloneNotes(outcome, targetContext.notes, `${plugin}@${marketplace}`);
 }
 
 /**

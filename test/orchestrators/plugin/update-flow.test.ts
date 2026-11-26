@@ -108,6 +108,10 @@ import type {
   SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type {
+  CloneTransportNote,
+  PluginInstalledMessage,
+} from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 function createUpdateOperations() {
@@ -16318,5 +16322,218 @@ test("D-SG-22: a PUP-2 sync whose re-clone fails names the clone it tried under 
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+// ─── D-SG-22: an autoupdate run names each target's own clone ───────────────
+
+/**
+ * D-SG-19: a transport context for a user with no ssh setting whose probe
+ * finds ssh not configured, so a GitHub `owner/repo` clone tries HTTPS first
+ * and SSH once after it, and `probes` counts the probes.
+ */
+function probeNotConfiguredContext(probes: { count: number }): PluginTransportContext {
+  const { platform, checks, notes } = createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: () => {
+        probes.count += 1;
+        return Promise.resolve("not-configured");
+      },
+      userOverride: () => Promise.resolve(false),
+      urlRewritten: () => Promise.resolve({ rewritten: false, exitCode: 1 }),
+      showsDirectGitHub: () => Promise.resolve({ kind: "ran", direct: true, exitCode: 0 }),
+      showsDirectGitHubThroughGit: () => Promise.resolve(true),
+    },
+  });
+  return { force: undefined, platform, checks, notes };
+}
+
+/** Runs `fn` with `cwd` as the process's working directory, which the cascade reads. */
+async function inCwd<T>(t: TestContext, cwd: string, fn: () => Promise<T>): Promise<T> {
+  const previousCwd = process.cwd();
+  t.after(() => {
+    process.chdir(previousCwd);
+  });
+  process.chdir(cwd);
+  return fn();
+}
+
+test("D-SG-22, D-SG-19: an autoupdate run returns each github target's own clone note and probes once", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-autoupdate-clone-notes-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedGitPluginMarketplace({
+      cwd,
+      cloneUrl: "https://github.com/org/repo",
+      fixtureRepoDir: path.join(cwd, "repo-fixture"),
+      versionTag: "9.9.9",
+      entrySource: { source: "github", repo: "org/repo", sha: SHA_NEW },
+      recordedSha: SHA_OLD,
+      extraPlugins: {
+        gq: {
+          entrySource: { source: "github", repo: "org/other", sha: SHA_NEW },
+          recordedSha: SHA_OLD,
+        },
+      },
+    });
+    const probes = { count: 0 };
+    const updatePlugin = transportUpdateOperations(() => {
+      throw new Error("a command's context leaves the factory unused");
+    }).beginPluginUpdateRun(commandNotification(), probeNotConfiguredContext(probes));
+
+    // act
+    const outcomes = await inCwd(t, cwd, async () => [
+      await updatePlugin("gp", "mp", "project"),
+      await updatePlugin("gq", "mp", "project"),
+    ]);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        rows: outcomes.map(({ name, partition, clone }) => ({ name, partition, clone })),
+        probes: probes.count,
+      },
+      {
+        rows: [
+          {
+            name: "gp",
+            partition: "failed",
+            clone: {
+              note: "ssh-not-configured",
+              url: "https://github.com/org/repo.git",
+              retries: ["git@github.com:org/repo.git"],
+            },
+          },
+          {
+            name: "gq",
+            partition: "failed",
+            clone: {
+              note: "ssh-not-configured",
+              url: "https://github.com/org/other.git",
+              retries: ["git@github.com:org/other.git"],
+            },
+          },
+        ],
+        probes: 1,
+      },
+    );
+  });
+});
+
+test("D-SG-22, OQ-3: an autoupdate target whose mirror is warm names no clone, after the other scope's target cloned", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-autoupdate-clone-scopes-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const cloneUrl = "https://github.com/org/repo";
+    const fixtureRepoDir = path.join(cwd, "repo-fixture");
+    for (const scope of ["project", "user"] as const) {
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: `${cloneUrl}.git`, sha: SHA_NEW },
+        recordedSha: SHA_OLD,
+        scope,
+      });
+    }
+
+    // The user scope already holds the new commit's clone, so only the
+    // project scope clones.
+    const userClone = await locationsFor("user", cwd).pluginCloneDir(
+      pluginCloneKey(cloneUrl, SHA_NEW),
+    );
+    await cp(fixtureRepoDir, userClone, { recursive: true });
+    const updatePlugin = createUpdateOperations().beginPluginUpdateRun(commandNotification());
+
+    // act
+    const [project, user] = await inCwd(t, cwd, async () => [
+      await updatePlugin("gp", "mp", "project"),
+      await updatePlugin("gp", "mp", "user"),
+    ]);
+
+    // assert
+    assert.deepStrictEqual(
+      [project, user].map((outcome) => ({
+        partition: outcome?.partition,
+        clone: outcome?.clone,
+        hasClone: outcome !== undefined && Object.hasOwn(outcome, "clone"),
+      })),
+      [
+        {
+          partition: "failed",
+          clone: { note: "via-https", url: "https://github.com/org/repo.git" },
+          hasClone: true,
+        },
+        { partition: "updated", clone: undefined, hasClone: false },
+      ],
+    );
+  });
+});
+
+test("D-SG-22: an autoupdate names each dependency row by the clone of its own key", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-autoupdate-dependency-notes-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedPathMarketplace({
+      cwd,
+      marketplaceRoot: path.join(cwd, "mp-src"),
+      marketplaceName: "mp",
+      manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+      installedVersions: { hello: "1.0.0" },
+    });
+    const depClone: CloneTransportNote = {
+      note: "via-https",
+      url: "https://github.com/org/dep.git",
+    };
+    const dependencyRow = (name: string): PluginInstalledMessage => ({
+      status: "installed",
+      name,
+      dependencies: [],
+      severity: "info",
+      needsReload: true,
+    });
+    const operations = createPluginUpdateOperations(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+      undefined,
+      process.env,
+      (args) => {
+        args.transportContext?.notes.record("dep@mp", depClone);
+        return Promise.resolve({
+          kind: "settled",
+          rows: [dependencyRow("dep@mp"), dependencyRow("warm@mp")],
+        });
+      },
+    );
+
+    // act
+    const outcome = await inCwd(t, cwd, () =>
+      operations.beginPluginUpdateRun(commandNotification())("hello", "mp", "project"),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        partition: outcome.partition,
+        clone: outcome.clone,
+        rows: outcome.dependencyRows?.map(({ name, clone }) => ({ name, clone })),
+      },
+      {
+        partition: "updated",
+        clone: undefined,
+        rows: [
+          { name: "dep@mp", clone: depClone },
+          { name: "warm@mp", clone: undefined },
+        ],
+      },
+    );
   });
 });

@@ -8042,3 +8042,133 @@ for (const { layer, runsCascade } of [
     });
   });
 }
+
+// ---------------------------------------------------------------------------
+// D-SG-22: the autoupdate cascade's rows name the clones their updates ran,
+// from the note each outcome of the `pluginUpdate` seam carries.
+// ---------------------------------------------------------------------------
+
+test("D-SG-22: the autoupdate cascade names each update's clone and each dependency row's own, and keeps the step's rows after them", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+    const events: string[] = [];
+    const step = recordingAutoupdateStep(
+      { rows: [AUTOUPDATE_DEPENDENCY_ROW], mcpConfigNotices: [] },
+      events,
+    );
+    const pluginUpdate: PluginUpdateFn = (plugin) =>
+      Promise.resolve({
+        partition: "updated",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        resourcesChanged: true,
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+        ...(plugin === "alpha" && {
+          clone: { note: "via-https", url: "https://github.com/acme/alpha.git" },
+          dependencyRows: [
+            {
+              status: "installed",
+              name: "core@deps-mp",
+              version: "1.0.0",
+              dependencies: [],
+              reasons: ["dependency installed"],
+              severity: "info",
+              needsReload: true,
+              clone: {
+                note: "ssh-not-configured",
+                url: "https://github.com/acme/core.git",
+                retries: ["git@github.com:acme/core.git"],
+              },
+            },
+          ],
+        }),
+      });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      pluginUpdate,
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● deps-mp [project] (updated)\n" +
+          "  ● alpha v0.0.1 → v0.0.2 (updated)\n" +
+          "    Cloning via HTTPS: https://github.com/acme/alpha.git\n" +
+          "  ● core@deps-mp v1.0.0 (installed) {dependency installed}\n" +
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/core.git\n" +
+          "    HTTPS clone failed, retrying with SSH: git@github.com:acme/core.git\n" +
+          "  ● beta v0.0.1 → v0.0.2 (updated)\n" +
+          "  ● lib@deps-mp v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+  });
+});
+
+test("D-SG-22: a failed autoupdate whose clone failed over both transports names both attempts under its row", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+    const pluginUpdate: PluginUpdateFn = (plugin) =>
+      Promise.resolve({
+        partition: "failed",
+        name: plugin,
+        notes: [],
+        reasons: ["network error"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        ...(plugin === "beta" && {
+          clone: {
+            note: "ssh-not-configured",
+            url: "https://github.com/acme/beta.git",
+            retries: ["git@github.com:acme/beta.git"],
+          },
+        }),
+      });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n\n" +
+          "● deps-mp [project] (updated)\n" +
+          "  ⊘ alpha (failed) {network error}\n" +
+          "  ⊘ beta (failed) {network error}\n" +
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/beta.git\n" +
+          "    HTTPS clone failed, retrying with SSH: git@github.com:acme/beta.git",
+        severity: "error",
+      },
+    ]);
+  });
+});
