@@ -49,9 +49,10 @@ import {
 } from "./reconcile.messaging.ts";
 
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { CloneTransportNote, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { CloneNoted } from "../github-transport.ts";
 import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { StagingDiagnostic } from "../plugin/staging-diagnostics.ts";
@@ -77,12 +78,12 @@ export interface PluginOutcomeBase extends OutcomeBase {
 }
 
 /** Marketplace add success outcome. */
-export interface MpAddedOutcome extends OutcomeBase {
+export interface MpAddedOutcome extends OutcomeBase, CloneNoted {
   readonly kind: "mp-added";
 }
 
 /** Marketplace add failure outcome. */
-export interface MpAddFailedOutcome extends OutcomeBase {
+export interface MpAddFailedOutcome extends OutcomeBase, CloneNoted {
   readonly kind: "mp-add-failed";
   readonly reason: Reason;
 }
@@ -129,7 +130,10 @@ export interface MpRemovePartialOutcome extends OutcomeBase {
  * `(partially-installed)`, which is for DROPPED supported components.
  */
 export interface PluginInstalledOutcome
-  extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
+  extends
+    PluginOutcomeBase,
+    CloneNoted,
+    Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
   readonly kind: "plugin-installed";
   readonly version?: string;
   readonly dependencies: readonly Dependency[];
@@ -186,7 +190,10 @@ export interface PluginInstalledOutcome
  * `unsupported` kind list below, read off the runner's partial-degrade result.
  */
 export interface PluginBackfilledOutcome
-  extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
+  extends
+    PluginOutcomeBase,
+    CloneNoted,
+    Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
   readonly kind: "plugin-backfilled";
   readonly version?: string;
   /**
@@ -210,7 +217,7 @@ export interface PluginBackfilledOutcome
 }
 
 /** Plugin install failure outcome. */
-export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
+export interface PluginInstallFailedOutcome extends PluginOutcomeBase, CloneNoted {
   readonly kind: "plugin-install-failed";
   readonly reason: Reason;
   /**
@@ -305,7 +312,8 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
  * row carries no `dependencies` field of its own for that reason: the list is
  * derived from the signals, never passed in beside them.
  */
-export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradationSignals {
+export interface PluginEnabledOutcome
+  extends PluginOutcomeBase, CloneNoted, EnableDegradationSignals {
   readonly kind: "plugin-enabled";
   readonly version?: string;
   /**
@@ -317,7 +325,7 @@ export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradati
 }
 
 /** Plugin enable failure outcome. */
-export interface PluginEnableFailedOutcome extends PluginOutcomeBase {
+export interface PluginEnableFailedOutcome extends PluginOutcomeBase, CloneNoted {
   readonly kind: "plugin-enable-failed";
   readonly reason: Reason;
   /** The redacted failure chain when an enable leaves work to recover manually. */
@@ -901,6 +909,48 @@ export function carriedStagingWarnings(carrier: {
   readonly stagingWarnings?: readonly StagingWarning[];
 }): Pick<PluginEnabledOutcome, "stagingWarnings"> {
   return carrier.stagingWarnings === undefined ? {} : { stagingWarnings: carrier.stagingWarnings };
+}
+
+/**
+ * D-SG-22: a catalog move's outcomes with the move's clone note on each row
+ * that can show one and shows none yet: an installed, updated,
+ * partially-installed, or failed row, and a backfill. A row that already
+ * names a clone, such as the one an enable after the move ran, keeps its own.
+ */
+export function withMoveClone(
+  outcomes: readonly PerEntryOutcome[],
+  noted: CloneNoted,
+): PerEntryOutcome[] {
+  const clone = noted.clone;
+  if (clone === undefined) {
+    return [...outcomes];
+  }
+
+  return outcomes.map((outcome) => {
+    if (outcome.kind === "plugin-backfilled") {
+      return { clone, ...outcome };
+    }
+
+    return outcome.kind === "plugin-converged"
+      ? { ...outcome, row: rowWithClone(outcome.row, clone) }
+      : outcome;
+  });
+}
+
+// The row with `clone` when its kind can show a clone and it names none yet.
+function rowWithClone(row: ReconcileAppliedMsg, clone: CloneTransportNote): ReconcileAppliedMsg {
+  switch (row.status) {
+    case "installed":
+    case "updated":
+    case "partially-installed":
+    case "failed":
+      return { clone, ...row };
+    case "uninstalled":
+    case "disabled":
+    case "skipped":
+    case "partially-upgradable":
+      return row;
+  }
 }
 
 /**

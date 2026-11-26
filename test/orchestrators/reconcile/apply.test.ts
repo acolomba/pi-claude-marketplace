@@ -68,6 +68,7 @@ import {
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
   createApplyReconcile,
@@ -103,6 +104,7 @@ import { retryTree } from "../plugin/scope-tree-inventory.ts";
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type { PluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as ApplyOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts";
@@ -1178,6 +1180,8 @@ describe("applyReconcile", () => {
           "● local-mp [project] (added)\n" +
           "\n" +
           "⊘ remote-mp [project] (failed) {network unreachable}\n" +
+          "  SSH not configured, cloning via HTTPS: https://github.com/acme/remote.git\n" +
+          "  HTTPS clone failed, retrying with SSH: git@github.com:acme/remote.git\n" +
           "\n" +
           "Reconcile: 1 failure, 1 success",
         severity: "error",
@@ -4162,7 +4166,13 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(boundary.notifications, [
-      { message: "● tools [project] (added)\n\nReconcile: 1 success" },
+      {
+        message:
+          "● tools [project] (added)\n" +
+          "  SSH not configured, cloning via HTTPS: https://github.com/acme/tools.git\n" +
+          "\n" +
+          "Reconcile: 1 success",
+      },
     ]);
     assert.deepStrictEqual(clonedUrls(), ["https://github.com/acme/tools.git"]);
     boundary.verifyBoundary();
@@ -4356,8 +4366,10 @@ describe("applyReconcile", () => {
       {
         message:
           "● remote-mp [project] (added)\n" +
+          "  SSH not configured, cloning via HTTPS: https://github.com/acme/proj.git\n" +
           "\n" +
           "● remote-mp [user] (added)\n" +
+          "  SSH not configured, cloning via HTTPS: https://github.com/acme/user.git\n" +
           "\n" +
           "Reconcile: 2 successes",
       },
@@ -11389,5 +11401,181 @@ describe("createScopeDependencyInstall", () => {
       scopeInstall.rows.map((row) => [row.status, row.name]),
       [["installed", "secrets-vault@mp"]],
     );
+  });
+});
+
+// ─── D-SG-18 / D-SG-22: one plugin transport context per apply run ──────────
+
+/**
+ * A GitHub base no server answers. A plugin clone sends its request there and
+ * fails at once, so no case reaches github.com.
+ */
+const UNANSWERED_GITHUB_BASE = "https://127.0.0.1:9";
+const PROBE_REFUSED = "the probe of the run's transport context ran";
+
+/**
+ * D-SG-18: a transport context for a user with no ssh setting, whose probe
+ * answers with `answer` and counts each probe in `probes`. Nothing forces
+ * HTTPS, so a plugin clone asks the probe even while the base override is set.
+ */
+function countingTransportContext(
+  probes: { count: number },
+  answer: () => Promise<"configured" | "not-configured" | "unknown">,
+): PluginTransportContext {
+  const { platform, checks, notes } = createPluginTransportContext({
+    env: {},
+    platform: "linux",
+    ssh: {
+      probe: () => {
+        probes.count += 1;
+        return answer();
+      },
+      userOverride: () => Promise.resolve(false),
+      urlRewritten: () => Promise.resolve({ rewritten: false, exitCode: 1 }),
+      showsDirectGitHub: () => Promise.resolve({ kind: "ran", direct: true, exitCode: 0 }),
+      showsDirectGitHubThroughGit: () => Promise.resolve(true),
+    },
+  });
+  return { force: undefined, platform, checks, notes };
+}
+
+/** An apply operation whose runs take their transport contexts from `newTransportContext`. */
+function applyWithTransport(
+  newTransportContext: () => PluginTransportContext,
+): (opts: Omit<ApplyReconcileOptions, "completionCache" | "hooksRouting">) => Promise<void> {
+  const apply = createApplyReconcile({ loadState, newTransportContext });
+  return (opts) =>
+    apply({
+      ...opts,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+}
+
+/**
+ * A project scope that records the path marketplace `mp`, which offers the
+ * github plugins `ghp` (`acme/ghp`) and `ghq` (`acme/ghq`), and a config that
+ * declares both.
+ */
+async function seedGitHubPluginScope(
+  t: TestContext,
+  label: string,
+): Promise<{ readonly cwd: string; readonly project: ScopedLocations }> {
+  const { cwd, project } = await createHermeticScopes(t, label);
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeUnder(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: ["ghp", "ghq"].map((plugin) => ({
+        name: plugin,
+        version: "1.0.0",
+        source: { source: "github", repo: `acme/${plugin}` },
+      })),
+    }),
+  );
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "ghp@mp": {}, "ghq@mp": {} },
+    }),
+  );
+  await seedState(project, {
+    schemaVersion: 3,
+    marketplaces: {
+      mp: marketplaceRecord({
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        rawSource: marketplaceRoot,
+        manifestPath,
+        marketplaceRoot,
+      }),
+    },
+  });
+  return { cwd, project };
+}
+
+describe("D-SG-18 / D-SG-22: apply's plugin transport context", () => {
+  test("D-SG-18: an apply run gives every install one transport context, so it probes once", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const { cwd, project } = await seedGitHubPluginScope(t, "transport-once");
+    const probes = { count: 0 };
+    let made = 0;
+    const apply = applyWithTransport(() => {
+      made += 1;
+      return countingTransportContext(probes, () => Promise.reject(new Error(PROBE_REFUSED)));
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await apply({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual({ made, probes: probes.count }, { made: 1, probes: 1 });
+    assert.match(notifications[0]?.message ?? "", /⊘ ghp \(failed\)[^\n]*\n[^]*⊘ ghq \(failed\)/u);
+    assert.deepStrictEqual((await loadState(project.extensionRoot)).marketplaces.mp?.plugins, {});
+    verifyBoundary();
+  });
+
+  test("D-SG-18 / T-04-48: two apply runs make two transport contexts", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const { cwd } = await seedGitHubPluginScope(t, "transport-per-run");
+    const probes = { count: 0 };
+    const contexts: PluginTransportContext[] = [];
+    const apply = applyWithTransport(() => {
+      const context = countingTransportContext(probes, () =>
+        Promise.reject(new Error(PROBE_REFUSED)),
+      );
+      contexts.push(context);
+      return context;
+    });
+    const { ctx, verifyBoundary } = createNotificationBoundary(2);
+
+    // act
+    await apply({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+    await apply({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    assert.equal(contexts.length, 2);
+    assert.notEqual(contexts[0], contexts[1]);
+    assert.equal(probes.count, 2);
+    verifyBoundary();
+  });
+
+  test("D-SG-22: each install row of an apply run names the transport of its own clone", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const { cwd } = await seedGitHubPluginScope(t, "transport-notes");
+    const probes = { count: 0 };
+    const apply = applyWithTransport(() =>
+      countingTransportContext(probes, () => Promise.resolve("not-configured")),
+    );
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await apply({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    const lines = (notifications[0]?.message ?? "").split("\n");
+    const under = (row: string): readonly string[] => {
+      const at = lines.findIndex((line) => line.startsWith(row));
+      return lines.slice(at + 1, at + 3);
+    };
+
+    assert.deepStrictEqual(under("  ⊘ ghp (failed)"), [
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghp.git",
+      "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghp.git",
+    ]);
+    assert.deepStrictEqual(under("  ⊘ ghq (failed)"), [
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/ghq.git",
+      "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghq.git",
+    ]);
+    assert.equal(probes.count, 1);
+    verifyBoundary();
   });
 });

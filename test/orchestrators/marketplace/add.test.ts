@@ -1548,6 +1548,10 @@ test("MA-13 / RECON-03: orchestrated mode reports a leftover whose origin sectio
 
     // assert
     assert.deepStrictEqual(outcome, {
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
       status: "failed",
       reason: "stale clone",
       error: new StaleSourceCloneError(finalDir, "valid-marketplace"),
@@ -1731,6 +1735,10 @@ test("MA-14: orchestrated mode carries the leftover cleanup failure in the cause
 
     // assert
     assert.deepStrictEqual(outcome, {
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
       status: "failed",
       reason: "stale clone",
       error: new CleanupLeakError(
@@ -1772,6 +1780,10 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
     const staging = stagingDir();
     const cause = `stale source clone at ${finalDir} (additionally: ${leak}; failed to clean up marketplace clone staging at ${staging}: EACCES: permission denied, rm '${staging}')`;
     assert.deepStrictEqual(outcome, {
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
       status: "failed",
       reason: "stale clone",
       error: new CleanupLeakError(
@@ -1848,7 +1860,14 @@ test("MPA-01: a same-source add into the declaring layer is skipped as already a
     });
 
     // assert
-    assert.deepStrictEqual(added, { status: "added", name: "valid-marketplace" });
+    assert.deepStrictEqual(added, {
+      status: "added",
+      name: "valid-marketplace",
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
     assert.deepStrictEqual(unchanged, { status: "unchanged", name: "valid-marketplace" });
     assert.deepStrictEqual(n2, []);
     assert.deepStrictEqual(declaration.notifications, [
@@ -4236,6 +4255,10 @@ test(
 
       // assert
       assert.deepStrictEqual(outcome, {
+        clone: {
+          note: "ssh-not-configured",
+          url: "https://github.com/anthropics/claude-plugins-official.git",
+        },
         status: "failed",
         reason: "unreadable",
         error: new Error("[object Object]"),
@@ -4963,7 +4986,14 @@ test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither
     });
 
     // assert
-    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+    assert.deepStrictEqual(outcome, {
+      status: "added",
+      name: "valid-marketplace",
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
     assert.equal((await loadConfig(locations.baseConfigJsonPath)).status, "absent");
@@ -5298,7 +5328,14 @@ test("D-PL6-19: an add that replaces a recorded github marketplace swaps its clo
     });
 
     // assert
-    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+    assert.deepStrictEqual(outcome, {
+      status: "added",
+      name: "valid-marketplace",
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
     const { lastUpdatedAt, ...record } =
       (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"] ?? {};
     assert.deepStrictEqual(record, {
@@ -5359,6 +5396,10 @@ test("D-PL6-19: an add whose new manifest names another marketplace fails as an 
 
     // assert
     assert.deepStrictEqual(outcome, {
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
       status: "failed",
       reason: "invalid manifest",
       error: new InvalidMarketplaceManifestError(message),
@@ -5441,7 +5482,14 @@ test("D-PL6-19: a replaced clone that cannot be removed after the save leaves th
     });
 
     // assert
-    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+    assert.deepStrictEqual(outcome, {
+      status: "added",
+      name: "valid-marketplace",
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
     const [setAside, ...others] = await stagingEntries(locations);
     assert.deepStrictEqual(others, []);
     assert.deepStrictEqual(await readdir(path.join(stagingRoot, setAside ?? "")), [
@@ -5480,6 +5528,11 @@ test("D-PL6-19: an add whose clone fails puts the replaced clone back and keeps 
 
     // assert
     assert.deepStrictEqual(outcome, {
+      clone: {
+        note: "ssh-not-configured",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+        retries: ["git@github.com:anthropics/claude-plugins-official.git"],
+      },
       status: "failed",
       reason: "source missing",
       error: cloneFailure,
@@ -6625,6 +6678,10 @@ test("GHB-01: an orchestrated GitHub add failing under the override still classi
 
     // assert
     assert.deepStrictEqual(outcome, {
+      clone: {
+        note: "via-https",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
       status: "failed",
       reason: "source missing",
       error: cloneThrows,
@@ -7216,7 +7273,7 @@ async function seedHostedRecord(
   return { state, record };
 }
 
-for (const { kind, rawSource, source, marker, markerBytes } of [
+for (const { kind, rawSource, source, marker, markerBytes, cloneNote } of [
   {
     kind: "hosted",
     rawSource: "https://catalog.example/new/marketplace.json",
@@ -7227,6 +7284,7 @@ for (const { kind, rawSource, source, marker, markerBytes } of [
     },
     marker: HOSTED_MARKER,
     markerBytes: hostedMarkerBytes("https://catalog.example/new/marketplace.json"),
+    cloneNote: {},
   },
   {
     kind: "github",
@@ -7239,6 +7297,9 @@ for (const { kind, rawSource, source, marker, markerBytes } of [
     },
     marker: OWNERSHIP_MARKER,
     markerBytes: OWNERSHIP_MARKER_BYTES,
+    cloneNote: {
+      clone: { note: "ssh-not-configured", url: "https://github.com/owner/repo.git" },
+    },
   },
 ]) {
   test(`replaces a hosted marketplace with a ${kind} source and keeps installed records`, async (t) => {
@@ -7269,7 +7330,11 @@ for (const { kind, rawSource, source, marker, markerBytes } of [
       });
 
       // assert
-      assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+      assert.deepStrictEqual(outcome, {
+        status: "added",
+        name: "valid-marketplace",
+        ...cloneNote,
+      });
       const replaced = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
       assert.ok(replaced);
       assert.deepStrictEqual(replaced, {

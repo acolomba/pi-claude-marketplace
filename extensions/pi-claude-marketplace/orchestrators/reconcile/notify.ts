@@ -66,6 +66,7 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
+  type CloneTransportNote,
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
   type PluginFailedMessage,
@@ -81,6 +82,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { carriedClone } from "../github-transport.ts";
 import { enableRowDependencies } from "../plugin/shared.ts";
 import {
   constraintCauseFor,
@@ -137,6 +139,8 @@ interface MarketplaceBlock<Msg extends PluginNotificationMessage = PluginNotific
   readonly scope: Scope;
   status?: ReconcileBlockStatus;
   reasons?: readonly ContentReason[];
+  /** D-SG-22: the note of the GitHub clone the block's marketplace add ran. */
+  clone?: CloneTransportNote;
   plugins: Msg[];
 }
 
@@ -197,8 +201,9 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
 
   switch (block.status) {
     case "added":
-      // RECON-04: realized apply-time transition token.
-      return { name, scope, status: "added", plugins };
+      // RECON-04: realized apply-time transition token. D-SG-22: the block
+      // names the transport of the add's GitHub clone.
+      return { name, scope, status: "added", ...carriedClone(block), plugins };
     case "removed":
       // RECON-04: realized apply-time transition token.
       return { name, scope, status: "removed", plugins };
@@ -224,6 +229,7 @@ function blockToMarketplaceMessage<Msg extends PluginNotificationMessage>(
         severity: "error",
         plugins,
         ...(block.reasons !== undefined && { reasons: block.reasons }),
+        ...carriedClone(block),
       };
   }
 }
@@ -533,6 +539,8 @@ export function enabledMoveOutcome(
   const row: PluginUpdatedMessage = {
     status: "updated",
     name: move.plugin,
+    // D-SG-22: the enable that materialized the move names its own clone.
+    ...(enable === undefined ? {} : carriedClone(enable)),
     scope: move.scope,
     from: move.fromVersion,
     to: move.toVersion,
@@ -992,6 +1000,7 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
   return {
     status: "installed",
     name: outcome.plugin,
+    ...carriedClone(outcome),
     ...(outcome.version !== undefined && { version: outcome.version }),
     dependencies: outcome.dependencies,
     ...(reasons.length > 0 && { reasons }),
@@ -1047,6 +1056,7 @@ export function enabledRowFromOutcome(
     return {
       status: "partially-installed",
       name: outcome.plugin,
+      ...carriedClone(outcome),
       ...(outcome.version !== undefined && { version: outcome.version }),
       dependencies,
       reasons: [...reasons, ...narrowUnsupportedKinds(unsupported)],
@@ -1058,6 +1068,7 @@ export function enabledRowFromOutcome(
   return {
     status: "installed",
     name: outcome.plugin,
+    ...carriedClone(outcome),
     ...(outcome.version !== undefined && { version: outcome.version }),
     dependencies,
     ...(reasons.length > 0 && { reasons }),
@@ -1118,6 +1129,7 @@ function backfilledRowFromOutcome(
     return {
       status: "installed",
       name: outcome.plugin,
+      ...carriedClone(outcome),
       ...(outcome.version !== undefined && { version: outcome.version }),
       dependencies: outcome.dependencies,
       // WCONV-03: unconditional, because the prelude above always places the
@@ -1131,6 +1143,7 @@ function backfilledRowFromOutcome(
   return {
     status: "partially-installed",
     name: outcome.plugin,
+    ...carriedClone(outcome),
     ...(outcome.version !== undefined && { version: outcome.version }),
     dependencies: outcome.dependencies,
     // SEV-05 / D-69-04: append the factual dropped-component kinds to the
@@ -1162,11 +1175,16 @@ function applyMarketplaceOutcomeToBlock(
   switch (outcome.kind) {
     case "mp-added":
       block.status = "added";
+      setBlockClone(block, outcome);
       return block;
     case "mp-removed":
       block.status = "removed";
       return block;
     case "mp-add-failed":
+      block.status = "failed";
+      block.reasons = reasonAsContent(outcome.reason);
+      setBlockClone(block, outcome);
+      return block;
     case "mp-remove-failed":
       block.status = "failed";
       block.reasons = reasonAsContent(outcome.reason);
@@ -1232,6 +1250,16 @@ function applyMarketplaceOutcomeToBlock(
         needsReload: false,
       });
       return block;
+  }
+}
+
+/** D-SG-22: the block takes the note of its marketplace add's GitHub clone, when it ran one. */
+function setBlockClone(
+  block: MarketplaceBlock<ReconcileAppliedMsg>,
+  outcome: { readonly clone?: CloneTransportNote },
+): void {
+  if (outcome.clone !== undefined) {
+    block.clone = outcome.clone;
   }
 }
 
@@ -1304,6 +1332,16 @@ function failedRowReasons(
   return reasonAsContent(outcome.reason);
 }
 
+/**
+ * D-SG-22: the clone note of a failed install or enable, which tried the
+ * clone it names. An uninstall or a disable clones nothing.
+ */
+function failedRowClone(outcome: PerEntryOutcome): { readonly clone?: CloneTransportNote } {
+  return outcome.kind === "plugin-install-failed" || outcome.kind === "plugin-enable-failed"
+    ? carriedClone(outcome)
+    : {};
+}
+
 /** Builds the `(failed)` row of a reconcile install, uninstall, enable or disable. */
 export function failedRowFromOutcome(
   outcome: Extract<
@@ -1320,6 +1358,7 @@ export function failedRowFromOutcome(
   return {
     status: "failed",
     name: outcome.plugin,
+    ...failedRowClone(outcome),
     reasons: failedRowReasons(outcome),
     // D-05-16 / RESV-06 / MIM-03: a refused uninstall, a dependency-cascade
     // install failure, and an install or enable that left rollback partials carry a

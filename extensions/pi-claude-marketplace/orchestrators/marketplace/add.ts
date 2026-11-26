@@ -211,6 +211,11 @@ export type AddMarketplaceNotifications =
  * `cause` carries the formatted user-visible text for orchestrated callers
  * that surface it directly.
  *
+ * D-SG-22: `clone` on the `added` and `failed` arms is the transport note of
+ * the GitHub clone the add ran, so `apply` and `import` name it on the
+ * marketplace's block as the standalone add does. Omitted when the add cloned
+ * nothing from GitHub.
+ *
  * `reason` is typed as `Reason` (not `ContentReason`) so the `applyReconcile`
  * caller can dispatch on the broader closed set, including the
  * structural `"marketplace not added"` sentinel surfaced by the `remove` sibling. This
@@ -218,13 +223,14 @@ export type AddMarketplaceNotifications =
  * dispatchable end-to-end without a separate marker field.
  */
 export type AddMarketplaceOutcome =
-  | { readonly status: "added"; readonly name: string }
+  | { readonly status: "added"; readonly name: string; readonly clone?: CloneTransportNote }
   | { readonly status: "unchanged"; readonly name: string }
   | {
       readonly status: "failed";
       readonly reason: Reason;
       readonly error: Error;
       readonly cause: string;
+      readonly clone?: CloneTransportNote;
     };
 
 /** Inputs to `addMarketplace`: the notification context, scope, source, and injected ports. */
@@ -744,6 +750,9 @@ async function repairableSource(
 
 /** The marketplace an add recorded, or declared in the target layer. */
 type AddedMarketplace = Extract<AddMarketplaceOutcome, { readonly status: "added" }>;
+
+/** An add that failed with a typed reason. */
+type FailedAdd = Extract<AddMarketplaceOutcome, { readonly status: "failed" }>;
 
 /** A marketplace add whose typed source already belongs to an intact record. */
 type UnchangedAdd = Extract<AddMarketplaceOutcome, { readonly status: "unchanged" }>;
@@ -1579,7 +1588,7 @@ function surfaceLockHeldAdd(
   opts: AddMarketplaceOptions,
   err: StateLockHeldError,
   orchestrated: boolean,
-): AddMarketplaceOutcome {
+): FailedAdd {
   if (!orchestrated) {
     notifyWithContext(
       opts.ctx,
@@ -1626,7 +1635,7 @@ function handleAddFailure(
   err: unknown,
   orchestrated: boolean,
   cloneNote?: CloneTransportNote,
-): AddMarketplaceOutcome {
+): FailedAdd {
   if (err instanceof StateLockHeldError) {
     return surfaceLockHeldAdd(opts, err, orchestrated);
   }
@@ -1771,7 +1780,7 @@ async function runAddOutcome<U extends UnchangedAdd>(
       throw err;
     }
 
-    return handleAddFailure(opts, err, orchestrated, clone.note());
+    return withAddClone(handleAddFailure(opts, err, orchestrated, clone.note()), clone.note());
   }
 
   const recordedName = recorded.name;
@@ -1809,7 +1818,18 @@ async function runAddOutcome<U extends UnchangedAdd>(
     await notifyAdded(opts, recordedName, clone.note());
   }
 
-  return { status: "added", name: recordedName };
+  return withAddClone({ status: "added", name: recordedName }, clone.note());
+}
+
+/**
+ * D-SG-22: an added or failed outcome with the note of the add's clone, when
+ * the add ran a GitHub clone.
+ */
+function withAddClone<O extends AddedMarketplace | FailedAdd>(
+  outcome: O,
+  note: CloneTransportNote | undefined,
+): O {
+  return note === undefined ? outcome : { ...outcome, clone: note };
 }
 
 /**

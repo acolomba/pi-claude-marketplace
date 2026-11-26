@@ -1,8 +1,14 @@
 import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
 import {
+  carriedClone,
+  cloneNoteOf,
+  withOwnCloneNotes,
+} from "../../orchestrators/github-transport.ts";
+import {
   addMarketplace as defaultAddMarketplace,
   resolvePathSource,
 } from "../../orchestrators/marketplace/add.ts";
+import { defaultPluginTransportContext } from "../../orchestrators/marketplace/shared.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
 import {
   narrowNotInstallableReasons,
@@ -50,6 +56,7 @@ import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts"
 import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
+  type CloneTransportNote,
   type MarketplaceStatus,
   type PluginFailedMessage,
   type PluginInstalledMessage,
@@ -75,6 +82,11 @@ import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
 import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
+import type {
+  CloneNoted,
+  GitHubCloneNotes,
+  PluginTransportContext,
+} from "../../orchestrators/github-transport.ts";
 import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
@@ -107,7 +119,7 @@ import type {
   PlannedPluginImport,
 } from "./types.ts";
 
-export interface MarketplaceAddedOutcome {
+export interface MarketplaceAddedOutcome extends CloneNoted {
   readonly kind: "marketplace-added";
   readonly scope: Scope;
   readonly marketplace: string;
@@ -121,7 +133,7 @@ export interface MarketplaceSkipOutcome {
   readonly reason: "already-present";
 }
 
-export interface PluginInstalledOutcome {
+export interface PluginInstalledOutcome extends CloneNoted {
   readonly kind: "plugin-installed";
   readonly scope: Scope;
   readonly plugin: string;
@@ -199,7 +211,7 @@ export type ImportWarningOutcome = {
   | { readonly reason: "uninstallable"; readonly reasons: readonly ContentReason[] }
 );
 
-export interface MarketplaceFailureOutcome {
+export interface MarketplaceFailureOutcome extends CloneNoted {
   readonly kind: "marketplace-failure";
   readonly scope: Scope;
   readonly marketplace: string;
@@ -229,7 +241,7 @@ export interface SourceMismatchOutcome {
   readonly cause: string;
 }
 
-export interface UnexpectedPluginFailureOutcome {
+export interface UnexpectedPluginFailureOutcome extends CloneNoted {
   readonly kind: "plugin-failure";
   readonly scope: Scope;
   readonly plugin: string;
@@ -368,6 +380,15 @@ export interface ImportClaudeSettingsOptions {
   readonly gitOps?: AddMarketplaceOptions["gitOps"];
   readonly deps?: ImportDeps;
 }
+
+/**
+ * D-SG-18 / D-SG-19: the options of one import run, with the run's one plugin
+ * transport context. `importClaudeSettings` makes it, so no two runs share
+ * one (T-04-48), and every install and enable of the run clones over it.
+ */
+type ImportRunOptions = ImportClaudeSettingsOptions & {
+  readonly transportContext: PluginTransportContext;
+};
 
 function emptyResult(): MutableImportResult {
   return {
@@ -529,6 +550,8 @@ interface MarketplaceBlock {
   readonly name: string;
   readonly scope: Scope;
   status: ImportBlockStatus;
+  /** D-SG-22: the note of the GitHub clone the block's marketplace add ran. */
+  clone?: CloneTransportNote;
   /**
    * The cause row for a `status: "failed"` block whose failure came from
    * `result.marketplaceFailures` (a marketplace add attempt, a re-add from a
@@ -552,6 +575,7 @@ function setMarketplaceStatus(
   marketplaceName: string,
   status: ImportBlockStatus,
   failure?: MarketplaceBlockFailure,
+  clone: CloneNoted = {},
 ): void {
   const key = `${scope}:${marketplaceName}`;
   const existing = byMp.get(key);
@@ -562,6 +586,7 @@ function setMarketplaceStatus(
       scope,
       status,
       ...(failure !== undefined && { failure }),
+      ...clone,
     });
     return;
   }
@@ -677,6 +702,7 @@ function unexpectedFailureRows(
   const requested: PluginFailedMessage = {
     status: "failed",
     name: o.plugin,
+    ...carriedClone(o),
     reasons: ["dependency failed"],
     ...(o.rollbackPartial !== undefined && { rollbackPartial: o.rollbackPartial }),
     severity: "error",
@@ -697,6 +723,7 @@ function unexpectedFailureRow(o: UnexpectedPluginFailureOutcome): PluginFailedMe
   return {
     status: "failed",
     name: o.plugin,
+    ...carriedClone(o),
     reasons: unexpectedFailureReasons(o),
     // IMP-09: install's authentication row is bare, so this one is too.
     ...(o.runtimeReason !== "authentication required" && { cause: failureCause(o) }),
@@ -721,6 +748,7 @@ function installedRow(
       scope: o.scope,
       marketplace: o.marketplace,
       plugin: o.plugin,
+      ...carriedClone(o),
       ...(o.version !== undefined && { version: o.version }),
       ...o.enableSignals,
       ...(o.declaresAgents && { stagedAgents: true }),
@@ -732,6 +760,7 @@ function installedRow(
   return {
     status: "installed",
     name: o.plugin,
+    ...carriedClone(o),
     ...(o.version !== undefined && { version: o.version }),
     dependencies: declaredDependencies(o),
     // D-04-07: a promotion's brace is the standalone row's -- the record was
@@ -763,7 +792,7 @@ function marketplaceFailureReasons(
 function marketplaceBlocks(result: ClaudeImportExecutionResult): Map<string, MarketplaceBlock> {
   const byMp = new Map<string, MarketplaceBlock>();
   for (const o of result.addedMarketplaces) {
-    setMarketplaceStatus(byMp, o.scope, o.marketplace, "added");
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "added", undefined, carriedClone(o));
   }
 
   for (const o of result.skippedExistingMarketplaces) {
@@ -771,10 +800,14 @@ function marketplaceBlocks(result: ClaudeImportExecutionResult): Map<string, Mar
   }
 
   for (const o of result.marketplaceFailures) {
-    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", {
-      cause: failureCause(o),
-      reasons: marketplaceFailureReasons(o.reason),
-    });
+    setMarketplaceStatus(
+      byMp,
+      o.scope,
+      o.marketplace,
+      "failed",
+      { cause: failureCause(o), reasons: marketplaceFailureReasons(o.reason) },
+      carriedClone(o),
+    );
   }
 
   // Source-mismatch supersedes any prior status (the import for that
@@ -931,7 +964,8 @@ function blockToMarketplaceMessage(
   const plugins = Object.freeze(rows);
   switch (block.status) {
     case "added":
-      return { name, scope, status: "added", plugins };
+      // D-SG-22: the block names the transport of the add's GitHub clone.
+      return { name, scope, status: "added", ...carriedClone(block), plugins };
     case "skipped":
       // IMP-06: the marketplace was already recorded with the settings' source,
       // so nothing changed. Unstamped, like `marketplace update`'s
@@ -967,6 +1001,7 @@ function blockToMarketplaceMessage(
         scope,
         status: "failed",
         severity: "error",
+        ...carriedClone(block),
         plugins: Object.freeze([causeRow, ...plugins]),
       };
     }
@@ -984,7 +1019,7 @@ type ScopedImportPlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][numbe
 type ImportConfigPatch = Required<BatchedConfigPatch>;
 
 /** Why a marketplace will not be usable this run, as its failure row carries it. */
-interface MarketplaceFailure {
+interface MarketplaceFailure extends CloneNoted {
   readonly reason: MarketplaceFailureOutcome["reason"];
   readonly cause: string;
   readonly causeChain?: Error;
@@ -1015,6 +1050,7 @@ function recordMarketplaceAddFailure(
     reason: failure.reason,
     cause: failure.cause,
     ...(failure.causeChain !== undefined && { causeChain: failure.causeChain }),
+    ...carriedClone(failure),
   });
   for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
     pushPluginWarning(result, plugin, "marketplace-failed", failure.cause);
@@ -1143,12 +1179,17 @@ type PlannedPluginBucket = "install-failed" | "installed" | "skipped" | "unexpec
  *   promoted at lock time.
  */
 async function installOnePlannedPlugin(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   plugin: PlannedPlugin,
   promoting?: PluginInstallRecord,
 ): Promise<PlannedPluginBucket> {
   const installPlugin = installPluginFn(opts.deps, opts.hooksRouting, opts.completionCache);
+  // D-SG-18: the install clones over the run's transport context, through a
+  // view of its own, so its row names its own clone (D-SG-22).
+  const transportContext = withOwnCloneNotes(opts.transportContext);
+  const { notes } = transportContext;
+  const subject = `${plugin.ref.plugin}@${plugin.ref.marketplace}`;
   let outcome: InstallPluginOutcome;
   try {
     outcome = await installPlugin({
@@ -1160,6 +1201,7 @@ async function installOnePlannedPlugin(
       plugin: plugin.ref.plugin,
       notifications: { mode: "orchestrated" },
       ...(promoting !== undefined && !promoting.compatibility.installable && { partial: true }),
+      transportContext,
     });
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
@@ -1176,6 +1218,8 @@ async function installOnePlannedPlugin(
       plugin,
       "unexpected-failure",
       err instanceof Error ? err : new Error(errorMessage(err)),
+      [],
+      cloneNoteOf(notes, subject),
     );
     return "unexpected-failure";
   }
@@ -1183,7 +1227,8 @@ async function installOnePlannedPlugin(
   // AFILE-04: both arms carry notices; a failed install can still have
   // rewritten the MCP config through a dependency that committed first.
   result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
-  pushDependencyChanges(result, plugin, outcome);
+  pushDependencyChanges(result, plugin, outcome, notes);
+  const clone = cloneNoteOf(notes, subject);
 
   // CR-01: a third `InstallPluginOutcome` arm must become a compile error here,
   // not get counted as a successful install in the cascade totals. The
@@ -1202,6 +1247,7 @@ async function installOnePlannedPlugin(
       // failure class; everything else falls through to the unexpected bucket.
       dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
+        clone,
       });
       return "install-failed";
     case "installed":
@@ -1219,6 +1265,7 @@ async function installOnePlannedPlugin(
         ...(outcome.promoted === true && { promoted: true }),
         ...(promoting !== undefined && isRecordedButDisabled(promoting) && { reenabled: true }),
         declaresWorkflows: outcome.declaresWorkflows,
+        ...clone,
       });
       result.changedResources ||= outcome.resourcesChanged;
       for (const w of outcome.postCommitWarnings ?? []) {
@@ -1233,12 +1280,14 @@ async function installOnePlannedPlugin(
  * UPD-DEP-D1 / WR-N5 / WR-3: every dependency change an install reported,
  * success or failure, as a row beside the plugin's own: each move, then each
  * dependency the install after a plan added with the plugin. A change that
- * landed changed resources, as the plugin's own install does.
+ * landed changed resources, as the plugin's own install does. D-SG-22: a
+ * row that names no clone yet takes the note `notes` keeps for its key.
  */
 function pushDependencyChanges(
   result: MutableImportResult,
   plugin: PlannedPlugin,
   outcome: InstallPluginOutcome,
+  notes: GitHubCloneNotes,
 ): void {
   const changes: readonly MovedDependency[] = [
     ...(outcome.movedDependencies ?? []),
@@ -1248,7 +1297,7 @@ function pushDependencyChanges(
     result.dependencyChanges.push({
       scope: plugin.scope,
       marketplace: plugin.ref.marketplace,
-      row: entry.row,
+      row: { ...cloneNoteOf(notes, entry.key), ...entry.row },
     });
     result.changedResources ||= entry.row.status !== "failed";
   }
@@ -1284,11 +1333,15 @@ function enableDegradation(
  * skip.
  */
 async function enableOnePlannedPlugin(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   plugin: PlannedPlugin,
 ): Promise<PlannedPluginBucket> {
   const setPluginEnabled = setPluginEnabledFn(opts.deps, opts.hooksRouting);
+  // D-SG-19: an enable that re-clones clones over the run's transport
+  // context, through a view of its own, so its row names its own clone.
+  const transportContext = withOwnCloneNotes(opts.transportContext);
+  const subject = `${plugin.ref.plugin}@${plugin.ref.marketplace}`;
   let outcome: EnableDisablePluginOutcome;
   try {
     outcome = await setPluginEnabled({
@@ -1300,6 +1353,7 @@ async function enableOnePlannedPlugin(
       enable: true,
       scope: plugin.scope,
       notifications: { mode: "orchestrated" },
+      transportContext,
     });
   } catch (err) {
     // The same defensive arm as the install's: an invalid GitHub base override
@@ -1310,10 +1364,13 @@ async function enableOnePlannedPlugin(
       plugin,
       "unexpected-failure",
       err instanceof Error ? err : new Error(errorMessage(err)),
+      [],
+      cloneNoteOf(transportContext.notes, subject),
     );
     return "unexpected-failure";
   }
 
+  const clone = cloneNoteOf(transportContext.notes, subject);
   switch (outcome.status) {
     case "enabled":
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
@@ -1331,6 +1388,7 @@ async function enableOnePlannedPlugin(
         reenabled: true,
         enableSignals: enableDegradation(outcome),
         declaresWorkflows: outcome.stagedWorkflows === true,
+        ...clone,
       });
       result.changedResources = true;
       return "installed";
@@ -1339,6 +1397,7 @@ async function enableOnePlannedPlugin(
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
       dispatchFailedOutcome(result, plugin, outcome.error, {
         rollbackPartials: outcome.rollbackPartials ?? [],
+        clone,
       });
       return "install-failed";
     case "skipped":
@@ -1373,7 +1432,7 @@ async function enableOnePlannedPlugin(
  * of the typed outcome this function dispatches on.
  */
 async function addOnePlannedMarketplace(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   blockedMarketplaces: Set<string>,
   scopePlan: ScopedImportPlan,
@@ -1399,6 +1458,7 @@ async function addOnePlannedMarketplace(
         scope: marketplace.scope,
         marketplace: marketplace.marketplace,
         reason: "added",
+        ...carriedClone(outcome),
       });
       return;
     }
@@ -1458,6 +1518,8 @@ function addFailure(
     reason: "add-failed",
     cause: outcome.cause,
     ...(causeChain !== undefined && { causeChain }),
+    // D-SG-22: the block names the clone the failed add tried.
+    ...carriedClone(outcome),
   };
 }
 
@@ -1555,7 +1617,7 @@ function declaredNameFor(
  * (CR-01).
  */
 async function readPassForImport(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   scopePlan: ScopedImportPlan,
 ): Promise<ImportReadPass> {
   const loadState = stateLoader(opts.deps);
@@ -1679,7 +1741,7 @@ function pushMarketplaceSkip(result: MutableImportResult, marketplace: PlannedMa
  * again in place.
  */
 async function settleRecordedMarketplace(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   blockedMarketplaces: Set<string>,
   scopePlan: ScopedImportPlan,
@@ -1725,7 +1787,7 @@ async function settleRecordedMarketplace(
  * Any other marketplace is added. Answers the names whose plugins may run.
  */
 async function ensurePlannedMarketplaces(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
   read: Extract<ImportReadPass, { kind: "planned" }>,
@@ -1771,7 +1833,7 @@ async function ensurePlannedMarketplaces(
  * whose orchestrated promotion arm flips the record to a direct install.
  */
 async function applyPlannedPlugins(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
   read: Extract<ImportReadPass, { kind: "planned" }>,
@@ -1809,7 +1871,7 @@ async function applyPlannedPlugins(
  * untouched.
  */
 async function executeScopedPlan(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
 ): Promise<void> {
@@ -1913,7 +1975,7 @@ async function executeScopedPlan(
  * SKIP entirely (RECON-05 byte-stable).
  */
 async function writeBatchedConfigForScope(
-  opts: ImportClaudeSettingsOptions,
+  opts: ImportRunOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
   configClaims: ReadonlyMap<string, ConfigMarketplaceClaim>,
@@ -2250,6 +2312,7 @@ function pushUnexpectedFailure(
   reason: UnexpectedPluginFailureOutcome["reason"],
   error: Error,
   rollbackPartials: readonly RollbackPartial[] = [],
+  clone: CloneNoted = {},
 ): void {
   const causeChain = redactCauseChain(error.cause);
   const runtimeReason =
@@ -2265,6 +2328,7 @@ function pushUnexpectedFailure(
     cause: redactAbsolutePaths(errorMessage(error)),
     ...(causeChain !== undefined && { causeChain }),
     ...(rollbackPartials.length > 0 && partialMember(error, rollbackPartials)),
+    ...clone,
   });
 }
 
@@ -2331,10 +2395,21 @@ function dispatchFailedOutcome(
   result: MutableImportResult,
   plugin: PlannedPluginImport,
   error: Error,
-  options: { readonly rollbackPartials: readonly RollbackPartial[] },
+  options: {
+    readonly rollbackPartials: readonly RollbackPartial[];
+    /** D-SG-22: the note of the clone the failed install or enable tried. */
+    readonly clone: CloneNoted;
+  },
 ): void {
   if (error instanceof DependencyCascadeError) {
-    pushUnexpectedFailure(result, plugin, "dependency-failed", error, options.rollbackPartials);
+    pushUnexpectedFailure(
+      result,
+      plugin,
+      "dependency-failed",
+      error,
+      options.rollbackPartials,
+      options.clone,
+    );
     return;
   }
 
@@ -2384,7 +2459,14 @@ function dispatchFailedOutcome(
     }
   }
 
-  pushUnexpectedFailure(result, plugin, "unexpected-failure", error, options.rollbackPartials);
+  pushUnexpectedFailure(
+    result,
+    plugin,
+    "unexpected-failure",
+    error,
+    options.rollbackPartials,
+    options.clone,
+  );
 }
 
 /**
@@ -2442,9 +2524,13 @@ export async function importClaudeSettings(
   );
   result.diagnostics.push(...plan.diagnostics);
 
+  // D-SG-18 / D-SG-19: one transport context for the run, so its installs and
+  // enables probe the user's ssh once. Its marketplace adds keep the
+  // marketplace path's rule and probe on every GitHub clone (CONTEXT [Probe]).
+  const runOpts: ImportRunOptions = { ...opts, transportContext: defaultPluginTransportContext() };
   for (const scopePlan of plan.scopes) {
     // eslint-disable-next-line no-await-in-loop -- each scope plan appends to the shared result arrays
-    await executeScopedPlan(opts, result, scopePlan);
+    await executeScopedPlan(runOpts, result, scopePlan);
   }
 
   // D-20-02 / D-19-02: cascade construction

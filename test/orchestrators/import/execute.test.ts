@@ -35,7 +35,7 @@ import path from "node:path";
 import { test } from "node:test";
 
 import lockfile from "proper-lockfile";
-import { mock, verify, when } from "strong-mock";
+import { It, mock, verify, when } from "strong-mock";
 
 import {
   createHooksRouting,
@@ -76,6 +76,7 @@ import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification
 
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type { PluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type {
   ClaudeImportExecutionResult,
   ImportClaudeSettingsOptions,
@@ -355,6 +356,15 @@ function failedAddOutcome(cause: string): AddOutcome {
  * as an unexpected outcome on the aggregated result instead of reaching the real
  * marketplace, installer, state store, or Claude settings files.
  */
+/**
+ * D-SG-18: a strict mock's matcher for the transport context an install gets.
+ * Each install clones over its own view of the run's context, so a case that
+ * pins a call's other options accepts any context; the D-SG-18 cases pin it.
+ */
+const A_TRANSPORT_CONTEXT = It.matches(
+  (context: PluginTransportContext | undefined) => context !== undefined,
+);
+
 function collaborators(promised: ImportDeps): Collaborators {
   return {
     addMarketplace: (options) =>
@@ -722,6 +732,7 @@ test("records a marketplace the state does not carry and installs its declared p
       plugin: "plugin",
       run,
       scope: "user",
+      transportContext: A_TRANSPORT_CONTEXT,
     }),
   ).thenResolve(installedOutcome());
   const expectedResult: ClaudeImportExecutionResult = {
@@ -3923,7 +3934,9 @@ test("installs every plugin in orchestrated mode and never opts in to the defaul
     cwd,
     deps: collaborators({
       addMarketplace: () => Promise.resolve(addedOutcome("mp")),
-      installPlugin: (options) => {
+      installPlugin: ({ transportContext, ...options }) => {
+        // D-SG-18: every install gets the run's context; its own cases pin it.
+        assert.ok(transportContext);
         requested.push(options);
         return Promise.resolve(installedOutcome());
       },
@@ -6568,6 +6581,7 @@ test("CR-01: declares an installed plugin under the name a config declares for a
       plugin: "plugin",
       run,
       scope: "project",
+      transportContext: A_TRANSPORT_CONTEXT,
     }),
   ).thenResolve(installedOutcome());
 
@@ -6956,5 +6970,179 @@ test("leaves a record the load-time check holds down disabled and reports it alr
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 2 successes",
   });
+  verifyBoundary();
+});
+
+// ─── D-SG-18 / D-SG-22: one plugin transport context per import run ─────────
+
+/**
+ * D-SG-18: the checks of the transport context each install and enable of an
+ * import received, in call order. Each call takes its own view of the run's
+ * context, so the checks, which run the probe, are what one run shares.
+ */
+type ReceivedChecks = PluginTransportContext["checks"][];
+
+test("D-SG-18 / D-SG-19: an import gives its installs and its enables one transport context, and the next import another", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "transport-context");
+  const { ctx, verifyBoundary } = createNotificationBoundary(2);
+  const received: ReceivedChecks = [];
+  const deps = collaborators({
+    loadSettings: () => Promise.resolve(settingsForMp("alpha", "beta", "gamma")),
+    loadState: () => Promise.resolve(stateWithDisabled("gamma")),
+    installPlugin: (options) => {
+      assert.ok(options.transportContext);
+      received.push(options.transportContext.checks);
+      return Promise.resolve(installedOutcome());
+    },
+    setPluginEnabled: (options) => {
+      assert.ok(options.transportContext);
+      received.push(options.transportContext.checks);
+      return Promise.resolve({ status: "enabled", name: options.plugin });
+    },
+  });
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+
+  // act
+  for (const _run of [1, 2]) {
+    await importClaudeSettings({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      deps,
+      hooksRouting,
+      selectedScopes: ["project"],
+    });
+  }
+
+  // assert
+  const [first, second, third, fourth, fifth, sixth] = received;
+  assert.equal(received.length, 6);
+  assert.ok(first === second && second === third, "one run shares one context's checks");
+  assert.ok(fourth === fifth && fifth === sixth, "the next run shares its own");
+  assert.notStrictEqual(first, fourth);
+  verifyBoundary();
+});
+
+test("D-SG-22: an import names the clone of its marketplace add, of each install, and of each enable", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "transport-notes");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const noteOf = (plugin: string) =>
+    ({ note: "ssh-not-configured", url: `https://github.com/acme/${plugin}.git` }) as const;
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("alpha", "beta", "gamma")),
+      loadState: () => Promise.resolve(recordedState([])),
+      addMarketplace: () =>
+        Promise.resolve({
+          status: "added",
+          name: "mp",
+          clone: { note: "via-ssh", url: "git@github.com:acme/mp.git" },
+        }),
+      installPlugin: (options) => {
+        options.transportContext?.notes.record(
+          `${options.plugin}@${options.marketplace}`,
+          options.plugin === "beta"
+            ? { ...noteOf("beta"), retries: ["git@github.com:acme/beta.git"] }
+            : noteOf(options.plugin),
+        );
+        return Promise.resolve(
+          options.plugin === "beta"
+            ? failedInstallOutcome(new Error("both transports failed"), "both transports failed")
+            : installedOutcome(),
+        );
+      },
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    importResult.addedMarketplaces.map((outcome) => outcome.clone),
+    [{ note: "via-ssh", url: "git@github.com:acme/mp.git" }],
+  );
+  assert.deepStrictEqual(
+    notifications[0]?.message,
+    "A plugin operation has failed.\n" +
+      "\n" +
+      "● mp [project] (added)\n" +
+      "  Cloning via SSH: git@github.com:acme/mp.git\n" +
+      "  ● alpha v1.0.0 (installed)\n" +
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/alpha.git\n" +
+      "  ● gamma v1.0.0 (installed)\n" +
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/gamma.git\n" +
+      "  ⊘ beta (failed)\n" +
+      "    SSH not configured, cloning via HTTPS: https://github.com/acme/beta.git\n" +
+      "    HTTPS clone failed, retrying with SSH: git@github.com:acme/beta.git\n" +
+      "    cause: both transports failed\n" +
+      "\n" +
+      "Import: 1 failure, 3 successes\n" +
+      "\n" +
+      "/reload to pick up changes",
+  );
+  verifyBoundary();
+});
+
+test("D-SG-22: an import names the clone each enable ran on its row, and an enable that cloned nothing names none", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "transport-enable-notes");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("alpha", "beta", "gamma")),
+      loadState: () => Promise.resolve(stateWithDisabled("alpha", "beta", "gamma")),
+      setPluginEnabled: (options) => {
+        if (options.plugin !== "gamma") {
+          options.transportContext?.notes.record(`${options.plugin}@${options.marketplace}`, {
+            note: "via-https",
+            url: `https://github.com/acme/${options.plugin}.git`,
+          });
+        }
+
+        return Promise.resolve(
+          options.plugin === "beta"
+            ? {
+                status: "failed",
+                reason: "network unreachable",
+                error: new Error("clone failed"),
+                cause: "clone failed",
+              }
+            : { status: "enabled", name: options.plugin },
+        );
+      },
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    notifications[0]?.message,
+    "A plugin operation has failed.\n" +
+      "\n" +
+      "● mp [project] (skipped) {already added}\n" +
+      "  ● alpha (installed)\n" +
+      "    Cloning via HTTPS: https://github.com/acme/alpha.git\n" +
+      "  ● gamma (installed)\n" +
+      "  ⊘ beta (failed)\n" +
+      "    Cloning via HTTPS: https://github.com/acme/beta.git\n" +
+      "    cause: clone failed\n" +
+      "\n" +
+      "Import: 1 failure, 3 successes\n" +
+      "\n" +
+      "/reload to pick up changes",
+  );
   verifyBoundary();
 });

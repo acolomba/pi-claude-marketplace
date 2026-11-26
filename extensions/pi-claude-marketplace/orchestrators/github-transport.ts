@@ -48,6 +48,33 @@ export function createGitHubCloneNotes(): GitHubCloneNotes {
 }
 
 /**
+ * D-SG-22: the transport note of the GitHub clone the operation behind a row
+ * ran, which the row shows under it. Set only when the operation cloned from
+ * GitHub (NREG-01).
+ */
+export interface CloneNoted {
+  readonly clone?: CloneTransportNote;
+}
+
+/**
+ * D-SG-22: lift an orchestrated outcome's clone note onto the outcome or row
+ * built from it. An absent note stays absent (NREG-01).
+ */
+export function carriedClone(carrier: CloneNoted): CloneNoted {
+  return carrier.clone === undefined ? {} : { clone: carrier.clone };
+}
+
+/**
+ * D-SG-22: the note `notes` keeps for `subject`, the `<plugin>@<marketplace>`
+ * of the row that reports the clone, as a member to spread onto its outcome.
+ * A subject that cloned nothing from GitHub gives no member (NREG-01).
+ */
+export function cloneNoteOf(notes: GitHubCloneNotes, subject: string): CloneNoted {
+  const clone = notes.noteFor(subject);
+  return clone === undefined ? {} : { clone };
+}
+
+/**
  * D-SG-24, D-SG-21, OQ-2: what forces every GitHub clone of this command onto
  * one HTTPS attempt, or undefined when nothing does. Claude Code's
  * `PREFER_HTTPS_VARIABLE` in `env` forces it first. The GitHub base override

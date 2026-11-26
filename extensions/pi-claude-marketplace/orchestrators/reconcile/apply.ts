@@ -84,6 +84,14 @@
 // D-05 / D-07: the soft-dependency snapshot is the run the `apply` command
 // (or, under autoapply, the load) opens before the pass, so it observes a
 // stable pi-subagents / pi-mcp-adapter status.
+//
+// D-SG-18 / D-SG-19: each run makes one plugin transport context, and its
+// installs, missing-dependency installs, enables, and catalog moves clone
+// over it, so the run probes the user's ssh once. Each call clones over its
+// own `withOwnCloneNotes` view, so its row reads the note of its own clone
+// only, also when one plugin runs in both scopes (D-SG-22). The marketplace
+// adds keep the marketplace path's rule and probe on every GitHub clone
+// (CONTEXT [Probe]); each add's note rides its outcome.
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
@@ -108,8 +116,10 @@ import {
   splitDependencyPartials,
 } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
+import { carriedClone, cloneNoteOf, withOwnCloneNotes } from "../github-transport.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
+import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 import { collectPluginClonesLocked } from "../plugin/clone-gc.ts";
 import {
   createConvergeOperation,
@@ -132,6 +142,7 @@ import {
   dependencyDisabledOutcome,
   sourceMismatchOutcomes,
   stagingDiagnosticsOf,
+  withMoveClone,
 } from "./apply-outcomes.ts";
 import {
   cascadeDependencies,
@@ -163,6 +174,7 @@ import {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { CloneNoted, GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { IndexFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
@@ -189,6 +201,15 @@ import type {
 } from "./types.ts";
 
 /**
+ * D-SG-18 / D-SG-19: the options of one `applyReconcile` run, with the run's
+ * one plugin transport context. `createApplyReconcile` makes the context for
+ * each run, so no two runs share one (T-04-48).
+ */
+type ApplyRunOptions = ApplyReconcileOptions & {
+  readonly transportContext: PluginTransportContext;
+};
+
+/**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the
  * loop -- each orchestrator call owns its own per-scope withLockedState
  * critical section (CR-01: `proper-lockfile` is not re-entrant). Per-entry
@@ -197,7 +218,7 @@ import type {
  * (NFR-5 / RECON-03).
  */
 async function applyMarketplaceRemoves(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
@@ -315,7 +336,7 @@ function foldRemoveOutcome(
  * `apply` command reports it as its command error (GHB-03).
  */
 async function applyMarketplaceAdds(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
@@ -342,7 +363,12 @@ async function applyMarketplaceAdds(
       // declared config key does not have to match). The planner's
       // source-based matching (plan.ts::buildMarketplaceClaims) makes the
       // next reconcile converge on that recorded name.
-      outcomes.push({ kind: "mp-added", scope: op.scope, marketplace: result.name });
+      outcomes.push({
+        kind: "mp-added",
+        scope: op.scope,
+        marketplace: result.name,
+        ...carriedClone(result),
+      });
       continue;
     }
 
@@ -355,6 +381,7 @@ async function applyMarketplaceAdds(
       scope: op.scope,
       marketplace: op.marketplace,
       reason: result.reason,
+      ...carriedClone(result),
     });
   }
 }
@@ -367,7 +394,7 @@ async function applyMarketplaceAdds(
  */
 async function applyOnePluginUninstall(
   uninstallPlugin: UninstallPluginOperation,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   op: PlannedPluginUninstall,
 ): Promise<PerEntryOutcome | undefined> {
   try {
@@ -451,7 +478,7 @@ function isRefusedUninstall(outcome: PerEntryOutcome): boolean {
  * declares.
  */
 async function applyPluginUninstalls(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
@@ -582,11 +609,14 @@ function showsFailedDependency(
  *
  * AFILE-04: dependencies that committed before the failure rewrote the MCP
  * config, so their notices ride the requested plugin's failed row.
+ *
+ * D-SG-22: the requested plugin's row names the clone it tried (`clone`).
  */
 function installFailedOutcomes(
   op: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
   result: FailedPluginInstall,
   outcomes: readonly PerEntryOutcome[],
+  clone: CloneNoted,
 ): PerEntryOutcome[] {
   const { error, rollbackPartials = [] } = result;
   const subject = {
@@ -594,6 +624,7 @@ function installFailedOutcomes(
     scope: op.scope,
     marketplace: op.marketplace,
     plugin: op.plugin,
+    ...clone,
   } as const;
   if (rollbackPartials.length === 0) {
     return [
@@ -652,11 +683,13 @@ function installFailedOutcomes(
  * under each dependency's own marketplace and by its bare name, as a catalog
  * move's row reads; the range the move was made for stays on its cause line.
  * A move that did not land is left to the catalog step, which tries it again
- * and reports it with its closed-set reason (T-55-02-02).
+ * and reports it with its closed-set reason (T-55-02-02). D-SG-22: a row
+ * that names no clone yet takes the note `notes` keeps for its dependency.
  */
 function movedDependencyOutcomes(
   scope: Scope,
   moved: readonly MovedDependency[],
+  notes: GitHubCloneNotes,
 ): PluginConvergedOutcome[] {
   return moved.flatMap((entry) =>
     entry.row.status === "failed"
@@ -667,7 +700,7 @@ function movedDependencyOutcomes(
             scope,
             marketplace: entry.marketplace,
             plugin: entry.name,
-            row: { ...entry.row, name: entry.name },
+            row: { ...cloneNoteOf(notes, entry.key), ...entry.row, name: entry.name },
           },
         ],
   );
@@ -689,15 +722,19 @@ function movedDependencyOutcomes(
  *
  * Returns whether any install landed: the read pass judged the scope without
  * it, so its toggle buckets are stale (D-09-07).
+ *
+ * D-SG-18: every install clones over the run's transport context, through a
+ * view of its own, and its row names its own clone (D-SG-22).
  */
 async function applyPluginInstalls(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
   const installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache);
   let installed = false;
   for (const op of plan.pluginsToInstall) {
+    const transportContext = withOwnCloneNotes(opts.transportContext);
     // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installPlugin({
       ctx: opts.ctx,
@@ -724,10 +761,13 @@ async function applyPluginInstalls(
       // is invisible to the merged view. Conditional spread because
       // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
       ...(op.configSource === "local" && { local: true }),
+      transportContext,
     });
+    const { notes } = transportContext;
+    const clone = cloneNoteOf(notes, `${op.plugin}@${op.marketplace}`);
     // UPD-DEP-D1: the dependencies the install moved into range first report
     // as the catalog moves they are, so `apply` lists every change it made.
-    outcomes.push(...movedDependencyOutcomes(op.scope, result.movedDependencies ?? []));
+    outcomes.push(...movedDependencyOutcomes(op.scope, result.movedDependencies ?? [], notes));
     installed ||= result.status === "installed";
 
     if (result.status === "installed" && result.landedDisabled === true) {
@@ -781,6 +821,7 @@ async function applyPluginInstalls(
         plugin: op.plugin,
         version: result.version,
         dependencies: declaredDependencies(result),
+        ...clone,
         // S2 / PR #51: propagate post-commit warnings so the cascade
         // caller can surface them to the operator (mirrors the
         // `pushDiagnostic` channel in
@@ -793,7 +834,7 @@ async function applyPluginInstalls(
         ...carriedMcpConfigNotices(result),
       });
     } else {
-      outcomes.push(...installFailedOutcomes(op, result, outcomes));
+      outcomes.push(...installFailedOutcomes(op, result, outcomes, clone));
     }
   }
 
@@ -826,7 +867,7 @@ async function applyPluginInstalls(
  * mean the enables that wait on it read the scope again (D-PL2-16).
  */
 async function applyDependencyInstalls(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   installs: readonly PlannedDependencyInstall[],
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
@@ -837,6 +878,7 @@ async function applyDependencyInstalls(
   let satisfied = false;
   for (const op of installs) {
     const rootKey = `${op.plugin}@${op.marketplace}`;
+    const transportContext = withOwnCloneNotes(opts.transportContext);
     // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installMissingDependency({
       ctx: opts.ctx,
@@ -849,7 +891,9 @@ async function applyDependencyInstalls(
       requiredBy: op.requiredBy,
       declarers: op.declarers,
       ...(op.requirers !== undefined && { requirers: op.requirers }),
+      transportContext,
     });
+    const { notes } = transportContext;
 
     if (result.status === "skipped") {
       satisfied = true;
@@ -867,6 +911,8 @@ async function applyDependencyInstalls(
           version: member.version,
           dependencies: declaredDependencies(member),
           dependencyInstalled: true,
+          // D-SG-22: each member's row names its own clone.
+          ...cloneNoteOf(notes, member.key),
           ...(member.key === rootKey &&
             result.postCommitWarnings !== undefined &&
             result.postCommitWarnings.length > 0 && {
@@ -891,7 +937,7 @@ async function applyDependencyInstalls(
       continue;
     }
 
-    outcomes.push(...installFailedOutcomes(op, result, outcomes));
+    outcomes.push(...installFailedOutcomes(op, result, outcomes, cloneNoteOf(notes, rootKey)));
   }
 
   return satisfied;
@@ -920,7 +966,7 @@ async function applyDependencyInstalls(
  */
 async function refreshTogglePlan(
   reader: ReconcileStateReader,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   toggles: TogglePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<TogglePlan> {
@@ -1017,7 +1063,7 @@ function installedRowDegradation(
  * target that reads the base ends it.
  */
 async function applyPluginToggles(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   ops: ReconcilePlan["pluginsToEnable"] | ReconcilePlan["pluginsToDisable"],
   outcomes: PerEntryOutcome[],
   axes: PluginToggleAxes,
@@ -1029,6 +1075,10 @@ async function applyPluginToggles(
   // pair (e.g. enable:true + successStatus:"disabled").
   const successStatus: "enabled" | "disabled" = axes.enable ? "enabled" : "disabled";
   for (const op of ops) {
+    // D-SG-19: an enable that re-clones clones over the run's transport
+    // context, through a view of its own, and its row names its own clone
+    // (D-SG-22). A disable clones nothing.
+    const transportContext = withOwnCloneNotes(opts.transportContext);
     // Y3 (PR #51): the orchestrated overload of setPluginEnabled returns
     // `Promise<EnableDisablePluginOutcome>` (no `| undefined`), so a
     // `if (result === undefined) continue` silent-vanish guard would be a
@@ -1046,7 +1096,9 @@ async function applyPluginToggles(
       enable: axes.enable,
       scope: op.scope,
       notifications: { mode: "orchestrated" },
+      transportContext,
     });
+    const clone = cloneNoteOf(transportContext.notes, `${op.plugin}@${op.marketplace}`);
 
     if (result.status === successStatus) {
       // ENBL-07 / SURF-05 / WARN-01: only the enable arm carries degradation
@@ -1066,6 +1118,7 @@ async function applyPluginToggles(
         ...carriedMcpConfigNotices(result),
         // D-PL1-09: a disable stages nothing, so only the enable arm carries them.
         ...(result.status === "enabled" ? carriedStagingWarnings(result) : {}),
+        ...clone,
       });
     } else if (result.status === "failed") {
       outcomes.push({
@@ -1083,6 +1136,7 @@ async function applyPluginToggles(
         // AFILE-04: a toggle that failed after its cascade rewrote the MCP
         // config still reports the rewrite.
         ...carriedMcpConfigNotices(result),
+        ...clone,
       });
     }
     // skipped (idempotent) -> intentionally drop; the steady state isn't a
@@ -1108,7 +1162,7 @@ async function applyPluginToggles(
  * marker is re-derived every pass, so there is nothing to recover.
  */
 async function stampDependencyDisabled(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scope: Scope,
   transitioned: readonly PlannedDependencyDisable[],
 ): Promise<void> {
@@ -1164,7 +1218,7 @@ async function stampDependencyDisabled(
  * the wrapper builds from the throw.
  */
 async function applyDependencyDisables(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scope: Scope,
   ops: readonly PlannedDependencyDisable[],
   outcomes: { push: (...rows: PluginRow[]) => number },
@@ -1234,7 +1288,7 @@ const ENABLE_AXES: PluginToggleAxes = {
  * would otherwise discard every outcome accumulated for both scopes.
  */
 async function applyToggleSteps(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
@@ -1303,7 +1357,7 @@ async function applyToggleSteps(
  */
 async function applyPlan(
   reader: ReconcileStateReader,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   round1: TogglePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<TogglePlan> {
@@ -1355,7 +1409,7 @@ async function applyPlan(
 async function convergeScope(
   reader: ReconcileStateReader,
   restoreDeferredPin: DeferredPinRestore,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scope: Scope,
   toggles: TogglePlan,
   outcomes: PerEntryOutcome[],
@@ -1474,7 +1528,7 @@ interface AfterMovesRun extends CascadeRun {
  */
 async function installAfterMoves(
   reader: ReconcileStateReader,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   toggles: TogglePlan,
   run: AfterMovesRun,
 ): Promise<void> {
@@ -1521,7 +1575,7 @@ async function installAfterMoves(
  * held by its dependencies: the fresh plan already judged that enable.
  */
 async function runAfterInstallSteps(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   steps: readonly CascadeStep[],
   run: AfterMovesRun,
 ): Promise<void> {
@@ -1548,7 +1602,7 @@ async function runAfterInstallSteps(
  */
 async function readPlainPlan(
   reader: ReconcileStateReader,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scope: Scope,
   rows: PerEntryOutcome[],
 ): Promise<ScopeReadResult> {
@@ -1712,7 +1766,7 @@ interface CascadeRun {
  * did not land is not run (`runSteps`).
  */
 async function runCascade(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   cascade: ConvergenceCascade,
   run: CascadeRun,
 ): Promise<void> {
@@ -1732,7 +1786,7 @@ async function runCascade(
  * leaves its record as it was and reports nothing (WR-B).
  */
 async function runSteps(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   steps: readonly CascadeStep[],
   run: CascadeRun,
   blocked: (step: CascadeStep) => boolean,
@@ -1799,7 +1853,7 @@ function failedMoveRows(move: PlannedMove, failure: PluginEnableFailedOutcome): 
  * the rows `landedStepRows` gives.
  */
 async function runStep(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   convergePlugin: ReturnType<typeof createConvergeOperation>,
   step: CascadeStep,
   run: CascadeRun,
@@ -1819,6 +1873,9 @@ async function runStep(
   // D-10 / D-25: a move whose revision did not change exists because its
   // supported set grew, so the runner re-materializes the recorded revision.
   const rematerialize = !move.revisionChanged;
+  // D-SG-19: the move clones over the run's transport context, through a view
+  // of its own, and its rows name the move's clone (D-SG-22).
+  const transportContext = withOwnCloneNotes(opts.transportContext);
   const result = await convergePlugin({
     plugin: move.plugin,
     marketplace: move.marketplace,
@@ -1829,7 +1886,9 @@ async function runStep(
     rematerialize,
     // WR-3: a held-down record's clones are collected once its enable is known.
     ...(step.enable !== undefined && { cleanupClones: deferCollection(collect) }),
+    transportContext,
   });
+  const clone = cloneNoteOf(transportContext.notes, pluginKey(move));
   const enable = step.enable;
   if (!moveLanded(result, enable !== undefined) || enable === undefined) {
     const landed = moveLanded(result, false);
@@ -1840,7 +1899,10 @@ async function runStep(
 
     run.reports.push({
       key: step.key,
-      rows: rematerialize ? grownMoveOutcomes(move, result) : convergedMoveOutcomes(move, result),
+      rows: withMoveClone(
+        rematerialize ? grownMoveOutcomes(move, result) : convergedMoveOutcomes(move, result),
+        clone,
+      ),
     });
     return;
   }
@@ -1850,7 +1912,10 @@ async function runStep(
   // The step's rows are recorded before the tail that can throw, so a fault in
   // the restore or the collection cannot lose them or the failed key.
   if (landed) {
-    run.reports.push({ key: step.key, rows: landedStepRows(step, move, enabled) });
+    run.reports.push({
+      key: step.key,
+      rows: withMoveClone(landedStepRows(step, move, enabled), clone),
+    });
   } else {
     const failures = enabled.filter(
       (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
@@ -1858,7 +1923,10 @@ async function runStep(
     run.failed.all.add(step.key);
     run.reports.push({
       key: step.key,
-      rows: failures.flatMap((failure) => failedMoveRows(move, failure)),
+      rows: withMoveClone(
+        failures.flatMap((failure) => failedMoveRows(move, failure)),
+        clone,
+      ),
     });
   }
 
@@ -1932,7 +2000,7 @@ async function collectClones(locations: ScopedLocations): Promise<void> {
 
 /** Enables one record; answers whether it landed. */
 async function enableStep(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   op: PlannedPluginEnable,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
@@ -1976,7 +2044,7 @@ function restorePinFields(record: PluginInstallRecord, pin: Partial<PluginInstal
  * holds, as a record lifted in the toggle step does.
  */
 async function restorePin(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scope: Scope,
   key: string,
   before: ExtensionState,
@@ -2057,7 +2125,7 @@ function reportRefusedCopies(
  */
 async function judgeScopeAfterCascade(
   reader: ReconcileStateReader,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scope: Scope,
   judged: CascadeJudgement,
 ): Promise<void> {
@@ -2316,7 +2384,7 @@ function grownMoveOutcomes(move: PlannedMove, result: PluginUpdateOutcome): PerE
 async function applyReconcileWithReader(
   reader: ReconcileStateReader,
   restoreDeferredPin: DeferredPinRestore,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
 ): Promise<void> {
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
 
@@ -2357,7 +2425,7 @@ async function applyReconcileWithReader(
 async function applyScopes(
   reader: ReconcileStateReader,
   restoreDeferredPin: DeferredPinRestore,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scopes: readonly Scope[],
   accumulators: ScopePassAccumulators,
 ): Promise<void> {
@@ -2402,7 +2470,7 @@ async function applyScopes(
 async function applyAndConverge(
   reader: ReconcileStateReader,
   restoreDeferredPin: DeferredPinRestore,
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   scope: Scope,
   readResult: ScopeReadResult,
   sinks: { readonly outcomes: PerEntryOutcome[]; readonly convergeFailures: PerEntryOutcome[] },
@@ -2437,10 +2505,7 @@ async function applyAndConverge(
  * and MCP config notices. Returns whether the cascade was sent; with no
  * cascade it sends no warning or notice either.
  */
-function reportScopePasses(
-  opts: ApplyReconcileOptions,
-  accumulators: ScopePassAccumulators,
-): boolean {
+function reportScopePasses(opts: ApplyRunOptions, accumulators: ScopePassAccumulators): boolean {
   if (!notifyScopePasses(opts.ctx, opts.run, accumulators)) {
     return false;
   }
@@ -2481,13 +2546,25 @@ function reportScopePasses(
  * the `apply` command (APL-01).
  */
 export function createApplyReconcile(
-  composition: ReconcileStateReader & { readonly restoreDeferredPin?: DeferredPinRestore },
+  composition: ReconcileStateReader & {
+    readonly restoreDeferredPin?: DeferredPinRestore;
+    /**
+     * D-SG-18: makes the one plugin transport context of each run. Defaults
+     * to a context bound to the user's own ssh.
+     */
+    readonly newTransportContext?: () => PluginTransportContext;
+  },
 ): (opts: ApplyReconcileOptions) => Promise<void> {
+  const newTransportContext = composition.newTransportContext ?? defaultPluginTransportContext;
   return async function applyReconcile(opts: ApplyReconcileOptions): Promise<void> {
+    // D-SG-18 / T-04-48: a new context for each run, also for the run an
+    // autoapply load makes.
+    const runOpts: ApplyRunOptions = { ...opts, transportContext: newTransportContext() };
     const restoreDeferredPin =
       composition.restoreDeferredPin ??
-      ((scope: Scope, key: string, before: ExtensionState) => restorePin(opts, scope, key, before));
-    await applyReconcileWithReader(composition, restoreDeferredPin, opts);
+      ((scope: Scope, key: string, before: ExtensionState) =>
+        restorePin(runOpts, scope, key, before));
+    await applyReconcileWithReader(composition, restoreDeferredPin, runOpts);
   };
 }
 
@@ -2507,10 +2584,14 @@ export function createApplyReconcile(
  * installs the dependency (NFR-3). Only the read is isolated, so a throw out
  * of an install still reaches the caller. The single production composition
  * lives in the extension entry point, beside `createApplyReconcile`.
+ *
+ * D-SG-18: each call is one command's step, so its installs clone over one
+ * transport context from `newTransportContext`.
  */
 export function createScopeDependencyInstall(
   reader: ReconcileStateReader,
   lifecycle: Pick<ApplyReconcileOptions, "hooksRouting" | "completionCache">,
+  newTransportContext: () => PluginTransportContext = defaultPluginTransportContext,
 ): ScopeDependencyInstallFn {
   return async function installMissingDependencies(request) {
     const outcomes: PerEntryOutcome[] = [];
@@ -2520,7 +2601,13 @@ export function createScopeDependencyInstall(
     });
     const installs = (read.plan?.pluginsToDependencyInstall ?? []).filter(request.select);
     await applyDependencyInstalls(
-      { ctx: request.ctx, run: request.run, cwd: request.cwd, ...lifecycle },
+      {
+        ctx: request.ctx,
+        run: request.run,
+        cwd: request.cwd,
+        ...lifecycle,
+        transportContext: newTransportContext(),
+      },
       installs,
       outcomes,
     );
@@ -2536,7 +2623,7 @@ export function createScopeDependencyInstall(
 }
 
 function surfacePostCommitWarnings(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {
   const lines: string[] = [];
@@ -2585,7 +2672,7 @@ function surfacePostCommitWarnings(
  * operation and carry none.
  */
 function surfaceMcpConfigNotices(
-  opts: ApplyReconcileOptions,
+  opts: ApplyRunOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {
   notifyMcpConfigNotices(opts.ctx, opts.run, carriedOutcomeNotices(outcomes));
