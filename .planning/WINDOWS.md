@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 37
+open_count: 38
 waived_count: 52
 fixed_count: 48
-total_count: 137
-last_updated: 2026-11-26T02:56:01.845Z
+total_count: 138
+last_updated: 2026-11-26T04:22:27.255Z
 ---
 
 # Broken Windows Ledger
@@ -152,6 +152,7 @@ last_updated: 2026-11-26T02:56:01.845Z
 | 135 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts |  | [system-git] A bulk update where every plugin stayed up to date drops its blocks, so a PUP-2 marketplace sync re-clone there shows no clone note (D-SG-22) | open |  | 2026-11-26T01:23:49.245Z |  |
 | 136 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] A failing enable cascade member's re-clone shows no clone note: the enable reports only the root's failed row (D-SG-22) | open |  | 2026-11-26T02:56:01.708Z |  |
 | 137 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] An enable that fails after its ledger (a transaction-level throw) shows no clone note on its failed row (D-SG-22) | open |  | 2026-11-26T02:56:01.845Z |  |
+| 138 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts |  | [system-git] An apply or import install whose dependency's rollback failed shows the dependency's row with no clone note (D-SG-22) | open |  | 2026-11-26T04:22:27.255Z |  |
 
 ````json
 [
@@ -1877,6 +1878,19 @@ last_updated: 2026-11-26T02:56:01.845Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-26T02:56:01.845Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 138,
+    "kind": "deviation",
+    "phase": "4",
+    "file": "extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts",
+    "line": null,
+    "description": "[system-git] An apply or import install whose dependency's rollback failed shows the dependency's row with no clone note (D-SG-22)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-26T04:22:27.255Z",
     "resolved_at": null,
     "milestone": null
   }
