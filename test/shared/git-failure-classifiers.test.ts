@@ -562,6 +562,17 @@ describe("classifyGitHostFailure", () => {
     // assert
     assert.strictEqual(reason, undefined);
   });
+
+  test("IN-A-01: classifies a refused github repository as unsupported source", () => {
+    // arrange
+    const failure = new InvalidGitHubRepositoryError("evil:x/ghp");
+
+    // act
+    const reason = classifyGitHostFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "unsupported source");
+  });
 });
 
 describe("classifyGitSourceAccessFailure", () => {
@@ -574,6 +585,17 @@ describe("classifyGitSourceAccessFailure", () => {
 
     // assert
     assert.strictEqual(reason, "source missing");
+  });
+
+  test("IN-A-01: classifies a refused github repository as unsupported source", () => {
+    // arrange
+    const failure = new InvalidGitHubRepositoryError("evil:x/ghp");
+
+    // act
+    const reason = classifyGitSourceAccessFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "unsupported source");
   });
 });
 
