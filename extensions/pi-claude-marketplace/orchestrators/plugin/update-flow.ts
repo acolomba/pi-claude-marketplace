@@ -1639,9 +1639,14 @@ export interface PluginUpdateOperations {
    * `createPluginUpdateOperations`). `notification` is the command's
    * notification context, and it is required: its run names the MCP
    * implementation the cascade reads (D-P3-12), and a dependency install
-   * reports through it (UPD-DEP-D1).
+   * reports through it (UPD-DEP-D1). D-SG-18: `transportContext` is the
+   * command's, which its missing-dependency steps share, so the command
+   * probes once; a run given none makes one of its own.
    */
-  readonly beginPluginUpdateRun: (notification: UpdateNotification) => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (
+    notification: UpdateNotification,
+    transportContext?: PluginTransportContext,
+  ) => PluginUpdateFn;
   /** D-26: materializes one catalog move for `apply` under the converge policy. */
   readonly convergePlugin: PluginConvergeFn;
 }
@@ -1767,12 +1772,16 @@ export function createPluginUpdateOperations(
   // plugin of one run, so a marketplace common to several of them is listed
   // once and the cascade's warm-cache expectation for path sources holds.
   // D-SG-19: the run's one transport context has the same lifetime, so the
-  // plugin clones of one autoupdate run follow one probe.
-  const beginPluginUpdateRun = (notification: UpdateNotification): PluginUpdateFn => {
+  // plugin clones of one autoupdate run follow one probe. D-SG-18: a command
+  // that gives its own context shares it with its missing-dependency steps.
+  const beginPluginUpdateRun = (
+    notification: UpdateNotification,
+    transportContext?: PluginTransportContext,
+  ): PluginUpdateFn => {
     const runScoped = {
       tagMemo: new Map<string, readonly RemoteTag[]>(),
       marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
-      transportContext: newTransportContext(),
+      transportContext: transportContext ?? newTransportContext(),
     };
     const runner = settling(notification);
     // D-P3-12: the run reads the MCP implementation of its command's run.

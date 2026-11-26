@@ -11578,4 +11578,73 @@ describe("D-SG-18 / D-SG-22: apply's plugin transport context", () => {
     assert.equal(probes.count, 1);
     verifyBoundary();
   });
+
+  test("D-SG-18: two missing-dependency steps of one command clone over the context the command gives them, so they probe once", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const { cwd } = await seedCommentedAdapterScope(t, "transport-dependency-step", {
+      trees: {
+        "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+        "secrets-vault": { skill: "clean" },
+      },
+      declared: { "deploy-kit@mp": {} },
+      recorded: { "deploy-kit": { supported: ["skills"] } },
+      owners: [],
+    });
+    // The missing dependency comes from github, so its install clones.
+    const manifestPath = path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      readonly plugins: readonly { readonly name: string }[];
+    };
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        ...manifest,
+        plugins: manifest.plugins.map((entry) =>
+          entry.name === "secrets-vault"
+            ? { ...entry, source: { source: "github", repo: "acme/secrets-vault" } }
+            : entry,
+        ),
+      }),
+    );
+    const probes = { count: 0 };
+    const refused = (): Promise<never> => Promise.reject(new Error(PROBE_REFUSED));
+    let made = 0;
+    const step = createScopeDependencyInstall(
+      { loadState },
+      {
+        completionCache: createCompletionCache(),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      },
+      () => {
+        made += 1;
+        return countingTransportContext(probes, refused);
+      },
+    );
+    const transportContext = countingTransportContext(probes, refused);
+    const { ctx, verifyBoundary } = createNotificationBoundary(0);
+    const request = {
+      ctx,
+      run: runWithNothingLoaded(),
+      scope: "project",
+      cwd,
+      select: () => true,
+      transportContext,
+    } as const;
+
+    // act
+    const first = await step(request);
+    const second = await step(request);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        made,
+        probes: probes.count,
+        rows: [first, second].flatMap(({ rows }) => rows.map((row) => `${row.name} ${row.status}`)),
+      },
+      { made: 0, probes: 1, rows: ["secrets-vault@mp failed", "secrets-vault@mp failed"] },
+    );
+    verifyBoundary();
+  });
 });

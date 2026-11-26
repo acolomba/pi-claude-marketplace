@@ -676,6 +676,13 @@ export interface ScopeDependencyInstallRequest {
     readonly marketplace: string;
     readonly declarers: readonly string[];
   }) => boolean;
+  /**
+   * D-SG-18: the transport context of the command that runs the step, so a
+   * command that runs the step for several marketplaces, beside its own
+   * plugin updates, probes once. A step whose request carries none makes one
+   * of its own.
+   */
+  readonly transportContext?: PluginTransportContext;
 }
 
 /**

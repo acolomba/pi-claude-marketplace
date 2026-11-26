@@ -14,6 +14,7 @@
 // (`import type { SubcommandHandlers } from "./router.ts"`, as `register.ts`
 // does).
 
+import type { PluginTransportContext } from "../orchestrators/github-transport.ts";
 import type {
   ClaudeImportExecutionResult,
   ImportClaudeSettingsOptions,
@@ -41,12 +42,16 @@ export interface EdgeDeps {
    * function to the orchestrator, so the cascade's D-10-18 tag memos are
    * bounded by the run rather than by this binding's lifetime. UPD-DEP-D1:
    * the command's context is what a dependency install the cascade makes
-   * reports through.
+   * reports through. D-SG-18: `transportContext` is the command's plugin
+   * transport context, which its missing-dependency steps share.
    */
-  readonly beginPluginUpdateRun: (notification: {
-    readonly ctx: NotificationContext;
-    readonly run: NotificationRun;
-  }) => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (
+    notification: {
+      readonly ctx: NotificationContext;
+      readonly run: NotificationRun;
+    },
+    transportContext?: PluginTransportContext,
+  ) => PluginUpdateFn;
   /** APL-01: the reconcile apply step that `/claude:plugin apply` runs. */
   readonly applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>;
   /**

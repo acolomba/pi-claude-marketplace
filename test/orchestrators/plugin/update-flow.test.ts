@@ -15991,6 +15991,37 @@ test("D-SG-19: one autoupdate run gives its plugin updates one transport context
   });
 });
 
+test("D-SG-18: an autoupdate run clones over the transport context its command gives and makes none", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    setGitHubBaseUrl(t, UNANSWERED_GITHUB_BASE);
+    const cwd = await createCaseDir("update-transport-autoupdate-given-");
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await seedUnpinnedGitHubPlugin(cwd);
+    process.chdir(cwd);
+    const probes = { count: 0 };
+    const operations = transportUpdateOperations(() => {
+      throw new Error("a command's context leaves the factory unused");
+    });
+    const transportContext = probeRefusingContext(probes);
+
+    // act
+    const updatePlugin = operations.beginPluginUpdateRun(commandNotification(), transportContext);
+    const outcome = await updatePlugin("gp", "mp", "project");
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.partition === "failed" ? outcome.notes.join(" ") : outcome.partition,
+      PROBE_REFUSED,
+    );
+    assert.strictEqual(probes.count, 1);
+  });
+});
+
 /** The converge target of the unpinned github plugin `gp@mp` in the project scope of `cwd`. */
 function gitHubConvergeTarget(cwd: string): PluginConvergeTarget {
   return {

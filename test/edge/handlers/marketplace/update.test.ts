@@ -482,6 +482,44 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   verify(pluginUpdate);
 });
 
+test("D-SG-18: gives its plugin updates and its missing-dependency step one transport context per command", async (t) => {
+  // arrange
+  const { cwd, gitProcessRuns } = await createHermeticScope(t, "transport-context");
+  await seedThreeMarketplaces(cwd);
+  const { ctx, verifyBoundary } = createNotificationBoundary(4, { value: cwd, reads: 2 });
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  when(() => pluginUpdate("hello", "alpha", "project"))
+    .thenResolve(unchangedHello())
+    .times(2);
+  const runContexts: unknown[] = [];
+  const stepContexts: unknown[] = [];
+  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
+    completionCache: createCompletionCache(),
+    gitOps: createCurrentGitOps().gitOps,
+    beginPluginUpdateRun: (_notification, transportContext) => {
+      runContexts.push(transportContext);
+      return pluginUpdate;
+    },
+    installMissingDependencies: (request) => {
+      stepContexts.push(request.transportContext);
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await marketplaceUpdateHandler("", ctx, runWithNothingLoaded());
+  await marketplaceUpdateHandler("alpha", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.strictEqual(runContexts.length, 2);
+  assert.ok(runContexts.every((context) => context !== undefined));
+  assert.notStrictEqual(runContexts[0], runContexts[1]);
+  assert.deepStrictEqual(stepContexts, runContexts);
+  assert.strictEqual(gitProcessRuns(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
+});
+
 for (const { emissions, expectCascade, rows, scope, touched } of [
   {
     emissions: 1,

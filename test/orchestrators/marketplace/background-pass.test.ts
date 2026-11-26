@@ -42,6 +42,7 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { emptyPiInventory } from "../../platform/pi-inventory-seed.ts";
 
+import type { PluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { BackgroundGate } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/background-gate.ts";
 import type {
   BackgroundContext,
@@ -586,6 +587,35 @@ test("a real cascade settles dependencies in a fresh gate signal's async scope",
   assert.strictEqual(begun.length, 3);
   assert.deepStrictEqual(dependencyScopes, [begun[2]]);
   assert.deepStrictEqual(selections, [true]);
+});
+
+test("D-SG-18: the pass's plugin updates and its missing-dependency steps share one transport context", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-dependencies-transport-");
+  await seedRealCascade(cwd);
+  const runContexts: Array<PluginTransportContext | undefined> = [];
+  const stepContexts: Array<PluginTransportContext | undefined> = [];
+  const { deps } = createPassUnderTest({});
+  const pass = createBackgroundPass({
+    ...deps,
+    updateMarketplace,
+    beginPluginUpdateRun: (notification, transportContext) => {
+      runContexts.push(transportContext);
+      return deps.beginPluginUpdateRun(notification);
+    },
+    installMissingDependencies: (request) => {
+      stepContexts.push(request.transportContext);
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+  });
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.strictEqual(runContexts.length, 1);
+  assert.ok(runContexts[0] !== undefined, "the pass gives its plugin updates a context");
+  assert.deepStrictEqual(stepContexts, [runContexts[0]]);
 });
 
 test("foreground cancellation reaches dependency settlement and waits for the marketplace to return", async (t) => {
