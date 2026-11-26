@@ -60,7 +60,15 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Clone transport lines
 
-A marketplace block or a plugin row whose command cloned a GitHub repository names the transport of that clone, as Claude Code's progress lines do (D-SG-22). The first line is one of four:
+A marketplace block or a plugin row whose command cloned a GitHub repository names the transport of that clone, as Claude Code's progress lines do (D-SG-22). These blocks and rows can carry the lines:
+
+- The marketplace blocks of `marketplace add`, `marketplace update`, and the PUP-2 marketplace sync of `plugin update`.
+- The separate block of a dependency's marketplace that an install adds to its scope (D-MF-04). This block holds no plugin rows, and it shows only when that add cloned.
+- The blocks and rows of a bulk update that changed nothing. That update keeps the block of a marketplace sync that cloned, and the up-to-date row of each plugin that it cloned.
+- The plugin rows of every install, update, reinstall, fetch, `info --fetch`, enable, apply, and import outcome that follows a clone, the `skipped`, `partially-upgradable`, `manual recovery`, and `disabled` rows included.
+- The failed row of an enable whose cascade failed. That row carries the lines of the cascade member that failed, labelled with the name of that member.
+
+The first line is one of four:
 
 ```text
 Cloning via SSH: <url>
@@ -75,7 +83,7 @@ SSH not configured, cloning via HTTPS: <url>
 <T1> clone failed, retrying with <T2>: <url>
 ```
 
-`<T1>` is the transport of the attempt before it, and `<T2>` and `<url>` are those of the retry. A failed block or row keeps the lines of every attempt it made, and a clone that failed over both transports shows both attempts in its cause. The lines sit 2 spaces under a marketplace header, and 4 spaces under a plugin row, after its description and before its hint and cause lines. JSON carries the same note as `clone.note`, `clone.url`, and `clone.retries` (`docs/json-output.md`). A line that names another plugin's clone starts with that plugin's `<plugin>@<marketplace>` and a colon, such as `dep@gits: Cloning via SSH: <url>`, and JSON carries that name as `clone.plugin`. A command that cloned nothing (a warm or current clone, a path source, a hosted catalog, a host that is not GitHub) shows no such line.
+`<T1>` is the transport of the attempt before it, and `<T2>` and `<url>` are those of the retry. A failed block or row keeps the lines of every attempt it made, and a clone that failed over both transports shows both attempts in its cause. The lines sit 2 spaces under a marketplace header, and 4 spaces under a plugin row, after its description and before its hint and cause lines. JSON carries the same note as `clone.note`, `clone.url`, and `clone.retries` (`docs/json-output.md`). A line that names another plugin's clone starts with that plugin's `<plugin>@<marketplace>` and a colon, such as `dep@gits: Cloning via SSH: <url>`, and JSON carries that name as `clone.plugin`. Only the failed row of an enable shows such a line. A command that cloned nothing (a warm or current clone, a path source, a hosted catalog, a host that is not GitHub) shows no such line.
 
 ### Reasons rendering
 
