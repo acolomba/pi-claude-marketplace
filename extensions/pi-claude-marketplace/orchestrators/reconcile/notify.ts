@@ -82,6 +82,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { carriedClone } from "../github-transport.ts";
 import { enableRowDependencies } from "../plugin/shared.ts";
 import {
   constraintCauseFor,
@@ -92,7 +93,6 @@ import {
 } from "../plugin/update-row.ts";
 
 import {
-  carriedClone,
   carriedMcpConfigNotices,
   carriedStagingWarnings,
   sourceMismatchOutcomeSubject,

@@ -116,7 +116,7 @@ import {
   splitDependencyPartials,
 } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
-import { withOwnCloneNotes } from "../github-transport.ts";
+import { carriedClone, cloneNoteOf, withOwnCloneNotes } from "../github-transport.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
@@ -134,12 +134,10 @@ import { UninstallRefusedError } from "../plugin/uninstall.ts";
 import { DISABLED_PIN_FIELDS } from "../plugin/update-preflight.ts";
 
 import {
-  carriedClone,
   carriedMcpConfigNotices,
   carriedStagingWarnings,
   cascadeDisabledOutcome,
   classifyOrchestratorThrow,
-  cloneNoteOf,
   installFailureReasonFields,
   dependencyDisabledOutcome,
   sourceMismatchOutcomes,
@@ -176,13 +174,12 @@ import {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
+import type { CloneNoted, GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { IndexFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 import type { MovedDependency, PluginUpdateOutcome, ScopeDependencyInstallFn } from "../types.ts";
 import type {
-  CloneNoted,
   PerEntryOutcome,
   PluginConvergedOutcome,
   PluginDependencyDisabledOutcome,

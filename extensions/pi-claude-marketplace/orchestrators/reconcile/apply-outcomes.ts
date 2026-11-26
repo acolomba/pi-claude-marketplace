@@ -52,7 +52,7 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { CloneTransportNote, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { GitHubCloneNotes } from "../github-transport.ts";
+import type { CloneNoted } from "../github-transport.ts";
 import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { StagingDiagnostic } from "../plugin/staging-diagnostics.ts";
@@ -75,15 +75,6 @@ export interface OutcomeBase {
 
 export interface PluginOutcomeBase extends OutcomeBase {
   readonly plugin: string;
-}
-
-/**
- * D-SG-22: the transport note of the GitHub clone the operation behind a row
- * ran, which the row shows under it. Set only when the operation cloned from
- * GitHub (NREG-01).
- */
-export interface CloneNoted {
-  readonly clone?: CloneTransportNote;
 }
 
 /** Marketplace add success outcome. */
@@ -918,25 +909,6 @@ export function carriedStagingWarnings(carrier: {
   readonly stagingWarnings?: readonly StagingWarning[];
 }): Pick<PluginEnabledOutcome, "stagingWarnings"> {
   return carrier.stagingWarnings === undefined ? {} : { stagingWarnings: carrier.stagingWarnings };
-}
-
-/**
- * D-SG-22: lift an orchestrated outcome's clone note onto the reconcile
- * outcome built from it, as `carriedMcpConfigNotices` does for the notices.
- * An absent note stays absent (NREG-01).
- */
-export function carriedClone(carrier: { readonly clone?: CloneTransportNote }): CloneNoted {
-  return carrier.clone === undefined ? {} : { clone: carrier.clone };
-}
-
-/**
- * D-SG-22: the note `notes` keeps for `subject`, the `<plugin>@<marketplace>`
- * of the row that reports the clone, as a member to spread onto its outcome.
- * A subject that cloned nothing from GitHub gives no member (NREG-01).
- */
-export function cloneNoteOf(notes: GitHubCloneNotes, subject: string): CloneNoted {
-  const clone = notes.noteFor(subject);
-  return clone === undefined ? {} : { clone };
 }
 
 /**

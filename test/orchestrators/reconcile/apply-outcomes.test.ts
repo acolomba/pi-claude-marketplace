@@ -1,14 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { createGitHubCloneNotes } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
-  carriedClone,
   carriedMcpConfigNotices,
   carriedStagingWarnings,
   classifyOrchestratorThrow,
-  cloneNoteOf,
   installFailureReasonFields,
   classifyReadPassThrow,
   cascadeDisabledOutcome,
@@ -1441,68 +1438,6 @@ describe("stagingDiagnosticsOf", () => {
       diagnostics.map(({ plugin }) => plugin),
       ["linter", "formatter"],
     );
-  });
-});
-
-describe("carriedClone", () => {
-  test("D-SG-22: carries the clone note of an outcome that has one", () => {
-    // arrange
-    const outcome = {
-      status: "added",
-      name: "official",
-      clone: { note: "via-ssh", url: "git@github.com:acme/official.git" },
-    } as const;
-
-    // act
-    const carried = carriedClone(outcome);
-
-    // assert
-    assert.deepStrictEqual(carried, {
-      clone: { note: "via-ssh", url: "git@github.com:acme/official.git" },
-    });
-  });
-
-  test("D-SG-22, NREG-01: carries nothing for an outcome that cloned nothing", () => {
-    // arrange
-    const outcome = {};
-
-    // act
-    const carried = carriedClone(outcome);
-
-    // assert
-    assert.deepStrictEqual(carried, {});
-  });
-});
-
-describe("cloneNoteOf", () => {
-  test("D-SG-22: gives the note the collector keeps for the subject", () => {
-    // arrange
-    const notes = createGitHubCloneNotes();
-    notes.record("formatter@official", {
-      note: "ssh-not-configured",
-      url: "https://github.com/acme/formatter.git",
-    });
-    notes.record("linter@official", { note: "via-ssh", url: "git@github.com:acme/linter.git" });
-
-    // act
-    const noted = cloneNoteOf(notes, "formatter@official");
-
-    // assert
-    assert.deepStrictEqual(noted, {
-      clone: { note: "ssh-not-configured", url: "https://github.com/acme/formatter.git" },
-    });
-  });
-
-  test("D-SG-22, NREG-01: gives nothing for a subject that cloned nothing", () => {
-    // arrange
-    const notes = createGitHubCloneNotes();
-    notes.record("linter@official", { note: "via-ssh", url: "git@github.com:acme/linter.git" });
-
-    // act
-    const noted = cloneNoteOf(notes, "formatter@official");
-
-    // assert
-    assert.deepStrictEqual(noted, {});
   });
 });
 
