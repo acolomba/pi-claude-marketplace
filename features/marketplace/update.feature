@@ -816,6 +816,27 @@ Feature: Marketplace update
       | marketplace name | marketplace scope | marketplace status | id        | name | status  | reasons | scope   | from  | to    | clone note | clone url                       |
       | tools            | project           | updated            | ghp@tools | ghp  | updated |         | project | 1.0.0 | 1.1.0 | via-https  | https://github.com/acme/ghp.git |
 
+  Scenario: Updating an unchanged marketplace with autoupdate on names the clone of the github plugin whose clone is gone
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id        | name | status  | reasons    | scope   | clone note | clone url                       |
+      | tools            | project           | skipped            | up-to-date          | ghp@tools | ghp  | skipped | up-to-date | project | via-https  | https://github.com/acme/ghp.git |
+
   Scenario Outline: Repeating an autoupdate does not reinstall a plugin
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" offers these plugins:

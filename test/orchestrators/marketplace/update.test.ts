@@ -4001,6 +4001,60 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
   });
 });
 
+test("D-SG-22: an all-unchanged autoupdate cascade keeps the up-to-date row of a plugin its update cloned and drops the others", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "noupd",
+      ref: "main",
+      autoupdate: true,
+      plugins: { p: makePluginRecord(), q: makePluginRecord() },
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps();
+    const pluginUpdate: PluginUpdateFn = async (plugin) =>
+      Promise.resolve({
+        partition: "unchanged",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.1",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+        ...(plugin === "p" && {
+          clone: { note: "ssh-not-configured", url: "https://github.com/acme/p.git" },
+        }),
+      });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "noupd",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map(({ message }) => message),
+      [
+        [
+          "● noupd [project] (skipped) {up-to-date}",
+          HTTPS_CLONE_LINE,
+          "  ⊘ p (skipped) {up-to-date}",
+          "    SSH not configured, cloning via HTTPS: https://github.com/acme/p.git",
+        ].join("\n"),
+      ],
+    );
+  });
+});
+
 test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a plugin UPDATES renders `(updated)` with the per-plugin row + reload-hint (NOT a no-op even when snapshot.changed === false)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

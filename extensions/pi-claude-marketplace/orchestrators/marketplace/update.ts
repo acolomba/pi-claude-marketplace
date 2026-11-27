@@ -1263,9 +1263,14 @@ function notifyRefreshed(
     outcomes.every((o) => o.partition === "unchanged") && installs.rows.length === 0;
   if (!snapshot.changed && cascadeIsNoOp) {
     // OUT-07 / D-12: autoupdate-ON no-op collapses to the OFF no-op shape
-    // (plugins:[]) -> Single, one marketplace block.
+    // (plugins:[]) -> Single, one marketplace block. D-SG-22: an unchanged
+    // outcome whose update re-cloned a gone mirror keeps its up-to-date row,
+    // so the block still names that GitHub clone, as the bulk update does.
+    const clonedRows = outcomes
+      .filter((o) => o.clone !== undefined)
+      .map((o) => outcomeToCascadePluginMessage(o, scope));
     const noopRows: Single<MarketplaceRows<UpdateRowMsg>> = [
-      { name, scope, status: "skipped", reasons: ["up-to-date"], ...clone, plugins: [] },
+      { name, scope, status: "skipped", reasons: ["up-to-date"], ...clone, plugins: clonedRows },
     ];
     notifyWithContext(ctx, run, UPDATE_CONTEXT, noopRows, undefined, cardinality);
     return;
