@@ -26,8 +26,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { serializeCauseChain } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -543,7 +541,6 @@ describe("judgeDependencyMove", () => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
     const notified: string[] = [];
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
 
     // act
     const judgement = await judgeDependencyMove(request(), {
@@ -554,25 +551,11 @@ describe("judgeDependencyMove", () => {
         ctx: { mode: "tui", hasUI: true, ui: { notify: (message) => notified.push(message) } },
         run: runWithNothingLoaded(),
       },
-      credentialOps: credentials.credentialOps,
-      deviceFlowHttp: createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: {
-          device_code: "device-1",
-          user_code: "USER-1",
-          verification_uri: "https://example.invalid/device",
-          expires_in: 900,
-          interval: 5,
-        },
-      }).http,
-      authMemo: new Map(),
     });
 
     // assert
     assert.strictEqual(judgement.ok, true);
     assert.deepStrictEqual(notified, []);
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
   });
 });
 

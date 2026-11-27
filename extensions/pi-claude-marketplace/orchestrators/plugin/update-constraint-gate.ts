@@ -37,7 +37,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CredentialOps } from "../auth-host.ts";
 import type {
   CatalogConstraintSeam,
   ConstraintHolder,
@@ -86,8 +86,6 @@ export interface UpdateConstraintOptions {
   readonly auth: {
     readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
   };
 }
 
@@ -228,10 +226,6 @@ function probeAuth(
   return {
     ...options.auth.notification,
     credentialOps: options.auth.credentialOps,
-    ...(options.auth.deviceFlowHttp !== undefined && {
-      deviceFlowHttp: options.auth.deviceFlowHttp,
-    }),
-    ...(options.auth.authMemo !== undefined && { authMemo: options.auth.authMemo }),
   };
 }
 

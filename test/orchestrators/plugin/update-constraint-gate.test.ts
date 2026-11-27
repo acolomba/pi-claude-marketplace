@@ -17,11 +17,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type {
-  AuthAttemptResult,
-  CredentialOps,
-  DeviceFlowHttp,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { ConstraintHolder } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/constraint-fold.ts";
 import type { AddressedDependency } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import type {
@@ -523,11 +519,6 @@ describe("evaluateUpdateConstraint", () => {
     const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
     const credOps = credentialOps();
     const run = runWithNothingLoaded();
-    const deviceFlowHttp: DeviceFlowHttp = {
-      requestCode: () => Promise.reject(new Error("not used")),
-      pollToken: () => Promise.reject(new Error("not used")),
-    };
-    const authMemo = new Map<string, never>();
     const calls: DependencyTagProbeOptions[] = [];
     const seam: UpdateConstraintSeam = {
       buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
@@ -546,19 +537,17 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        auth: { notification: { ctx, run }, credentialOps: credOps, deviceFlowHttp, authMemo },
+        auth: { notification: { ctx, run }, credentialOps: credOps },
       }),
     );
 
-    // assert -- credentialOps/deviceFlowHttp/authMemo reach the probe as the
+    // assert -- the context and the credential ops reach the probe as the
     // SAME objects the caller supplied, composing no second credential
     // acquisition path (AUTH-09).
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.auth.ctx, ctx);
     assert.strictEqual(calls[0]?.auth.run, run);
     assert.strictEqual(calls[0]?.auth.credentialOps, credOps);
-    assert.strictEqual(calls[0]?.auth.deviceFlowHttp, deviceFlowHttp);
-    assert.strictEqual(calls[0]?.auth.authMemo, authMemo);
   });
 
   test("UPDT-01: the git arm skips the tag query when no ui context was threaded", async () => {
@@ -659,7 +648,6 @@ describe("evaluateUpdateConstraint", () => {
     const ctx = silentCtx();
     const run = runWithNothingLoaded();
     const ops = credentialOps();
-    const authMemo = new Map<string, AuthAttemptResult>();
     const marketplaceSource = "https://example.com/acme/marketplace.git";
 
     // act
@@ -668,14 +656,14 @@ describe("evaluateUpdateConstraint", () => {
         state,
         seam,
         marketplaceSource,
-        auth: { notification: { ctx, run }, credentialOps: ops, authMemo },
+        auth: { notification: { ctx, run }, credentialOps: ops },
       }),
     );
 
     // assert
     assert.deepStrictEqual(
       calls.map((call) => [call.marketplaceSource, call.auth]),
-      [[marketplaceSource, { ctx, run, credentialOps: ops, authMemo }]],
+      [[marketplaceSource, { ctx, run, credentialOps: ops }]],
     );
   });
 

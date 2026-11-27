@@ -19,7 +19,6 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { PluginTransportContext } from "../github-transport.ts";
 import type { UpdateDependencyRow } from "../types.ts";
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
@@ -55,9 +54,6 @@ export interface DependencyCaller {
   readonly run: NotificationRun;
   readonly mapModel?: boolean;
   readonly partial?: boolean;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /** D-SG-19: the command's GitHub transport context, which its moves and installs share. */
   readonly transportContext?: PluginTransportContext;
 }
@@ -79,23 +75,11 @@ export interface DependencyMoveOwners {
 /** The caller fields a dependency move reads, spread only when set. */
 function callerFields(
   caller: DependencyCaller,
-): Pick<
-  DependencyMoveContext,
-  | "authMemo"
-  | "credentialOps"
-  | "deviceFlowHttp"
-  | "mapModel"
-  | "notification"
-  | "partial"
-  | "transportContext"
-> {
+): Pick<DependencyMoveContext, "mapModel" | "notification" | "partial" | "transportContext"> {
   return {
     notification: { ctx: caller.ctx, run: caller.run },
     ...(caller.partial !== undefined && { partial: caller.partial }),
     ...(caller.mapModel !== undefined && { mapModel: caller.mapModel }),
-    ...(caller.credentialOps !== undefined && { credentialOps: caller.credentialOps }),
-    ...(caller.deviceFlowHttp !== undefined && { deviceFlowHttp: caller.deviceFlowHttp }),
-    ...(caller.authMemo !== undefined && { authMemo: caller.authMemo }),
     ...(caller.transportContext !== undefined && { transportContext: caller.transportContext }),
   };
 }

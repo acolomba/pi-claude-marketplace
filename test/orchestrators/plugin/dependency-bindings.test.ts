@@ -25,13 +25,10 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { withExistingScopeLock } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { holdStateLock } from "../state-lock.ts";
 
-import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { DependencyCaller } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -55,24 +52,6 @@ function transportContext() {
       showsDirectGitHubThroughGit: unasked,
     },
   });
-}
-
-/** The command's authentication collaborators, network disabled. */
-function auth() {
-  return {
-    credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
-    deviceFlowHttp: createDeviceFlowFake({
-      boundary: "memory",
-      network: "disabled",
-      deviceCode: {
-        device_code: "device-1",
-        user_code: "USER-1",
-        verification_uri: "https://example.invalid/device",
-        expires_in: 900,
-        interval: 5,
-      },
-    }).http,
-  };
 }
 
 function pluginRecord(version: string, resolvedSource = "/work/mp/plugins/p"): PluginRecord {
@@ -144,17 +123,13 @@ describe("dependencyMoveContext", () => {
     const run = runWithNothingLoaded();
     const memos = freshDependencyMoveMemos();
     const cloneCandidates = new Set<string>();
-    const authMemo = new Map<string, AuthAttemptResult>();
-    const commandAuth = auth();
     const commandTransport = transportContext();
     const caller: DependencyCaller = {
       ctx: CTX,
       run,
       partial: true,
       mapModel: false,
-      authMemo,
       transportContext: commandTransport,
-      ...commandAuth,
     };
 
     // act
@@ -177,9 +152,7 @@ describe("dependencyMoveContext", () => {
       notification: { ctx: CTX, run },
       partial: true,
       mapModel: false,
-      authMemo,
       transportContext: commandTransport,
-      ...commandAuth,
       ...memos,
       cloneCandidates,
     });

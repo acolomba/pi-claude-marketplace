@@ -41,7 +41,6 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { DependencyStagingDiagnostic, UpdateDependencyRow } from "../types.ts";
 import type {
   DependencyMoveRequest,
@@ -75,9 +74,6 @@ export interface DependencyMoveContext {
   readonly mapModel?: boolean;
   /** The command's context, so a move authenticates as the command does. */
   readonly notification?: PreparePluginUpdateOptions["notification"];
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /** D-SG-19: the operation's GitHub transport context, so a move clones as the command does. */
   readonly transportContext?: NonNullable<PreparePluginUpdateOptions["transportContext"]>;
   readonly cloneCacheSeam?: PreparePluginUpdateOptions["cloneCacheSeam"];
@@ -183,9 +179,6 @@ function moveArgs(
     ...(context.partial !== undefined && { partial: context.partial }),
     ...(context.mapModel !== undefined && { mapModel: context.mapModel }),
     ...(context.notification !== undefined && { preflightNotification: context.notification }),
-    ...(context.credentialOps !== undefined && { credentialOps: context.credentialOps }),
-    ...(context.deviceFlowHttp !== undefined && { deviceFlowHttp: context.deviceFlowHttp }),
-    ...(context.authMemo !== undefined && { authMemo: context.authMemo }),
     ...(context.transportContext !== undefined && { transportContext: context.transportContext }),
     ...(context.cloneCacheSeam !== undefined && { cloneCacheSeam: context.cloneCacheSeam }),
     ...(context.constraintGate !== undefined && { constraintGate: context.constraintGate }),
