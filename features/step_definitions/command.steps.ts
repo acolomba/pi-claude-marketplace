@@ -244,13 +244,6 @@ function printModeOutput(world: ScenarioWorld): {
 }
 
 Then(
-  "pi's print mode exits with code {int} and prints this error:",
-  function (this: ScenarioWorld, exitCode: number, text: string) {
-    assert.deepStrictEqual(printModeOutput(this), { exitCode, stdout: "", stderr: `${text}\n` });
-  },
-);
-
-Then(
   "pi's print mode exits with code {int} and prints nothing",
   function (this: ScenarioWorld, exitCode: number) {
     assert.deepStrictEqual(printModeOutput(this), { exitCode, stdout: "", stderr: "" });

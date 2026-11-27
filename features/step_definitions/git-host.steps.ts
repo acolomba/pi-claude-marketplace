@@ -13,13 +13,13 @@
  * plugin it serves; a hosted marketplace names the directory its catalog is
  * served under. Every arm is released with its scenario (HOST-03).
  *
- * A pi without the GitHub base override signs in through GitHub's Device
- * Flow (GHB-02). Its steps start the Device Flow stand-in with a poll script,
- * start that pi with the GitHub redirect, which sends its github.com requests
- * to the stand-in and to the git host and refuses every other host, and state
- * the requests the stand-in received and the requests the redirect routed or
- * refused (D-BG-01, D-BG-03). Such a pi may also start with upstream, ssh,
- * or token variables of the user's shell (D-SG-18, D-SG-24, SG-AUTH-01).
+ * A pi without the GitHub base override starts with the GitHub redirect,
+ * which sends its github.com requests to the git host and refuses and logs
+ * every other request, and with a CONNECT proxy that tunnels its git's
+ * `github.com:443` connections to the git host and refuses every other host.
+ * A step states the requests the redirect routed or refused (D-BG-01,
+ * 03-SECURITY F-5). Such a pi may also start with upstream, ssh, or token
+ * variables of the user's shell (D-SG-18, D-SG-24, SG-AUTH-01).
  */
 
 import assert from "node:assert/strict";
@@ -35,12 +35,6 @@ import {
   readRedirectLog,
   writeRedirectConfig,
 } from "../lib/github-device-flow/extension.ts";
-import {
-  DEVICE_FLOW_LOG,
-  GitHubDeviceFlow,
-  readDeviceFlowRequests,
-  readPollScript,
-} from "../lib/github-device-flow/server.ts";
 import { runGit } from "../lib/hermetic-git.ts";
 import { armedStatus } from "../lib/https-git-host/server.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
@@ -52,7 +46,6 @@ import {
 } from "../lib/user-git-programs.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
-import type { DeviceFlowRequest } from "../lib/github-device-flow/server.ts";
 import type { GitHostArm } from "../lib/https-git-host/server.ts";
 import type { GitRepositoryReference } from "../support/git-repository.ts";
 import type { ProfilePiVariables, ScenarioWorld } from "../support/world.ts";
@@ -384,38 +377,11 @@ Given(
   },
 );
 
-// The credential store lies in the sandbox HOME, so the token the product
-// stores after a sign-in never reaches the user's own store.
-Given(
-  "the user's git keeps credentials in its credential store",
-  async function (this: ScenarioWorld): Promise<void> {
-    const config = await useCredentialStore(this);
-    assert.strictEqual(await readFile(config, "utf8"), CREDENTIAL_STORE_CONFIG);
-  },
-);
-
-// D-BG-03: the stand-in serves with the git host's certificate, which Pi
-// trusts already, and the redirect config it writes is read when Pi starts.
-Given(
-  "github's sign-in answers its polls with these outcomes:",
-  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
-    const harness = harnessDirectory(this.tokens.home);
-    const signIn = await GitHubDeviceFlow.start(this.gitHost, readPollScript(table), harness);
-    this.onRelease(() => signIn.close());
-    await writeRedirectConfig(this.tokens.home, {
-      gitHost: this.gitHost.address,
-      signIn: signIn.address,
-    });
-    assert.deepStrictEqual(await readDeviceFlowRequests(harness), []);
-  },
-);
-
-// D-BG-01: the pi runs without the GitHub base override, so GHB-02 runs
-// Device Flow and SG-SSH-02 runs the ssh probe, and the redirect keeps every
-// request on this machine. D-SG-14: a system git of that pi reaches
-// `github.com` through the CONNECT proxy, which tunnels only to the git host
-// and logs to the redirect log. The redirect config must be written already.
-// `variables` go to that pi only (D-SG-24).
+// D-BG-01: the pi runs without the GitHub base override, so SG-SSH-02 runs
+// the ssh probe, and the redirect keeps every request on this machine. A
+// system git of that pi reaches `github.com` through the CONNECT proxy, which
+// tunnels only to the git host and logs to the redirect log. The redirect
+// config must be written already. `variables` go to that pi only (D-SG-24).
 async function startPiWithGitHubRouted(
   world: ScenarioWorld,
   variables?: ProfilePiVariables,
@@ -441,16 +407,8 @@ async function startPiWithGitHubRouted(
   );
 }
 
-Given(
-  "pi runs with github's requests routed to the stand-ins",
-  { timeout: PROFILE_PI_START_TIMEOUT_MS },
-  async function (this: ScenarioWorld): Promise<void> {
-    await startPiWithGitHubRouted(this);
-  },
-);
-
-// A scenario with no sign-in stand-in: the redirect names only the git host,
-// so a sign-in request is refused and logged.
+// The redirect names only the git host, so a request to any other
+// github.com address, such as a returning sign-in, is refused and logged.
 Given(
   "pi runs with github's requests routed to the git host",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
@@ -581,30 +539,6 @@ Then(
     assert.deepStrictEqual(carrying, [], `a request the git host received carries ${secret}`);
   },
 );
-
-// The sign-in requests of the last `When`.
-async function signInRequestsOfLastWhen(world: ScenarioWorld): Promise<DeviceFlowRequest[]> {
-  const requests = await readDeviceFlowRequests(world.profileHarness());
-  return requests.slice(world.harnessLogLinesBeforeLastWhen(DEVICE_FLOW_LOG));
-}
-
-Then(
-  "github's sign-in receives these requests:",
-  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
-    const rows = (await signInRequestsOfLastWhen(this)).map((request) => [
-      request.method,
-      request.path,
-      Object.entries(request.form)
-        .map(([key, value]) => `${key}=${value}`)
-        .join(", "),
-    ]);
-    assert.deepStrictEqual([["method", "path", "form"], ...rows], table.raw());
-  },
-);
-
-Then("github's sign-in receives no request", async function (this: ScenarioWorld): Promise<void> {
-  assert.deepStrictEqual(await signInRequestsOfLastWhen(this), []);
-});
 
 // The `loaded` lines are not requests; every routed and refused one is a row.
 Then(
