@@ -1449,6 +1449,8 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.version, "0.0.2");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, projectTree.pluginRoot);
+  // D-SG-27: the add gets none of the ledger's credential, sign-in, or memo
+  // options, so its bundle carries the production credential surface.
   assert.deepStrictEqual(recordCalls, [
     {
       state: seeded.state,
@@ -1458,9 +1460,6 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
       ctx: options.ctx,
       run: options.run,
       removalOps: options.removalOps,
-      credentialOps: credentials.credentialOps,
-      deviceFlowHttp: deviceFlow.http,
-      authMemo,
     },
   ]);
   assert.deepStrictEqual(addedMarketplaces, [

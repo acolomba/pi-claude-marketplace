@@ -47,8 +47,6 @@ import {
 } from "../../features/lib/github-device-flow/extension.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { SshGitHost } from "../../features/lib/ssh-git-host/host.ts";
-import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
-import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import {
   createGitTestDirectory,
   createGitTestRepository,
@@ -163,22 +161,11 @@ async function createPrintAdd(t: TestContext) {
   } as const;
   await saveState(locations.extensionRoot, priorState);
   const priorBytes = await readFile(locations.stateJsonPath, "utf8");
-  const credentials = createCredentialOpsFake({
-    boundary: "memory",
-    credentials: [["other.example", { username: "foreign", password: "foreign-secret" }]],
-  });
-  const deviceFlow = createDeviceFlowFake({
-    boundary: "memory",
-    network: "disabled",
-    deviceCode: {
-      device_code: "device-secret",
-      user_code: "CODE",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 1,
-      interval: 0,
-    },
-    requestCodeError: new Error("device HTTP must not run"),
-  });
+  // AUTH-09 / NFR-5: a Device Flow request would reach github.com through the
+  // global fetch, so the case refuses every fetch and checks that none ran.
+  const deviceFlowFetch = t.mock.method(globalThis, "fetch", () =>
+    Promise.reject(new Error("device HTTP must not run")),
+  );
   const notifications: string[] = [];
   const stagingRoot = join(locations.extensionRoot, "sources-staging");
   const stagingDirs: string[] = [];
@@ -198,8 +185,6 @@ async function createPrintAdd(t: TestContext) {
     cwd: environment.cwd,
     rawSource: "owner/private",
     completionCache: createCompletionCache(),
-    credentialOps: credentials.credentialOps,
-    deviceFlowHttp: deviceFlow.http,
     gitHubSsh: { probe: () => probeGitHubSsh(standIn.gitProcess) },
     gitOps: {
       ...gitOps,
@@ -214,8 +199,7 @@ async function createPrintAdd(t: TestContext) {
     locations,
     priorState,
     priorBytes,
-    credentials,
-    deviceFlow,
+    deviceFlowFetch,
     notifications,
     requests: () => standIn.host.requestsSince(window).requests,
     sshLaunches: async () =>
@@ -247,8 +231,7 @@ async function assertUncommittedPrintAdd(fixture: Awaited<ReturnType<typeof crea
   // stopped the clone with no ssh attempt (MODE-04).
   assert.deepStrictEqual(await fixture.sshLaunches(), [GITHUB_PROBE_ARGV]);
   assert.strictEqual(fixture.stagingDirs.length, 1);
-  assert.deepStrictEqual(fixture.credentials.calls, { fill: [], approve: [], reject: [] });
-  assert.deepStrictEqual(fixture.deviceFlow.calls, { requestCode: [], pollToken: [] });
+  assert.strictEqual(fixture.deviceFlowFetch.mock.callCount(), 0);
 }
 
 test("a staging cleanup failure retains the print refusal as the primary cause", async (t) => {

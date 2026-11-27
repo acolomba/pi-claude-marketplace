@@ -33,7 +33,6 @@ import {
   createMachineNotificationBoundary,
   createNotificationBoundary,
 } from "../edge/notification-boundary.ts";
-import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
@@ -134,7 +133,6 @@ async function addRepo(
       allowedRemoteUrls: [REPO_URL],
       cloneFixture: { boundary: "local", sourceDir: scope.fixture },
     }).gitOps,
-    credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
     local,
   });
 }

@@ -161,11 +161,11 @@ interface ClassifiedSeam {
 }
 
 /*
- * The modules the classified seams live on. The two marketplace ledgers carry
- * the `MARKETPLACE_LEDGER_TARGETS` annotation, so naming a path that group does
- * not hold stops compiling (D-07-05). The four plugin owners are spelled here:
- * `eslint.config.js` gates them by glob, so there is no list this file could
- * read a type from.
+ * The modules the classified seams live on. The marketplace update ledger
+ * carries the `MARKETPLACE_LEDGER_TARGETS` annotation, so naming a path that
+ * group does not hold stops compiling (D-07-05). The four plugin owners are
+ * spelled here: `eslint.config.js` gates them by glob, so there is no list
+ * this file could read a type from.
  */
 const INSTALL_FLOW_REL =
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts";
@@ -173,8 +173,6 @@ const FETCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.t
 const PLUGIN_INFO_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 const REINSTALL_FLOW_REL =
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
-const MARKETPLACE_ADD_REL: (typeof MARKETPLACE_LEDGER_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 const MARKETPLACE_UPDATE_REL: (typeof MARKETPLACE_LEDGER_TARGETS)[number] =
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 
@@ -186,7 +184,7 @@ const MARKETPLACE_UPDATE_REL: (typeof MARKETPLACE_LEDGER_TARGETS)[number] =
  * install, fetch, info, and reinstall owners. `stateTransaction` and
  * `removeDataDir` are the promoted reinstall collaborators that replaced the
  * two `__`-prefixed bags. `credentialOps` and
- * `deviceFlowHttp` are the marketplace ledgers' auth ports.
+ * `deviceFlowHttp` are the marketplace update ledger's auth ports.
  */
 const CLASSIFIED_SEAMS: ReadonlyArray<ClassifiedSeam> = [
   { member: "cloneCacheSeam", target: INSTALL_FLOW_REL },
@@ -195,8 +193,6 @@ const CLASSIFIED_SEAMS: ReadonlyArray<ClassifiedSeam> = [
   { member: "cloneCacheSeam", target: REINSTALL_FLOW_REL },
   { member: "stateTransaction", target: REINSTALL_FLOW_REL },
   { member: "removeDataDir", target: REINSTALL_FLOW_REL },
-  { member: "credentialOps", target: MARKETPLACE_ADD_REL },
-  { member: "deviceFlowHttp", target: MARKETPLACE_ADD_REL },
   { member: "credentialOps", target: MARKETPLACE_UPDATE_REL },
   { member: "deviceFlowHttp", target: MARKETPLACE_UPDATE_REL },
 ];

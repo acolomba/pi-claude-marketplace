@@ -2,14 +2,13 @@
 //
 // Six internal cases (ITSCOPE-01) of the mirror seeding that follows
 // `marketplace add` (D-SEED-01). The real `addMarketplace` runs through the
-// git double, and each case reads `plugin-clones/` and the recorded git and
-// credential calls. The git double records every git operation it serves
-// except `listRemotes`. A same-repository plugin gets its mirror from the one
-// marketplace clone, a path marketplace seeds with none of the git calls the
-// double records, a plugin from another repository stays unseeded, a
-// reachable pin seeds and an unreachable one does not, the mirror keeps the
-// real remote url, and clone garbage collection removes a mirror that nothing
-// uses. No command lists
+// git double, and each case reads `plugin-clones/` and the recorded git calls.
+// The git double records every git operation it serves except `listRemotes`.
+// A same-repository plugin gets its mirror from the one marketplace clone, a
+// path marketplace seeds with none of the git calls the double records, a
+// plugin from another repository stays unseeded, a reachable pin seeds and an
+// unreachable one does not, the mirror keeps the real remote url, and clone
+// garbage collection removes a mirror that nothing uses. No command lists
 // `plugin-clones/`. What a user sees is in
 // `features/marketplace/url-source.feature`: the plugin is available right
 // after the add, and its install makes no git request.
@@ -37,7 +36,6 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { checkoutFailure, createGitOpsFake, recordedCalls } from "../platform/git-ops-fake.ts";
 import { gitTestCheckout, initGitTestCheckout } from "../platform/git-test-repository.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
@@ -82,10 +80,6 @@ function notificationBoundary(name: string): NotificationBoundary {
     notifications.push({ message, ...(severity === undefined ? {} : { severity }) });
   });
   return { ctx, notifications, run: runWithNothingLoaded(), ui };
-}
-
-function credentialOps() {
-  return createCredentialOpsFake({ boundary: "memory" });
 }
 
 function gitOpsAdapter(initial: GitOpsAdapterOptions = {}) {
@@ -170,7 +164,6 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
       plugins: [gitSubdirEntry(REPO_URL)],
     });
     const boundary = notificationBoundary("URL seed");
-    const credentials = credentialOps();
     const gitBoundary = gitOpsAdapter({ fixtureSourceDir: fixture });
 
     // act
@@ -182,7 +175,6 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
       completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
-      credentialOps: credentials.credentialOps,
     });
 
     // assert
@@ -203,7 +195,6 @@ test("seeds a same-repository URL plugin mirror with one marketplace clone", asy
       "available",
     );
     assert.deepStrictEqual(boundary.notifications, [{ message: "● mp [project] (added)" }]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -217,7 +208,6 @@ test("seeds a matching path marketplace without network operations", async () =>
       plugins: [gitSubdirEntry(REPO_URL)],
     });
     const boundary = notificationBoundary("path seed");
-    const credentials = credentialOps();
     const gitBoundary = gitOpsAdapter();
 
     // act
@@ -229,7 +219,6 @@ test("seeds a matching path marketplace without network operations", async () =>
       completionCache: createCompletionCache(),
       rawSource: checkout,
       gitOps: gitBoundary.gitOps,
-      credentialOps: credentials.credentialOps,
     });
 
     // assert
@@ -246,7 +235,6 @@ test("seeds a matching path marketplace without network operations", async () =>
       ),
       "available",
     );
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -260,7 +248,6 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
       plugins: [gitSubdirEntry(OTHER_URL)],
     });
     const boundary = notificationBoundary("different repository");
-    const credentials = credentialOps();
     const gitBoundary = gitOpsAdapter({ fixtureSourceDir: fixture });
 
     // act
@@ -272,7 +259,6 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
       completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
-      credentialOps: credentials.credentialOps,
     });
 
     // assert
@@ -292,7 +278,6 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
       gitBoundary.state.calls.clone.map(({ url }) => url),
       [REPO_URL],
     );
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -313,7 +298,6 @@ test("seeds a reachable pin and leaves an unreachable pin unseeded", async () =>
         const boundary = notificationBoundary(
           checkoutThrows === undefined ? "reachable" : "unreachable",
         );
-        const credentials = credentialOps();
         const gitBoundary = gitOpsAdapter({
           fixtureSourceDir: fixture,
           ...(checkoutThrows === undefined ? {} : { checkoutThrows }),
@@ -326,13 +310,12 @@ test("seeds a reachable pin and leaves an unreachable pin unseeded", async () =>
           completionCache: createCompletionCache(),
           rawSource: REPO_URL,
           gitOps: gitBoundary.gitOps,
-          credentialOps: credentials.credentialOps,
         });
         const clone = await locations.pluginCloneDir(pluginCloneKey(REPO_URL, PIN_40));
         const exists = await pathExists(clone);
         verify(boundary.ctx);
         verify(boundary.ui);
-        return { exists, gitCalls: gitBoundary.state.calls, credentialCalls: credentials.calls };
+        return { exists, gitCalls: gitBoundary.state.calls };
       }),
     ),
   );
@@ -346,13 +329,6 @@ test("seeds a reachable pin and leaves an unreachable pin unseeded", async () =>
     observations.map(({ gitCalls }) => gitCalls.clone.map(({ url }) => url)),
     [[REPO_URL], [REPO_URL]],
   );
-  assert.deepStrictEqual(
-    observations.map(({ credentialCalls }) => credentialCalls),
-    [
-      { approve: [], fill: [], reject: [] },
-      { approve: [], fill: [], reject: [] },
-    ],
-  );
 });
 
 test("preserves the real remote URL on the seeded mirror", async () => {
@@ -363,7 +339,6 @@ test("preserves the real remote URL on the seeded mirror", async () => {
       plugins: [gitSubdirEntry(REPO_URL)],
     });
     const boundary = notificationBoundary("origin remote");
-    const credentials = credentialOps();
     const gitBoundary = gitOpsAdapter({ fixtureSourceDir: fixture });
 
     // act
@@ -375,7 +350,6 @@ test("preserves the real remote URL on the seeded mirror", async () => {
       completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
-      credentialOps: credentials.credentialOps,
     });
 
     // assert
@@ -388,7 +362,6 @@ test("preserves the real remote URL on the seeded mirror", async () => {
       gitBoundary.state.calls.clone.map(({ url }) => url),
       [REPO_URL],
     );
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
     verify(boundary.ui);
   });
@@ -402,7 +375,6 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
       plugins: [gitSubdirEntry(REPO_URL)],
     });
     const boundary = notificationBoundary("garbage collection");
-    const credentials = credentialOps();
     const gitBoundary = gitOpsAdapter({ fixtureSourceDir: fixture });
     await addMarketplace({
       ctx: boundary.ctx,
@@ -412,7 +384,6 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
       completionCache: createCompletionCache(),
       rawSource: REPO_URL,
       gitOps: gitBoundary.gitOps,
-      credentialOps: credentials.credentialOps,
     });
     const mirror = await locations.pluginCloneDir(pluginMirrorKey(REPO_URL));
     assert.strictEqual(await pathExists(mirror), true);
@@ -426,7 +397,6 @@ test("lets normal clone garbage collection sweep an unreferenced seeded mirror",
       gitBoundary.state.calls.clone.map(({ url }) => url),
       [REPO_URL],
     );
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(boundary.ctx);
     verify(boundary.ui);
   });
