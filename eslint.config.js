@@ -145,7 +145,7 @@ const LOCAL_PLUGIN = {
         schema: [],
         messages: {
           found:
-            "GHB-02: a github.com literal belongs in shared/github-base-url.ts. Disable this line with a reason only at a parser host comparison, user-facing reason text, the github.com display string, or a Device Flow endpoint.",
+            "GHB-02: a github.com literal belongs in shared/github-base-url.ts. Disable this line with a reason only at a parser host comparison, user-facing reason text, or the github.com display string.",
         },
       },
       create(context) {
