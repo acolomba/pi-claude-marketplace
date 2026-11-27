@@ -13,63 +13,6 @@ Two reviewers split the diff. Overlaps: A WR-01 and B WR-05 share one root cause
 
 # Part A: source and gate config
 
-phase: 05-credential-surface
-reviewed: 2026-11-27T00:00:00Z
-depth: deep
-files_reviewed: 44
-files_reviewed_list:
-  - eslint.config.js
-  - extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts
-  - extensions/pi-claude-marketplace/domain/github-transport.ts
-  - extensions/pi-claude-marketplace/domain/source.ts
-  - extensions/pi-claude-marketplace/orchestrators/auth-host.ts
-  - extensions/pi-claude-marketplace/orchestrators/github-transport.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts
-  - extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-cascade-context.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-dependency-ledger.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-ledger.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
-  - extensions/pi-claude-marketplace/platform/git-failure-kind.ts
-  - extensions/pi-claude-marketplace/platform/git-process.ts
-  - extensions/pi-claude-marketplace/platform/git.ts
-  - extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts
-  - extensions/pi-claude-marketplace/shared/errors.ts
-  - extensions/pi-claude-marketplace/shared/fs-utils.ts
-  - extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts
-  - extensions/pi-claude-marketplace/shared/notification-dispatch.ts
-  - extensions/pi-claude-marketplace/shared/notification-grammar.ts
-  - extensions/pi-claude-marketplace/shared/notification-json.ts
-  - extensions/pi-claude-marketplace/shared/notification-resolve.ts
-  - extensions/pi-claude-marketplace/shared/notification-types.ts
-  - extensions/pi-claude-marketplace/shared/notification-wire.ts
-  - rule-packs/architecture.json
-findings:
-  critical: 0
-  warning: 3
-  info: 4
-  total: 7
-  necessity: 2
-status: issues_found
----
 
 # Phase 5 (05-credential-surface): Code Review Report
 
@@ -316,19 +259,6 @@ _Depth: deep_
 
 # Part B: tests, harness and features
 
-phase: 05-credential-surface
-reviewed: 2026-11-27T00:00:00Z
-depth: standard
-files_reviewed: 84
-files_reviewed_list:
-  - see /tmp/claude-0/-home-user-pi-claude-marketplace/f641c099-e3f5-563d-9ac5-9922f1b9e06a/scratchpad/p5-review-B.txt (84 files under test/, features/; diff 9debd0d..HEAD)
-findings:
-  critical: 1
-  warning: 6
-  info: 6
-  total: 13
-status: issues_found
----
 
 # Phase 5: Code Review Report (tests, harness, behavioral scenarios)
 
