@@ -407,7 +407,7 @@ Plans:
   1. A user whose machine holds an SSH key or agent, or a git credential helper such as gh's or Git Credential Manager, adds a private marketplace and installs from it with no prompt from the extension; with only `GITHUB_TOKEN` or `GH_TOKEN` set and no helper, the private clone fails as an auth failure, and the token appears in no URL, header, or argument (SG-AUTH-01).
   2. Device Flow is gone, with no device-code prompt on any command, or it remains in the form discuss chose (Q2); either way a load with `autoapply` on and the background autoupdate pass never wait for user input, and PROJECT.md restates the AAP, autoapply, and D-PL8-12 rules for the outcome (SG-AUTH-02).
   3. A user who stored a token through Device Flow before the upgrade still clones and updates over HTTPS with no action, the extension deletes no stored credential, and the one-time notice, if discuss chose one (Q5), appears once; cucumber scenarios pin each (SG-AUTH-03).
-**Plans**: 11/13 plans executed in 13 sequential waves (each plan depends on the one before it)
+**Plans**: 12/13 plans executed in 13 sequential waves (each plan depends on the one before it)
 
 Plans:
 **Wave 1**
@@ -444,7 +444,7 @@ Plans:
 - [x] 05-11-PLAN.md — The print-mode refusal error and the `credential` git subcommand with its stdin input are removed (wave 11)
 
 **Wave 12** *(blocked on Wave 11 completion)*
-- [ ] 05-12-PLAN.md — The harness becomes the GitHub redirect with one route, and every comment and test title that still describes Device Flow is reworded (wave 12)
+- [x] 05-12-PLAN.md — The harness becomes the GitHub redirect with one route, and every comment and test title that still describes Device Flow is reworded (wave 12)
 
 **Wave 13** *(blocked on Wave 12 completion)*
 - [ ] 05-13-PLAN.md — Records and docs: D-SG-27 to D-SG-29 and the dated amendments in PROJECT.md, the codebase map, README.md and README.es.md, and CHANGELOG.md (wave 13)
@@ -499,7 +499,7 @@ Plans:
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
 | 4. SSH Sources and Transport Selection | 26/26 | Complete    | 2026-11-27 |
-| 5. Credential Surface | 11/13 | In Progress | - |
+| 5. Credential Surface | 12/13 | In Progress | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |
 | 8. Close | 0/TBD | Not started | - |
