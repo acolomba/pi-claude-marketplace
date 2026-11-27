@@ -622,7 +622,7 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
-  test("classifies a cancelled authentication flow without exposing its cause", () => {
+  test("classifies a cancelled credential lookup without exposing its cause", () => {
     // arrange
     const failure = new GitCommandError(
       { kind: "https-auth", detail: "no-credential" },

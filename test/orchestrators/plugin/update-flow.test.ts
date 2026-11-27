@@ -10996,7 +10996,7 @@ test("NFR-3: a clone the host refused classifies as {authentication required}, n
         recordedSha: SHA_OLD,
       });
 
-      // D-SG-14: the clone's own https-auth failure, as git reports it when
+      // GAUTH-04: the clone's own https-auth failure, as git reports it when
       // the host refuses the request.
       const authError = new GitCommandError(
         { kind: "https-auth", detail: "no-credential" },

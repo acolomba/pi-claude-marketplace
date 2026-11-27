@@ -7138,7 +7138,7 @@ test("FTCH-06: info --fetch folds an https-auth seam throw to `{authentication r
   });
 });
 
-test("FTCH-06: info --fetch folds a denied/expired Device Flow to `{authentication required}`", async () => {
+test("FTCH-06: info --fetch folds a clone with no credential to `{authentication required}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -7153,8 +7153,8 @@ test("FTCH-06: info --fetch folds a denied/expired Device Flow to `{authenticati
       },
     });
 
-    // D-SG-14: a denied/expired Device Flow leaves the clone's own https-auth
-    // failure with no credential.
+    // GAUTH-04: git found no credential, so the clone fails as https-auth
+    // with no credential.
     const canceledErr = cloneFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps } = createGitOps({ cloneThrows: canceledErr });
     const { ctx, run, notifications } = makeCtx();

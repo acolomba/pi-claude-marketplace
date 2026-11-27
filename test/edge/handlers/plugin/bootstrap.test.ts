@@ -197,11 +197,10 @@ function createBootstrapDeps(
  *
  * The door is not `https.request`: system git is a child process that opens
  * its own connections, so a spy on Node's HTTP client records zero whatever
- * the handler does. Nor is it `globalThis.fetch`. The bootstrap source IS a
- * github one, so the device flow in `domain/github-auth.ts` is the one path
- * that would use that door; it is not watched because no case reaches it:
- * the flow runs only after a git command reports that it found no credential
- * (D-SG-14), and the injected port runs no git command.
+ * the handler does. Nor is it `globalThis.fetch`, whose only caller is the
+ * hosted catalog download in `platform/hosted-manifest-fetch.ts`: the
+ * bootstrap source is a github repository, not a hosted catalog, so no case
+ * reaches it.
  */
 function trapGitProcess(t: TestContext): () => number {
   const runSpy = t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>

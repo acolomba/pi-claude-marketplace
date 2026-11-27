@@ -79,9 +79,10 @@
 // asserted over an input that would need the network to resolve any further --
 // not over an all-path-source fixture where no code path could reach the
 // transport at all. `globalThis.fetch` is deliberately NOT the door watched
-// here: the git transport reaches the wire through `simple-get` ->
-// `https.request`, and this repo's only `fetch` caller is the device-flow
-// credential path, which no list invocation enters. This verb has no flag that
+// here: its only production caller is the hosted catalog download in
+// `platform/hosted-manifest-fetch.ts`, which no list invocation enters, and git
+// runs as a child process that `platform/git-process.ts` starts (D-SG-01). This
+// verb has no flag that
 // turns materialization on, so unlike the info verb there is no positive control
 // available: the zero is a regression guard on NFR-5, and the `(remote)` row
 // beside it is what says the workflow chose the offline answer.

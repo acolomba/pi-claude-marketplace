@@ -1607,7 +1607,7 @@ test("GHB-03: fetching a GitHub-source plugin on an invalid base fails the comma
   });
 });
 
-test("D-SG-14: a clone the host refused fails the row as authentication required", async () => {
+test("GAUTH-04: a clone the host refused fails the row as authentication required", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://github.com/acme/stale";

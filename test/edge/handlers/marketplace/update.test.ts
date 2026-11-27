@@ -115,7 +115,7 @@ interface FreshnessCalls {
   readonly lsRemotes: readonly DescribedLsRemoteCall[];
 }
 
-/** The host every seeded url source sits on. The provider registry does not claim it. */
+/** The host every seeded url source sits on. */
 const SOURCE_HOST = "gitlab.example.com";
 
 /** The commit each seeded checkout's `HEAD` names and its remote advertises for `main`. */
@@ -177,10 +177,9 @@ interface SeededClones {
  *
  * The door is not `https.request`: system git is a child process that opens
  * its own connections, so a spy on Node's HTTP client records zero whatever
- * the handler does. Nor is it `globalThis.fetch`, whose callers here are the
- * device flow in `domain/github-auth.ts` and the hosted catalog download: no
- * seeded source sits on a host the provider registry claims or names a hosted
- * catalog, so no case reaches either.
+ * the handler does. Nor is it `globalThis.fetch`, whose only caller is the
+ * hosted catalog download in `platform/hosted-manifest-fetch.ts`: no seeded
+ * source names a hosted catalog, so no case reaches it.
  */
 function trapGitProcess(t: TestContext): () => number {
   const runSpy = t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>
@@ -211,9 +210,8 @@ function createCurrentGitOps(): GitOpsFake {
 /**
  * D-SG-10: the freshness checks that refreshing `checkouts` in order records:
  * one `HEAD` read of each checkout and one `ls-remote` of its remote's `main`.
- * The `ls-remote` carries a bundle bound to the source's host even though the
- * provider registry does not claim it, so a credential already in the user's
- * helper is reachable (GAUTH-03).
+ * The `ls-remote` carries a bundle bound to the source's host, so a credential
+ * already in the user's helper is reachable (GAUTH-03).
  */
 function refreshesOf(...checkouts: readonly SeededCheckout[]): FreshnessCalls {
   return {
@@ -293,9 +291,8 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
 /**
  * Seed one url-source marketplace pinned to `main` and return its checkout.
  * The refresh threads a bundle bound to `SOURCE_HOST`, so the git port
- * receives an `ls-remote` carrying that bundle. The provider registry does not
- * claim the host, so the bundle's interactive half resolves without a device
- * flow and the credential helper is the only auth path.
+ * receives an `ls-remote` carrying that bundle, and the user's own credential
+ * helper is the only auth path (D-SG-05).
  */
 async function seedMarketplace(opts: {
   readonly cwd: string;

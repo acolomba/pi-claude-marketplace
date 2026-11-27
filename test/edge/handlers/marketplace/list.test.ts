@@ -75,10 +75,11 @@ interface HermeticScope {
  * rise, and none is. The value is that a dial-out acquired later fails the case
  * where it happens.
  *
- * The door is `https.request` because that is the one the git transport opens:
- * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
- * `https.request`. `globalThis.fetch` is NOT watched -- its only production
- * caller in this repository is the device flow in `domain/github-auth.ts`,
+ * The door is `https.request`, Node's in-process HTTPS client. git runs as a
+ * child process that `platform/git-process.ts` starts (D-SG-01), which the
+ * trap does not see, so the trap guards in-process HTTP only.
+ * `globalThis.fetch` is NOT watched -- its only production caller is the
+ * hosted catalog download in `platform/hosted-manifest-fetch.ts`,
  * which this closure does not reach.
  */
 function installNetworkTrap(t: TestContext): void {

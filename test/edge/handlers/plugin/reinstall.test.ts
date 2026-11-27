@@ -69,11 +69,11 @@
 // DELETED rather than overwritten, because `getAgentDir()` reads it ahead of
 // `homedir()` and an ambient value would defeat a hermetic HOME (SC-1).
 //
-// NFR-5: the git transport door is `https.request`, replaced by a counting
-// fail-fast throw and asserted at zero in every case. `globalThis.fetch` is
-// deliberately NOT the door watched -- the git transport reaches the wire
-// through `simple-get` -> `https.request`, and this repo's only `fetch` caller
-// is the device-flow credential path, which no reinstall invocation enters. One
+// NFR-5: `https.request`, Node's in-process HTTPS client, is replaced by a
+// counting fail-fast throw and asserted at zero in every case.
+// `globalThis.fetch` is deliberately NOT the door watched -- its only
+// production caller is the hosted catalog download in
+// `platform/hosted-manifest-fetch.ts`, which no reinstall invocation enters. One
 // case seeds a COLD git source as the installed plugin, which is the input that
 // would need the network to resolve any further; the no-network resolver answers
 // first and the row renders offline. Nothing in the reachable input space turns

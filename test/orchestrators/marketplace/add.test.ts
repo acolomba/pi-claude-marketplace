@@ -399,7 +399,7 @@ function hostAnswer(statusCode: number): GitFailure {
   }
 }
 
-/** D-SG-14: a clone whose Device Flow sign-in failed, after git found no credential. */
+/** GAUTH-04: a clone that failed because git found no credential to send. */
 function noCredentialFailure(): GitCommandError {
   return new GitCommandError(
     { kind: "https-auth", detail: "no-credential" },
@@ -6313,12 +6313,12 @@ test("D-76-09 orchestrated mode -- a gone repository returns the source-missing 
   });
 });
 
-test("GAUTH-02: a declined/failed Device Flow renders (failed) {authentication required} via notify(), not a raw throw or {unparseable}", async () => {
+test("GAUTH-04: a github add whose git found no credential renders (failed) {authentication required} via notify(), not a raw throw or {unparseable}", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
-    // D-SG-14: a denied/expired Device Flow (or a poll network error) leaves
-    // the clone's own https-auth failure, NOT a network failure.
+    // GAUTH-04: git found no credential for the github host, so the clone
+    // fails as https-auth, NOT as a network failure.
     const authError = noCredentialFailure();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
@@ -6349,7 +6349,7 @@ test("GAUTH-02: a declined/failed Device Flow renders (failed) {authentication r
   });
 });
 
-test("GAUTH-02 orchestrated mode -- a failed Device Flow returns { status: 'failed', reason: 'authentication required' }, not the mislabeled 'unparseable'", async () => {
+test("GAUTH-04 orchestrated mode -- a github add whose git found no credential returns { status: 'failed', reason: 'authentication required' }, not the mislabeled 'unparseable'", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
@@ -6622,7 +6622,7 @@ test("GHB-01: an orchestrated GitHub add failing under the override still classi
   });
 });
 
-test("D-79-03: a url add that 401s on a host with no Device Flow renders the bare (failed) {authentication required} row with NO cause line", async () => {
+test("D-79-03: a url add that 401s renders the bare (failed) {authentication required} row with NO cause line", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
@@ -6661,7 +6661,7 @@ test("D-79-03: a url add that 401s on a host with no Device Flow renders the bar
   });
 });
 
-test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a github source with the provider auth bundle", async () => {
+test("D-76-02: an add whose host case-folds to github.com clones as a github source with a github.com auth bundle", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -6670,8 +6670,8 @@ test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a 
     });
 
     // D-76-02: the parser folds the host's case, so this is a `github` source
-    // and clones at the canonical github.com url with the GitHub provider's
-    // bundle (unlike the no-provider gitlab.example.com adds above).
+    // and clones at the canonical github.com url with a bundle bound to
+    // github.com (GAUTH-03).
     // act
     await addMarketplace({
       ctx,
@@ -6692,7 +6692,7 @@ test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a 
   });
 });
 
-test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the GitLab provider's auth bundle attached to the same clone call", async () => {
+test("GAUTH-03 / MURL-08: a gitlab.com url add clones the URL as typed WITH an auth bundle bound to gitlab.com on the same clone call", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -6720,8 +6720,8 @@ test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the 
     // D-2-01: no `.git` is appended for a non-github host; the wire URL is
     // sent exactly as typed.
     assert.equal(cloneCall.url, "https://gitlab.com/team/mp");
-    // GAUTH-02: the clone carries a bundle bound to gitlab.com, the host the
-    // registry claims for the GitLab provider.
+    // GAUTH-03: the clone carries a bundle bound to gitlab.com, the url's
+    // host.
     assert.ok(cloneCall.auth, "gitlab.com must attach the auth bundle of its host");
     assert.equal(cloneCall.auth.host, "gitlab.com");
   });

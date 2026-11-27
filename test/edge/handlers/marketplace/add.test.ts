@@ -12,12 +12,9 @@
 // the flag scan and the positional parse -- so two rejection cases are needed to
 // prove both received it, one per consumer.
 //
-// Every seeded source is `https://gitlab.example.com/team/alpha#main`, a url on a
-// host with no registered auth provider. That is the shape that puts the git port
-// on the clone path at all (a path source never reaches git) AND keeps the clone
-// options structured-clonable: a github source resolves the GitHub provider and
-// attaches a credential bundle whose functions make the fake's `structuredClone`
-// recorder throw.
+// Every seeded source is `https://gitlab.example.com/team/alpha#main`, a url
+// source. That is the shape that puts the git port on the clone path at all (a
+// path source never reaches git).
 //
 // The staging directory carries a `randomUUID()` leaf, so the recorded `dir`
 // cannot be a hand-authored literal. The recorder is still compared as one whole
@@ -196,10 +193,9 @@ interface HermeticScope {
  *
  * The door is not `https.request`: system git is a child process that opens
  * its own connections, so a spy on Node's HTTP client records zero whatever
- * the handler does. Nor is it `globalThis.fetch`, whose callers here are the
- * device flow in `domain/github-auth.ts` and the hosted catalog download:
- * every seeded source is a git url on a host with no registered auth
- * provider, so no case reaches either.
+ * the handler does. Nor is it `globalThis.fetch`, whose only caller is the
+ * hosted catalog download in `platform/hosted-manifest-fetch.ts`: every
+ * seeded source is a git url, so no case reaches it.
  */
 function trapGitProcess(t: TestContext): () => number {
   const runSpy = t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>

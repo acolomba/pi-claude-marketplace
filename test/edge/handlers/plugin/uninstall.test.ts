@@ -31,9 +31,11 @@
 // cannot defeat the hermetic home.
 //
 // NFR-5 network half: `https.request` is replaced by a counting fail-fast throw
-// and read back at zero in every case. That is the door the git transport uses
-// (`simple-get` -> `https.request`); this repo's only `globalThis.fetch` caller
-// is the device-flow credential path, which no uninstall enters. Unlike the
+// and read back at zero in every case. It is Node's in-process HTTPS client;
+// git runs as a child process that `platform/git-process.ts` starts (D-SG-01),
+// which the trap does not see. This repo's only `globalThis.fetch` caller is
+// the hosted catalog download in `platform/hosted-manifest-fetch.ts`, which no
+// uninstall enters. Unlike the
 // sibling verbs that carry a cold git source in their fixture, NOTHING in the
 // uninstall path can reach a transport at all -- the door is in the graph only
 // because `orchestrators/marketplace/shared.ts`, which supplies the unstage

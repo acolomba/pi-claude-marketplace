@@ -54,11 +54,12 @@
 // and the sibling apply path DOES write a migrated config from the same inputs,
 // so the assertion has a real target on the delegating path. The NETWORK half is
 // a counting fail-fast replacement for `https.request`, asserted at zero in every
-// case. `globalThis.fetch` is deliberately NOT the door watched: the git
-// transport reaches the wire through `simple-get` -> `https.request`, and this
-// repo's only `fetch` caller is the device-flow credential path, which no
-// pending invocation enters. One fixture declares a COLD git source as a planned
-// install, which is the input this verb resolves through the no-network
+// case. `globalThis.fetch` is deliberately NOT the door watched: its only
+// production caller is the hosted catalog download in
+// `platform/hosted-manifest-fetch.ts`, which no pending invocation enters. git
+// runs as a child process that `platform/git-process.ts` starts (D-SG-01),
+// which the trap does not see, so the trap guards in-process HTTP only. One
+// fixture declares a COLD git source as a planned install, which is the input this verb resolves through the no-network
 // resolver, so the zero is asserted over an input that would need the network to
 // resolve any further. This verb has no flag that turns materialization on, so
 // no positive control is available: the zero is a regression guard on NFR-5, and

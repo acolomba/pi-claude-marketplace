@@ -135,11 +135,12 @@ function manifestFor(scope: Scope, marketplace: string): readonly PluginIndexRow
  * the watched door was `globalThis.fetch` and turned five cases red once the
  * door was this one.
  *
- * The door is `https.request` because that is the one the git transport opens:
- * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
- * `https.request`. `globalThis.fetch` is NOT watched -- its only production
- * caller in this repository is the device flow in `domain/github-auth.ts`,
- * which is not in this module's closure at all.
+ * The door is `https.request`, Node's in-process HTTPS client. git runs as a
+ * child process that `platform/git-process.ts` starts (D-SG-01), which the
+ * trap does not see, so the trap guards in-process HTTP only.
+ * `globalThis.fetch` is NOT watched -- its only production caller is the
+ * hosted catalog download in `platform/hosted-manifest-fetch.ts`,
+ * which no completion lookup calls.
  */
 function installNetworkTrap(t: TestContext): void {
   t.mock.method(https, "request", (): never => {

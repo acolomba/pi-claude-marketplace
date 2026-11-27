@@ -1885,12 +1885,12 @@ test("MURL-03: an unpinned url source asks the remote for its HEAD and clones it
   });
 });
 
-test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow renders {authentication required} plus the stored-credential cause line", async () => {
+test("GAUTH-04: a cancelled credential lookup on a url host renders {authentication required} plus the stored-credential cause line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-private", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    // D-SG-14: no credential helper answered git, which fails as https-auth
+    // GAUTH-04: no credential helper answered git, which fails as https-auth
     // with no credential -- NOT a network failure.
     const authError = remoteFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps, state } = createGitOps({ remoteThrows: authError });
@@ -1918,7 +1918,7 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
   });
 });
 
-test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same stored-credential cause line", async () => {
+test("GAUTH-04: a 401 challenge on a url host carries the same stored-credential cause line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-401", ref: "main" });
@@ -1983,7 +1983,7 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
   });
 });
 
-test("GAUTH-04: a stored credential that a host with no Device Flow rejects renders {authentication required} without the stored-credential cause line", async () => {
+test("GAUTH-04: a stored credential that a url host rejects renders {authentication required} without the stored-credential cause line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-rejected", ref: "main" });
@@ -2014,14 +2014,13 @@ test("GAUTH-04: a stored credential that a host with no Device Flow rejects rend
   });
 });
 
-test("GAUTH-02: a declined/failed Device Flow on refresh renders {authentication required}, not the lying {network unreachable}", async () => {
+test("GAUTH-04: a github refresh whose git found no credential renders {authentication required}, not the lying {network unreachable}", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    // D-SG-14: a denied/expired Device Flow (or a poll network error) leaves
-    // the run's own https-auth failure, with the sign-in's reason as its
-    // cause -- NOT a network failure.
+    // GAUTH-04: git found no credential for the github host, so the run
+    // fails as https-auth, here with a cause -- NOT a network failure.
     const authError = remoteFailure(
       { kind: "https-auth", detail: "no-credential" },
       new Error("cancelled"),
