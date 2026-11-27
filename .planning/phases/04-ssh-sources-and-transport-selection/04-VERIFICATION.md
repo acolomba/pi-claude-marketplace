@@ -289,6 +289,20 @@ None.
 | D-SG-21, D-SG-25, D-SG-26, the `.json` legacy exception (WINDOWS #129) | Recorded decisions | Maintainer-accepted |
 | WINDOWS #126 (debug line keyed on the note) | Open deviation | Warning. Debug output only. No user-visible row is wrong |
 
+### Gap Review Follow-Up (2026-11-27)
+
+`04-GAP-REVIEW.md` found 0 critical, 4 warnings, and 2 info items after this report. `04-GAP-REVIEW-FIX.md` records the fixes, merged at 1837ce1.
+
+| Item | State at HEAD | Judgement |
+| ---- | ------------- | --------- |
+| WR-G-01 (aborted bulk update repeats the sync note in a second block) | Fixed, with a scenario | Closed |
+| WR-G-02 (unchanged autoupdate drops a plugin re-clone's note) | Fixed, with a scenario | Closed |
+| WR-G-03 (owner/repo check ran on the stripped pair) | Fixed: the check reads the manifest's `repo` as written, as upstream does. D-SG-18 amended | Closed |
+| WR-G-04, IN-G-01 (wrappers, duplicate predicate) | Refactored | Closed |
+| IN-G-02 (apply and import enable rows name no member clone) | Cannot happen: an orchestrated enable runs no dependency cascade (`enable-disable.ts`, `if (!enable \|\| orchestrated)`). A guard scenario pins the dependency's own failed row | Not a gap |
+
+Gate at 1837ce1: static, unpaired, integration, and direct coverage pass. Cucumber adapter: 2414 of 2419 pass; the 5 failures are the known `fd` Glob scenarios in `features/hook/tool-use.feature`. The builtin profile is run separately below.
+
 ### Human Verification Required
 
 These items are in the frontmatter. All automated checks pass, so the status is `human_needed`.
