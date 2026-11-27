@@ -12378,8 +12378,10 @@ test("OQ-7, D-SG-19: info --fetch makes one transport context, and every clone-c
     });
 
     // assert
+    // The two scopes' clone-cache calls settle in either order.
+    const byCall = [...seen].sort((a, b) => a.call.localeCompare(b.call));
     assert.deepStrictEqual(
-      { made: contexts.length, probes: probes.count, seen },
+      { made: contexts.length, probes: probes.count, seen: byCall },
       {
         made: 1,
         probes: 1,
