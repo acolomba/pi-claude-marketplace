@@ -11,15 +11,12 @@ import {
   InvalidGitHubBaseUrlError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setGitHubBaseUrl, setPreferHttps } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
   GitBackedSource,
   GitHubSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 // D-2-01: a url source is queried at the URL as typed, with no `.git` added.
@@ -40,16 +37,6 @@ const GHD_HTTPS_URL = "https://github.com/acme/ghd.git";
 function unforced(t: TestContext): void {
   setGitHubBaseUrl(t, undefined);
   setPreferHttps(t, undefined);
-}
-
-function auth(): DependencyTagProbeOptions["auth"] {
-  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
-  const credentialOps: CredentialOps = {
-    approve: () => Promise.resolve(),
-    fill: () => Promise.resolve(null),
-    reject: () => Promise.resolve(),
-  };
-  return { ctx, run: runWithNothingLoaded(), credentialOps };
 }
 
 /** The dependency's own git source repository. */
@@ -103,7 +90,6 @@ test("pins a satisfying release tag to the object id it resolves to", async () =
     source: pluginSource(),
     range: "^1.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -134,7 +120,6 @@ test("pins the highest satisfying version when several tags satisfy the range", 
     source: pluginSource(),
     range: ">=1.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -163,7 +148,6 @@ test("skips a prefixed tag whose version part is not a version and pins its sibl
     source: pluginSource(),
     range: "^1.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -193,7 +177,6 @@ test("never considers a tag that carries a satisfying version without the releas
     source: pluginSource(),
     range: "^2.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -211,7 +194,6 @@ test("reports no matching tag for a repository advertising no tags at all", asyn
     source: pluginSource(),
     range: "^2.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -235,7 +217,6 @@ test("reports no matching tag when no advertised version satisfies", async () =>
     source: pluginSource(),
     range: ">=3.0.0 <4.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -253,7 +234,6 @@ test("reports the no-match arm when the query ran against the dependency's own s
     source: pluginSource(),
     range: ">=9.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -272,7 +252,6 @@ test("reports the same no-match arm when the query ran against the marketplace r
     source: marketplaceSource(),
     range: ">=9.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -292,7 +271,6 @@ test("returns the failure arm for an unclassifiable listing throw instead of rej
     source: pluginSource(),
     range: "^1.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -314,7 +292,6 @@ test("rethrows an invalid GitHub base URL instead of returning the failure arm",
     source: pluginSource(),
     range: "^1.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -336,7 +313,6 @@ test("classifies an unreachable host on the failure arm", async () => {
     source: pluginSource(),
     range: "^1.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -366,7 +342,6 @@ for (const { statusCode, kind, classification } of [
       source: pluginSource(),
       range: "^1.0.0",
       seam,
-      auth: auth(),
     });
 
     // assert
@@ -391,7 +366,6 @@ test("wraps a listing throw that is not an Error before carrying it on the failu
     source: pluginSource(),
     range: "^1.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -402,16 +376,16 @@ test("wraps a listing throw that is not an Error before carrying it on the failu
   });
 });
 
-test("threads the host credential bundle into the listing for a private source", async (t) => {
+test("threads the bundle of the source's address into the listing for a private source", async (t) => {
   // arrange
   setGitHubBaseUrl(t, undefined);
   setPreferHttps(t, "1");
   const queried: string[] = [];
-  let bundled: boolean | undefined;
+  const bindings: unknown[] = [];
   const seam: DependencyTagListingSeam = {
     listRemoteTags(options) {
       queried.push(options.url);
-      bundled = options.auth !== undefined;
+      bindings.push({ kind: options.auth?.kind, host: options.auth?.host });
       return Promise.resolve([{ name: "formatter--v2.0.0", oid: "aaa1" }]);
     },
   };
@@ -422,7 +396,6 @@ test("threads the host credential bundle into the listing for a private source",
     source: { kind: "github", raw: "acme/formatter", owner: "acme", repo: "formatter" },
     range: "^2.0.0",
     seam,
-    auth: auth(),
   });
 
   // assert
@@ -433,7 +406,7 @@ test("threads the host credential bundle into the listing for a private source",
     version: "2.0.0",
   });
   assert.deepStrictEqual(queried, ["https://github.com/acme/formatter.git"]);
-  assert.strictEqual(bundled, true);
+  assert.deepStrictEqual(bindings, [{ kind: "stored-credential", host: "github.com" }]);
 });
 
 test("serves a second query for the same repository from one listing call", async () => {
@@ -447,7 +420,6 @@ test("serves a second query for the same repository from one listing call", asyn
     range: "^1.0.0",
     seam,
     tagMemo,
-    auth: auth(),
   };
 
   // act
@@ -481,7 +453,6 @@ test("serves a memoized listing without reaching the production seam", async () 
     source: pluginSource(),
     range: "^1.0.0",
     tagMemo,
-    auth: auth(),
   });
 
   // assert
@@ -505,7 +476,6 @@ test("a failed listing is never memoized, so a later attempt re-queries instead 
     range: "^1.0.0",
     seam,
     tagMemo,
-    auth: auth(),
   };
 
   // act
@@ -537,7 +507,6 @@ test("D-SG-20: lists a github owner/repo dependency's tags over ssh and memoizes
     range: "^1.0.0",
     seam,
     tagMemo,
-    auth: auth(),
   });
 
   // assert
@@ -568,7 +537,6 @@ test("D-SG-20: serves a github owner/repo dependency from a listing memoized und
     range: "^1.0.0",
     seam,
     tagMemo,
-    auth: auth(),
   });
 
   // assert
@@ -628,7 +596,6 @@ test("D-SG-20: retries a github dependency's failed ssh listing once over https,
       range,
       seam,
       tagMemo,
-      auth: auth(),
     });
 
   // act
@@ -670,7 +637,6 @@ test("D-SG-20: reports the https attempt's cause and classification when a githu
     range: "^1.0.0",
     seam,
     tagMemo,
-    auth: auth(),
   });
 
   // assert
@@ -715,7 +681,6 @@ for (const { trigger, force } of [
       source: GITHUB_DEPENDENCY,
       range: "^1.0.0",
       seam,
-      auth: auth(),
     });
 
     // assert
@@ -749,7 +714,6 @@ for (const failure of [
       source: GITHUB_DEPENDENCY,
       range: "^1.0.0",
       seam,
-      auth: auth(),
     });
 
     // assert
@@ -794,7 +758,6 @@ for (const { name, source, url } of [
       source,
       range: "^1.0.0",
       seam,
-      auth: auth(),
     });
 
     // assert

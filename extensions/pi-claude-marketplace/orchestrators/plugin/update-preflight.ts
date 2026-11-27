@@ -32,12 +32,7 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import {
-  DEFAULT_CREDENTIAL_OPS,
-  buildCloneAuth,
-  buildStoredCredentialAuth,
-  hostFromCloneUrl,
-} from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { pluginCloneTransport } from "../github-transport.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
@@ -81,7 +76,6 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { RenameOps } from "../marketplace/clone-swap.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
@@ -352,11 +346,10 @@ interface UpdateCloneProbe {
 }
 
 /**
- * `cloneAuth` supplies the host-bound auth bundle for both arms below. The
- * autoupdate cascade calls this probe with no notification context, so it gets
- * `buildStoredCredentialAuth`'s bundle: the Device Flow renders a user code
- * through the context and the cascade has none (D-3-04). Every other caller
- * gets `buildCloneAuth`'s bundle.
+ * `cloneAuth` supplies the host-bound auth bundle for both arms below:
+ * `authBundleFor` of the clone address. The autoupdate cascade calls this
+ * probe with no notification context and gets the same bundle as every other
+ * caller, because the bundle depends only on the address (D-3-04).
  *
  * `refreshSource` is the policy knob the unpinned arm passes to the mirror
  * (D-18-04). The pinned arm never fetches a present clone, so it ignores it.
@@ -368,10 +361,6 @@ interface UpdateCloneProbe {
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
   locations: ScopedLocations,
-  auth: {
-    readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
-    readonly credentialOps: CredentialOps;
-  },
   refreshSource: boolean,
   cloneCandidates: Set<string> | undefined,
   transportFor: (source: GitBackedSource) => CloneTransport,
@@ -381,11 +370,7 @@ function makeUpdateCloneProbe(
     cloneCandidates?.add(key);
   };
 
-  function cloneAuth(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
-    return auth.notification === undefined
-      ? buildStoredCredentialAuth(hostFromCloneUrl(cloneUrl, kind), auth.credentialOps)
-      : buildCloneAuth(cloneUrl, kind, { ...auth, ...auth.notification });
-  }
+  const cloneAuth = authBundleFor;
 
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     // GIT-01 / GIT-04 / GIT-03: the shared unpinned step, under the scope's
@@ -1157,22 +1142,6 @@ function unchangedDirectoryPin(
 }
 
 /**
- * AUTH-09: the ONE credential composition `preparePluginUpdate` shares
- * between the constraint gate and the clone probe -- kept out of its own
- * body for the same cognitive-complexity reason as the other extractions
- * on this file.
- */
-function buildUpdateAuth(options: PreparePluginUpdateOptions): {
-  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
-  readonly credentialOps: CredentialOps;
-} {
-  return {
-    ...(options.notification !== undefined && { notification: options.notification }),
-    credentialOps: DEFAULT_CREDENTIAL_OPS,
-  };
-}
-
-/**
  * D-SG-19: the clone transport of one update source under the command's
  * context: the plan reads the context's force, checks, and platform, and the
  * note goes to its notes under `<plugin>@<marketplace>`. Every update root
@@ -1203,16 +1172,21 @@ function constraintFromVerdict(
 
 /**
  * Builds the constraint gate's own options, threading the run-scoped tag
- * memos in only when the caller supplied them (D-10-18) -- kept out of
- * `preparePluginUpdate`'s own body for the same cognitive-complexity reason
- * as `resolvePinnedUpdateCandidate` above.
+ * memos in only when the caller supplied them (D-10-18), and the caller's
+ * notification context only when it has one, which keeps the gate's tag
+ * queries (NFR-5) -- kept out of `preparePluginUpdate`'s own body for the
+ * same cognitive-complexity reason as `resolvePinnedUpdateCandidate` above.
  */
 function constraintGateOptions(
   options: PreparePluginUpdateOptions,
-  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "requesters" | "seam" | "tagMemo">,
+  base: Omit<
+    UpdateConstraintOptions,
+    "marketplaceTagMemo" | "notification" | "requesters" | "seam" | "tagMemo"
+  >,
 ): UpdateConstraintOptions {
   return {
     ...base,
+    ...(options.notification !== undefined && { notification: options.notification }),
     ...(options.requesters !== undefined && { requesters: options.requesters }),
     excludedVersions: options.excludedVersions,
     ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),
@@ -1258,9 +1232,6 @@ export async function preparePluginUpdate(
   }
 
   options.onRecord?.(triaged.record.version);
-  // AUTH-09: ONE credential composition in this function, shared by the
-  // constraint gate and the clone probe below.
-  const auth = buildUpdateAuth(options);
 
   // D-10-03: the gate runs after triage (there must be a record and a
   // manifest entry to constrain) and before candidate resolution (a held
@@ -1277,7 +1248,6 @@ export async function preparePluginUpdate(
       marketplaceSource: marketplace.source,
       state,
       locations: options.locations,
-      auth,
     }),
   );
   if (verdict.kind === "held") {
@@ -1301,7 +1271,6 @@ export async function preparePluginUpdate(
       materializePluginCommitCopy,
     },
     options.locations,
-    auth,
     options.policy.refreshSource,
     options.cloneCandidates,
     updateCloneTransport(options),

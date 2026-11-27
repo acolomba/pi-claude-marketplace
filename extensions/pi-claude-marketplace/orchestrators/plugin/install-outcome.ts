@@ -152,7 +152,7 @@ import {
   type RunPhasesResult,
 } from "../../transaction/phase-ledger.ts";
 import { formatRollbackError } from "../../transaction/rollback.ts";
-import { buildCloneAuth, DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import {
   addMarketplaceToState,
   classifyAddError,
@@ -814,12 +814,6 @@ async function preflightInstallResolve(
   // The full sha is read AFTER the resolve for the version's sha tier
   // (VER-01) and the full-sha state field (D-77-02).
   let resolvedSha: string | undefined;
-  // AUTH-09: one auth context for the clone probe and the tag copy's fetch.
-  const auth = {
-    ctx: opts.ctx,
-    run: opts.run,
-    credentialOps: DEFAULT_CREDENTIAL_OPS,
-  };
 
   // PI-4: resolveStrict + gate. Per D-04 the strict resolver consumes the
   // array-shape componentPaths (D-07 / COMP-01) and either returns an
@@ -840,7 +834,6 @@ async function preflightInstallResolve(
             : { ...gitSource, sha: opts.sourcePinOverride },
         locations,
         ...(opts.cloneCacheSeam !== undefined && { seam: opts.cloneCacheSeam }),
-        auth,
         ...(opts.cloneCandidates !== undefined && { cloneCandidates: opts.cloneCandidates }),
         ...(opts.transportContext !== undefined && { transportContext: opts.transportContext }),
         subject: `${plugin}@${marketplace}`,
@@ -863,8 +856,8 @@ async function preflightInstallResolve(
           pathSource,
           tagOid: pin,
           // D-SG-09: a git marketplace's tag copy fetches the tag's commit
-          // with its host's bundle, as a clone of that host authenticates.
-          resolveAuth: (cloneUrl, kind) => buildCloneAuth(cloneUrl, kind, auth),
+          // with the bundle of its address, as a clone of that host does.
+          resolveAuth: authBundleFor,
           ...(opts.cloneCandidates !== undefined && {
             onCloneCreated: (key: string) => opts.cloneCandidates?.add(key),
           }),

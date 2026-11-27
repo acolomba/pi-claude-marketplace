@@ -24,7 +24,6 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -4973,8 +4972,10 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1);
-      assert.equal(captured.auth?.host, "github.com");
-      assert.strictEqual(captured.auth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
+      assert.deepStrictEqual(
+        { kind: captured.auth?.kind, host: captured.auth?.host },
+        { kind: "stored-credential", host: "github.com" },
+      );
       assert.equal(gitState.cloneCalls.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });

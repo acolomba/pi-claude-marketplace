@@ -27,7 +27,6 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts";
 import {
   updateAllMarketplaces,
@@ -6048,7 +6047,7 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
 // (recorded on gitOps.clone's auth), proving no re-bundling occurs.
 // ───────────────────────────────────────────────────────────────────────────
 
-test("AUTH-02 update: the GitAuthBundle is forwarded by reference into the re-clone", async () => {
+test("AUTH-02 update: the re-clone carries the stored-credential bundle of github.com", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
@@ -6070,13 +6069,11 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into the re-cl
 
     // assert
 
-    // The auth bundle must be present on the recorded clone call.
     assert.equal(state.cloneCalls.length, 1);
-    assert.ok(state.cloneCalls[0]?.auth !== undefined);
-    assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
-    // Reference equality: the production credential surface appears on the
-    // recorded clone auth bundle -- proves no re-bundling occurred.
-    assert.strictEqual(state.cloneCalls[0]?.auth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
+    assert.deepStrictEqual(
+      { kind: state.cloneCalls[0]?.auth?.kind, host: state.cloneCalls[0]?.auth?.host },
+      { kind: "stored-credential", host: "github.com" },
+    );
   });
 });
 

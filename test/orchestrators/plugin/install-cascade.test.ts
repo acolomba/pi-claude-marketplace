@@ -6,7 +6,6 @@ import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import {
@@ -1875,10 +1874,10 @@ test("D-09-05: a root range on a path-source root reaches the marketplace tag pr
     "the marketplace tag probe is queried once for the root",
   );
   // D-SG-09: the probe gets the marketplace record's source, which decides
-  // where the tags are read, and the member's own auth context.
+  // where the tags are read, and asks for the bundle of its address.
   assert.deepStrictEqual(
-    seen.map((query) => [query.marketplaceSource, query.auth?.ctx.mode]),
-    [[state.marketplaces[MARKETPLACE]?.source, "tui"]],
+    seen.map((query) => [query.marketplaceSource, query.withHostBundle]),
+    [[state.marketplaces[MARKETPLACE]?.source, true]],
   );
   assert.deepStrictEqual(
     cascade.kind === "installed" &&
@@ -3953,47 +3952,6 @@ test("CMP-3 a constrained member whose marketplace the snapshot does not record 
     seen.map((query) => ({ pluginName: query.pluginName, source: query.source.kind })),
     [{ pluginName: "bar", source: "url" }],
     "the query addresses the source the resolved record's manifest names",
-  );
-});
-
-test("AUTH-09 the tag query rides the member's notification context and the production credential surface", async (t) => {
-  // arrange
-  const environment = await createHermeticEnvironment(t, "install-cascade-auth-");
-  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { gitSourced: ["bar"] });
-  const locations = locationsFor("project", environment.cwd);
-  const ctx = notificationContext();
-  const run = runWithNothingLoaded();
-  const seen: DependencyTagProbeOptions[] = [];
-
-  // act
-  const cascade = await runInstallCascade({
-    state,
-    locations,
-    rootKey: `foo@${MARKETPLACE}`,
-    lookup: catalog({
-      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }],
-      [`bar@${MARKETPLACE}`]: [],
-    }),
-    ledgerOptionsFor: (member) => ({
-      ...ledgerOptionsFor(environment.cwd)(member),
-      ctx,
-      run,
-    }),
-    rootAllowedMarketplaces: new Set<string>(),
-    installedKeys: new Set(),
-    knownMarketplaces: new Set([MARKETPLACE]),
-    seam: recordingLedgerSeam(environment.cwd, locations, []),
-    tagProbe: tagProbeAnswering(
-      { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
-      seen,
-    ),
-  });
-
-  // assert
-  assert.strictEqual(cascade.kind, "installed");
-  assert.deepStrictEqual(
-    seen.map((query) => query.auth),
-    [{ ctx, run, credentialOps: DEFAULT_CREDENTIAL_OPS }],
   );
 });
 

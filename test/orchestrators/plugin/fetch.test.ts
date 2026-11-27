@@ -12,7 +12,6 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -728,10 +727,10 @@ test("a pinned GitHub clone's bundle carries the production credential surface b
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ◌ stored (remote)" },
     ]);
-    assert.strictEqual(bundles.length, 1);
-    const [bundle] = bundles;
-    assert.strictEqual(bundle?.host, "github.com");
-    assert.strictEqual(bundle.credentialOps, DEFAULT_CREDENTIAL_OPS);
+    assert.deepStrictEqual(
+      bundles.map((bundle) => ({ kind: bundle.kind, host: bundle.host })),
+      [{ kind: "stored-credential", host: "github.com" }],
+    );
     verifyNotifications(boundary);
   });
 });

@@ -41,14 +41,11 @@ import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/
 import { listRemoteTags } from "../../platform/git.ts";
 import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
-import { buildCloneAuth } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { transportForce } from "../github-transport.ts";
 
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { CredentialOps } from "../auth-host.ts";
 
 /** The tag-listing operation this probe reaches the network through. */
 export interface DependencyTagListingSeam {
@@ -92,11 +89,6 @@ export interface DependencyTagProbeOptions {
    * for several dependencies, and this bounds that to one listing per URL.
    */
   readonly tagMemo?: Map<string, readonly RemoteTag[]>;
-  readonly auth: {
-    readonly ctx: NotificationContext;
-    readonly run: NotificationRun;
-    readonly credentialOps: CredentialOps;
-  };
 }
 
 const REAL_DEPENDENCY_TAG_LISTING_SEAM: DependencyTagListingSeam = Object.freeze({
@@ -111,7 +103,7 @@ type TagListingOutcome =
 interface TagListingRequest {
   readonly seam: DependencyTagListingSeam;
   readonly url: string;
-  readonly auth: ReturnType<typeof buildCloneAuth>;
+  readonly auth: ReturnType<typeof authBundleFor>;
   readonly memo?: Map<string, readonly RemoteTag[]>;
 }
 
@@ -181,9 +173,9 @@ function httpsRetryOf(
  * attempt reads and writes the memo under the URL it sends, and a successful
  * HTTPS retry is also kept under the SSH address, so the run tries SSH for
  * that repository once (D-10-18 shares the memo across a bulk run). The
- * credential bundle is the host bundle every other clone path already builds,
- * which an SSH listing never sends -- this adds no second credential
- * acquisition path.
+ * credential bundle is the one every clone path binds for the source's
+ * address (`authBundleFor`), which an SSH listing never sends -- this adds no
+ * second credential acquisition path.
  */
 export async function probeDependencyTags(
   options: DependencyTagProbeOptions,
@@ -191,7 +183,7 @@ export async function probeDependencyTags(
   const seam = options.seam ?? REAL_DEPENDENCY_TAG_LISTING_SEAM;
   const { source, pluginName, range } = options;
   const cloneUrl = canonicalCloneUrl(source);
-  const auth = buildCloneAuth(cloneUrl, source.kind, options.auth);
+  const auth = authBundleFor(cloneUrl, source.kind);
   const listAt = (url: string): Promise<TagListingOutcome> =>
     listCandidateTags({
       seam,

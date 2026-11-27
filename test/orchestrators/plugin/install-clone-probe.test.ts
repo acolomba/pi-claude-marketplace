@@ -17,17 +17,14 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { GitCommandError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { TransportAttempt } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   CloneTransport,
   PluginTransportContext,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const SHA = "1111111111111111111111111111111111111111";
 
@@ -49,16 +46,6 @@ async function plannedTransport(transport: CloneTransport | undefined): Promise<
   return { subject: transport.subject, first: plan.first, note: plan.note };
 }
 
-function auth(): Parameters<typeof probeInstallClone>[0]["auth"] {
-  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
-  const credentialOps: CredentialOps = {
-    approve: () => Promise.resolve(),
-    fill: () => Promise.resolve(null),
-    reject: () => Promise.resolve(),
-  };
-  return { ctx, run: runWithNothingLoaded(), credentialOps };
-}
-
 test("uses the production seam for a warm pinned clone", async (testContext) => {
   // arrange
   const { locations } = await freshLocations(testContext);
@@ -76,7 +63,6 @@ test("uses the production seam for a warm pinned clone", async (testContext) => 
   const outcome = await probeInstallClone({
     source,
     locations,
-    auth: auth(),
     subject: "plugin@market",
   });
 
@@ -126,7 +112,6 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     source,
     seam,
     locations,
-    auth: auth(),
     cloneCandidates,
   });
 
@@ -173,7 +158,6 @@ test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid b
     source,
     seam,
     locations,
-    auth: auth(),
     subject: "plugin@market",
   });
 
@@ -197,13 +181,12 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
   await mkdir(cloneRoot, { recursive: true });
   const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl, sha: SHA };
   const calls: unknown[] = [];
-  const pluginAuth = auth();
   const seam: InstallCloneCacheSeam = {
     resolvePluginPin() {
       return Promise.resolve({ cloneUrl, pin: SHA });
     },
-    // The bundle carries closures, so the recorded call keeps only the two
-    // comparable fields: the bound host and the injected credential ops.
+    // The bundle carries closures, so the recorded call keeps only its kind
+    // and its bound host.
     async materializePluginClone({
       resolveAuth,
       onCloneCreated: _onCloneCreated,
@@ -213,7 +196,7 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
       const bundle = resolveAuth();
       calls.push({
         ...cloneOptions,
-        auth: { credentialOps: bundle.credentialOps, host: bundle.host },
+        auth: { kind: bundle.kind, host: bundle.host },
         transport: await plannedTransport(transport),
       });
       return cloneRoot;
@@ -231,7 +214,6 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
     source,
     seam,
     locations,
-    auth: pluginAuth,
     subject: "plugin@market",
   });
 
@@ -242,7 +224,7 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
   });
   assert.deepStrictEqual(calls, [
     {
-      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      auth: { kind: "stored-credential", host: "example.com" },
       cloneUrl,
       locations,
       pin: SHA,
@@ -281,7 +263,7 @@ test("a pinned clone takes its pin from the source alone and clones over the ins
   };
 
   // act
-  await probeInstallClone({ source, seam, locations, auth: auth(), subject: "plugin@market" });
+  await probeInstallClone({ source, seam, locations, subject: "plugin@market" });
 
   // assert
   assert.deepStrictEqual(
@@ -307,7 +289,6 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
   await mkdir(copyRoot, { recursive: true });
   const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl, ref: "main" };
   const calls: unknown[] = [];
-  const pluginAuth = auth();
   const seam: InstallCloneCacheSeam = {
     resolvePluginPin() {
       return Promise.reject(new Error("unexpected pin resolution"));
@@ -323,7 +304,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
     }) {
       calls.push({
         ...mirrorOptions,
-        auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+        auth: { kind: bundle?.kind, host: bundle?.host },
         transport: await plannedTransport(transport),
       });
       return { pluginRoot: mirrorRoot, resolvedSha: SHA };
@@ -337,7 +318,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
       const bundle = resolveAuth();
       calls.push({
         ...copyOptions,
-        auth: { credentialOps: bundle.credentialOps, host: bundle.host },
+        auth: { kind: bundle.kind, host: bundle.host },
         transport: await plannedTransport(transport),
       });
       return copyRoot;
@@ -350,7 +331,6 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
     source,
     seam,
     locations,
-    auth: pluginAuth,
     subject: "plugin@market",
   });
 
@@ -361,14 +341,14 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
   });
   assert.deepStrictEqual(calls, [
     {
-      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      auth: { kind: "stored-credential", host: "example.com" },
       cloneUrl,
       locations,
       ref: "main",
       transport: { ...planned, note: undefined },
     },
     {
-      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      auth: { kind: "stored-credential", host: "example.com" },
       cloneUrl,
       locations,
       sha: SHA,
@@ -379,6 +359,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
 
 test("returns a refreshed unpinned mirror result with ref and auth", async (testContext) => {
   // arrange
+  setGitHubBaseUrl(testContext, undefined);
   const { locations, root } = await freshLocations(testContext);
   const mirrorRoot = path.join(root, "mirror-clone");
   await mkdir(mirrorRoot, { recursive: true });
@@ -399,7 +380,10 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
     materializeOrRefreshPluginMirror(options) {
       assert.strictEqual(options.cloneUrl, "https://github.com/owner/repo");
       assert.strictEqual(options.ref, "main");
-      assert.ok(options.auth !== undefined);
+      assert.deepStrictEqual(
+        { kind: options.auth?.kind, host: options.auth?.host },
+        { kind: "stored-credential", host: "github.com" },
+      );
       return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
     materializePluginCommitCopy: () => Promise.resolve(mirrorRoot),
@@ -411,7 +395,6 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
     source,
     seam,
     locations,
-    auth: auth(),
   });
 
   // assert
@@ -433,7 +416,6 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     path: "plugins/missing",
     sha: SHA,
   };
-  const pluginAuth = auth();
   const seam: InstallCloneCacheSeam = {
     resolvePluginPin() {
       return Promise.resolve({ cloneUrl: "https://example.com/mono", pin: SHA, ref: "main" });
@@ -441,8 +423,8 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     materializePluginClone(options) {
       assert.strictEqual(options.ref, "main");
       assert.deepStrictEqual(
-        { credentialOps: options.resolveAuth().credentialOps, host: options.resolveAuth().host },
-        { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+        { kind: options.resolveAuth().kind, host: options.resolveAuth().host },
+        { kind: "stored-credential", host: "example.com" },
       );
       return Promise.resolve(cloneRoot);
     },
@@ -459,7 +441,6 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     source,
     seam,
     locations,
-    auth: pluginAuth,
     subject: "plugin@market",
   });
 
@@ -502,7 +483,6 @@ test("returns an escaping-subdir result without exposing the mirror sha", async 
     source,
     seam,
     locations,
-    auth: auth(),
     subject: "plugin@market",
   });
 
@@ -543,7 +523,7 @@ test("propagates a pinned clone failure unchanged", async (testContext) => {
 
   // act & assert
   await assert.rejects(
-    probeInstallClone({ source, seam, locations, auth: auth(), subject: "plugin@market" }),
+    probeInstallClone({ source, seam, locations, subject: "plugin@market" }),
     (error: unknown) => error === cloneFailure,
   );
 });
@@ -601,7 +581,6 @@ test("D-SG-18: a clone under a transport context plans with its checks and notes
     source: OWNER_REPO_SOURCE,
     seam,
     locations,
-    auth: auth(),
     transportContext: context,
     subject: "ghp@gits",
   });
@@ -629,7 +608,6 @@ test("D-SG-19: a clone with no transport context makes one for the call and foll
     source: OWNER_REPO_SOURCE,
     seam,
     locations,
-    auth: auth(),
     subject: "ghp@gits",
   });
 
@@ -652,7 +630,6 @@ test("D-SG-21: a clone with no transport context clones once over https under th
     source: OWNER_REPO_SOURCE,
     seam,
     locations,
-    auth: auth(),
     subject: "ghp@gits",
   });
 
@@ -712,7 +689,6 @@ test("SG-SSH-05: a Windows clone that ssh refuses for its key retries over https
     source: OWNER_REPO_SOURCE,
     seam,
     locations,
-    auth: auth(),
     transportContext: context,
     subject: "ghp@gits",
   });

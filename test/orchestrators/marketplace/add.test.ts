@@ -20,10 +20,7 @@ import test, { type TestContext } from "node:test";
 import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
-import {
-  DEFAULT_CREDENTIAL_OPS,
-  NO_STORED_CREDENTIAL_CAUSE,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import {
   addMarketplace as addMarketplaceWithCache,
   addMarketplaceToState,
@@ -3722,7 +3719,7 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
 // AUTH-01 auth-wiring tests
 // -----------------------------------------------------------------------
 
-test("AUTH-01 add: the clone's bundle carries the production credential surface by reference (no re-bundling)", async () => {
+test("AUTH-01 add: the clone carries the stored-credential bundle of github.com", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -3743,11 +3740,9 @@ test("AUTH-01 add: the clone's bundle carries the production credential surface 
 
     // assert
     assert.equal(state.cloneCalls.length, 1);
-    assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
-    assert.equal(
-      state.cloneCalls[0]?.auth?.credentialOps,
-      DEFAULT_CREDENTIAL_OPS,
-      "credentialOps must be reference-equal (no re-bundling)",
+    assert.deepStrictEqual(
+      { kind: state.cloneCalls[0]?.auth?.kind, host: state.cloneCalls[0]?.auth?.host },
+      { kind: "stored-credential", host: "github.com" },
     );
   });
 });
