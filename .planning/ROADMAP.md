@@ -407,7 +407,47 @@ Plans:
   1. A user whose machine holds an SSH key or agent, or a git credential helper such as gh's or Git Credential Manager, adds a private marketplace and installs from it with no prompt from the extension; with only `GITHUB_TOKEN` or `GH_TOKEN` set and no helper, the private clone fails as an auth failure, and the token appears in no URL, header, or argument (SG-AUTH-01).
   2. Device Flow is gone, with no device-code prompt on any command, or it remains in the form discuss chose (Q2); either way a load with `autoapply` on and the background autoupdate pass never wait for user input, and PROJECT.md restates the AAP, autoapply, and D-PL8-12 rules for the outcome (SG-AUTH-02).
   3. A user who stored a token through Device Flow before the upgrade still clones and updates over HTTPS with no action, the extension deletes no stored credential, and the one-time notice, if discuss chose one (Q5), appears once; cucumber scenarios pin each (SG-AUTH-03).
-**Plans**: TBD
+**Plans**: 13 plans in 13 sequential waves (each plan depends on the one before it)
+
+Plans:
+**Wave 1**
+- [ ] 05-01-PLAN.md — Pins first: the git host records request headers, token variables reach a routed Pi, the credential features pin every SG-AUTH behavior that holds today, the scenarios that need no sign-in leave `device-flow.feature`, and an architecture scan keeps token variable names out of the extension (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md — `marketplace add` and `update` stop threading the injectable credential surface, the Device Flow transport, and the sign-in memo (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-03-PLAN.md — `fetch` and `info` stop threading them (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-04-PLAN.md — The update and reinstall family, dependency moves and bindings, and the constraint gate stop threading them (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 05-05-PLAN.md — The install family and the tag probes stop threading them, and auth-host re-exports only the credential type (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 05-06-PLAN.md — Device Flow removed: auth-host builds stored-credential bundles only, the engine and provider registry are deleted with their gates and scenarios, and no command shows a device code (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 05-07-PLAN.md — The `device-flow-prompt` notification kind leaves the types, wire, JSON schema, and docs; `schemaVersion` stays 1 (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 05-08-PLAN.md — The sign-in retry, its one-shot credential helper, and the Device Flow bundle arm are deleted (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 05-09-PLAN.md — The auth-host builders become one pure host binding, `authBundleFor` (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 05-10-PLAN.md — The auth bundle shrinks to its host and the credential module is deleted; auth-host leaves `NETWORK_SEAMS` (wave 10)
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 05-11-PLAN.md — The print-mode refusal error and the `credential` git subcommand with its stdin input are removed (wave 11)
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 05-12-PLAN.md — The harness becomes the GitHub redirect with one route, and every comment and test title that still describes Device Flow is reworded (wave 12)
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 05-13-PLAN.md — Records and docs: D-SG-27 to D-SG-29 and the dated amendments in PROJECT.md, the codebase map, README.md and README.es.md, and CHANGELOG.md (wave 13)
 
 ### Phase 6: Failure-Message Parity
 
