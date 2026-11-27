@@ -7,9 +7,7 @@ import {
   DEFAULT_CREDENTIAL_OPS,
   NO_STORED_CREDENTIAL_CAUSE,
   authBundleFor,
-  buildAuthForHost,
   buildCloneAuth,
-  buildGitHubAuth,
   buildStoredCredentialAuth,
   hostFromCloneUrl,
 } from "../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -20,10 +18,7 @@ import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { CredentialGit } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import type {
-  ExtensionContext,
-  NotificationContext,
-} from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 describe("DEFAULT_CREDENTIAL_OPS", () => {
   test("composes the platform credential protocol without launching a process", () => {
@@ -275,6 +270,25 @@ describe("authBundleFor", () => {
     });
   }
 
+  for (const { base, host } of [
+    { base: "https://github.com/mirror", host: "github.com" },
+    { base: "https://gitlab.com/mirror", host: "gitlab.com" },
+  ]) {
+    test(`D-04: binds a GitHub source under a ${base} base to ${host}`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, base);
+
+      // act
+      const { credentialOps: _credentialOps, ...binding } = authBundleFor(
+        "https://github.com/acme/tools.git",
+        "github",
+      );
+
+      // assert
+      assert.deepStrictEqual(binding, { kind: "stored-credential", host });
+    });
+  }
+
   test("GHB-04: binds a url address outside GitHub under an invalid override", (t) => {
     // arrange
     setGitHubBaseUrl(t, "http://mirror.example");
@@ -305,156 +319,6 @@ describe("NO_STORED_CREDENTIAL_CAUSE", () => {
         "'protocol=https\\nhost=git.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' " +
         "| git credential approve",
     );
-  });
-});
-describe("buildAuthForHost", () => {
-  for (const host of ["github.com", "gitlab.com", "git.example.invalid"]) {
-    for (const mode of ["print", "json", "rpc", "tui"]) {
-      test(`D-SG-27: binds ${host} to its stored credential on a ${mode} command run without signing in`, async () => {
-        // arrange
-        const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
-        const credentials = createCredentialOpsFake({
-          boundary: "memory",
-          credentials: [[host, { username: "stored", password: "secret" }]],
-        });
-        const auth = buildAuthForHost({
-          host,
-          ctx: { mode, hasUI: mode === "tui" || mode === "rpc", ui },
-          run: runWithNothingLoaded(),
-          credentialOps: credentials.credentialOps,
-        });
-
-        // act
-        const credential = await auth.credentialOps.fill(auth.host);
-
-        // assert
-        assert.deepStrictEqual(auth, {
-          kind: "stored-credential",
-          credentialOps: credentials.credentialOps,
-          host,
-        });
-        assert.deepStrictEqual(credential, { username: "stored", password: "secret" });
-        assert.deepStrictEqual(credentials.calls, { fill: [{ host }], approve: [], reject: [] });
-        verify(ui);
-      });
-    }
-  }
-
-  test("GAUTH-03: binds an unregistered host's stored credential to a bundle with no sign-in", async () => {
-    // arrange
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [["git.example.invalid", { username: "user", password: "stored-credential" }]],
-    });
-    const auth = buildAuthForHost({
-      host: "git.example.invalid",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      run: runWithNothingLoaded(),
-    });
-
-    // act
-    const credential = await auth.credentialOps.fill(auth.host);
-
-    // assert
-    assert.deepStrictEqual(auth, {
-      kind: "stored-credential",
-      credentialOps: credentials.credentialOps,
-      host: "git.example.invalid",
-    });
-    assert.deepStrictEqual(credential, { username: "user", password: "stored-credential" });
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: "git.example.invalid" }],
-      approve: [],
-      reject: [],
-    });
-    verify(ctx);
-  });
-
-  for (const host of ["github.com", "gitlab.com", "git.example.invalid"]) {
-    test(`GAUTH-04 / D-SG-27: offers no sign-in on ${host} when its helper is empty`, async () => {
-      // arrange
-      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const auth = buildAuthForHost({
-        host,
-        credentialOps: credentials.credentialOps,
-        ctx,
-        run: runWithNothingLoaded(),
-      });
-
-      // act
-      const credential = await auth.credentialOps.fill(auth.host);
-
-      // assert
-      assert.deepStrictEqual(auth, {
-        kind: "stored-credential",
-        credentialOps: credentials.credentialOps,
-        host,
-      });
-      assert.strictEqual(credential, null);
-      assert.deepStrictEqual(credentials.calls, {
-        fill: [{ host }],
-        approve: [],
-        reject: [],
-      });
-      verify(ctx);
-    });
-  }
-
-  for (const host of ["github.com", "git.example.invalid"]) {
-    test(`CR-01 / GAUTH-04: binds ${host} to the bundle that keeps a rejected credential`, () => {
-      // arrange
-      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-      const irreplaceable = { username: "user", password: "self-hosted-token" };
-      const credentials = createCredentialOpsFake({
-        boundary: "memory",
-        credentials: [[host, irreplaceable]],
-      });
-
-      // act
-      const auth = buildAuthForHost({
-        host,
-        credentialOps: credentials.credentialOps,
-        ctx,
-        run: runWithNothingLoaded(),
-      });
-
-      // assert
-      assert.deepStrictEqual(auth, {
-        kind: "stored-credential",
-        credentialOps: credentials.credentialOps,
-        host,
-      });
-      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-      assert.deepStrictEqual(credentials.storedCredential(host), irreplaceable);
-      verify(ctx);
-    });
-  }
-
-  test("AAP-02 / D-13: returns a stored-credential bundle for a registry host to a load run without notifying", () => {
-    // arrange
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const { commandState: _commandState, ...snapshot } = runWithNothingLoaded();
-
-    // act
-    const auth = buildAuthForHost({
-      host: "github.com",
-      credentialOps: credentials.credentialOps,
-      ctx,
-      run: { ...snapshot, origin: { kind: "load" } },
-    });
-
-    // assert
-    assert.deepStrictEqual(auth, {
-      kind: "stored-credential",
-      credentialOps: credentials.credentialOps,
-      host: "github.com",
-    });
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    verify(ctx);
   });
 });
 
@@ -495,107 +359,6 @@ describe("buildStoredCredentialAuth", () => {
       approve: [],
       reject: [],
     });
-  });
-});
-
-describe("buildGitHubAuth", () => {
-  test("GHB-02: returns a stored-credential bundle for the override host", (t) => {
-    // arrange
-    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-
-    // act
-    const auth = buildGitHubAuth({
-      credentialOps: credentials.credentialOps,
-      ctx,
-      run: runWithNothingLoaded(),
-    });
-
-    // assert
-    assert.deepStrictEqual(auth, {
-      kind: "stored-credential",
-      credentialOps: credentials.credentialOps,
-      host: "mirror.example:8443",
-    });
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    verify(ctx);
-  });
-
-  for (const { base, host } of [
-    { base: "https://github.com/mirror", host: "github.com" },
-    { base: "https://gitlab.com/mirror", host: "gitlab.com" },
-  ]) {
-    test(`D-04: binds a ${base} base to its host's stored credential`, (t) => {
-      // arrange
-      setGitHubBaseUrl(t, base);
-      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-
-      // act
-      const auth = buildGitHubAuth({
-        credentialOps: credentials.credentialOps,
-        ctx,
-        run: runWithNothingLoaded(),
-      });
-
-      // assert
-      assert.deepStrictEqual(auth, {
-        kind: "stored-credential",
-        credentialOps: credentials.credentialOps,
-        host,
-      });
-      verify(ctx);
-    });
-  }
-
-  test("D-SG-27: returns the github.com stored-credential bundle when unset", (t) => {
-    // arrange
-    setGitHubBaseUrl(t, undefined);
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-
-    // act
-    const auth = buildGitHubAuth({
-      credentialOps: credentials.credentialOps,
-      ctx,
-      run: runWithNothingLoaded(),
-    });
-
-    // assert
-    assert.deepStrictEqual(auth, {
-      kind: "stored-credential",
-      credentialOps: credentials.credentialOps,
-      host: "github.com",
-    });
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    verify(ctx);
-  });
-
-  test("GHB-03: throws the typed error for an invalid override", (t) => {
-    // arrange
-    setGitHubBaseUrl(t, "http://mirror.example");
-    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-
-    // act & assert
-    assert.throws(
-      () =>
-        buildGitHubAuth({
-          credentialOps: credentials.credentialOps,
-          ctx,
-          run: runWithNothingLoaded(),
-        }),
-      (error: unknown) => {
-        assert.ok(error instanceof InvalidGitHubBaseUrlError);
-        assert.deepStrictEqual(
-          { variable: error.variable, problem: error.problem },
-          { variable: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", problem: "scheme" },
-        );
-        return true;
-      },
-    );
-    verify(ctx);
   });
 });
 

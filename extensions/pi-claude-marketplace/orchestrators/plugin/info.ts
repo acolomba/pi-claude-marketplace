@@ -114,7 +114,7 @@ import {
 } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { pluginCloneTransport, withOwnCloneNotes } from "../github-transport.ts";
 import {
   crossScopeFlag,
@@ -162,7 +162,6 @@ import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.t
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { PinnedGitSource } from "./clone-cache.ts";
 import type { WorkflowNoteScript } from "./discover-names.ts";
@@ -256,10 +255,10 @@ export interface InfoCloneCacheSeam {
  * FTCH-03 / D-81-05: derive the per-command fetch context from the caller
  * options. Returns undefined unless `--fetch` was passed (so every row builder
  * stays fs-only for bare info). Production defaults to the real clone-cache
- * imports; tests inject mock-backed seams. Every clone bundle carries
- * `DEFAULT_CREDENTIAL_OPS` (FTCH-06), and the command's one transport context,
- * the caller's or one `newTransportContext` makes, gives every clone of both
- * scopes one probe (OQ-7, D-SG-19).
+ * imports; tests inject mock-backed seams. Every clone binds the bundle of
+ * its address (`authBundleFor`, FTCH-06), and the command's one transport
+ * context, the caller's or one `newTransportContext` makes, gives every clone
+ * of both scopes one probe (OQ-7, D-SG-19).
  */
 function buildInfoFetchContext(
   opts: GetPluginInfoOptions,
@@ -270,14 +269,11 @@ function buildInfoFetchContext(
   }
 
   return {
-    ctx: opts.ctx,
-    run: opts.run,
     seam: opts.cloneCacheSeam ?? {
       resolvePluginPin,
       materializePluginClone,
       materializeOrRefreshPluginMirror,
     },
-    credentialOps: DEFAULT_CREDENTIAL_OPS,
     transportContext: opts.transportContext ?? newTransportContext(),
     subject: `${opts.plugin}@${opts.marketplace}`,
   };
@@ -2470,18 +2466,15 @@ function buildNonPathInstalledRow(
 }
 
 /**
- * FTCH-06 / D-81-05: the per-command auth + seam context for the `info --fetch`
+ * FTCH-06 / D-81-05: the per-command seam context for the `info --fetch`
  * hook. Built once in `getPluginInfoWithReader` when `opts.fetch === true`,
  * threaded down to the git-source row builders. `locations` are supplied
- * per-block by the caller. Mirrors the install clone-probe's auth bundle
- * wiring; info reaches the git surface ONLY through the `clone-cache.ts` seam
- * + `auth-host.ts` re-exports (BLOCK F in `eslint.config.js`, NFR-5).
+ * per-block by the caller. Each clone binds `authBundleFor` of its address,
+ * as the install clone probe does; info reaches the git surface ONLY through
+ * the `clone-cache.ts` seam (BLOCK F in `eslint.config.js`, NFR-5).
  */
 interface InfoFetchContext {
-  readonly ctx: NotificationContext;
-  readonly run: NotificationRun;
   readonly seam: InfoCloneCacheSeam;
-  readonly credentialOps: CredentialOps;
   /** OQ-7: the command's transport context, shared by both scopes' clones. */
   readonly transportContext: PluginTransportContext;
   /** D-SG-22: the subject the clones note under, `<plugin>@<marketplace>`. */
@@ -2518,7 +2511,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
 
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx);
+    const authBundle = authBundleFor(cloneUrl, gitSource.kind);
     const { pluginRoot: mirrorRoot, resolvedSha } =
       await fetchCtx.seam.materializeOrRefreshPluginMirror({
         locations,
@@ -2538,7 +2531,7 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
       cloneUrl,
       pin,
       ...(ref !== undefined && { ref }),
-      resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, fetchCtx),
+      resolveAuth: () => authBundleFor(cloneUrl, gitSource.kind),
       transport,
     });
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);

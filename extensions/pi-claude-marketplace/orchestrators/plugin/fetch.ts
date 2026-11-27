@@ -11,8 +11,8 @@
 //     surface (no git-ops handle, no default-git-ops constant, no clone-refresh
 //     helper, no platform-git import). BLOCK F in `eslint.config.js` enforces
 //     that, because this file is not in its `NETWORK_SEAMS` list.
-//   - auth: `auth-host.ts`'s `buildCloneAuth` over the production credential
-//     surface, at install parity (FTCH-06, D-81-05).
+//   - auth: `auth-host.ts`'s `authBundleFor` of the clone address, at install
+//     parity (FTCH-06, D-81-05).
 //   - transport: one GitHub transport context per fetch command, so every
 //     clone of the sweep plans over it and the command probes once (OQ-7,
 //     D-SG-19).
@@ -58,7 +58,7 @@ import {
 } from "../../shared/probe-classifiers.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { pluginCloneTransport, withOwnCloneNotes } from "../github-transport.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
@@ -80,7 +80,6 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { makePresenceProbe } from "./git-source-probe.ts";
 import type { ListCandidate, resolveListCandidate } from "./list-candidate-version.ts";
@@ -186,14 +185,7 @@ export function createFetchPlugins(
       // to the remaining plugins. Only an invalid GitHub base override escapes
       // and ends the sweep (GHB-03).
       // eslint-disable-next-line no-await-in-loop -- each unpinned fetch locks the scope (retries: 0)
-      const row = await fetchOne(target, {
-        ctx,
-        run,
-        seam,
-        status,
-        credentialOps: DEFAULT_CREDENTIAL_OPS,
-        transportContext,
-      });
+      const row = await fetchOne(target, { run, seam, status, transportContext });
       pushRow(target.scope, target.marketplace, row);
     }
 
@@ -336,11 +328,9 @@ async function enumerateMarketplaceEntries(
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface FetchOneDeps {
-  readonly ctx: ExtensionContext;
   readonly run: NotificationRun;
   readonly seam: FetchCloneCacheSeam;
   readonly status: FetchStatus;
-  readonly credentialOps: CredentialOps;
   readonly transportContext: PluginTransportContext;
 }
 
@@ -446,7 +436,7 @@ async function materializeThroughSeam(
 ): Promise<void> {
   if (!isPinnedSource(gitSource)) {
     const cloneUrl = canonicalCloneUrl(gitSource);
-    const auth = buildCloneAuth(cloneUrl, gitSource.kind, deps);
+    const auth = authBundleFor(cloneUrl, gitSource.kind);
     await deps.seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
@@ -463,7 +453,7 @@ async function materializeThroughSeam(
     cloneUrl,
     pin,
     ...(ref !== undefined && { ref }),
-    resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, deps),
+    resolveAuth: () => authBundleFor(cloneUrl, gitSource.kind),
     transport,
   });
 }

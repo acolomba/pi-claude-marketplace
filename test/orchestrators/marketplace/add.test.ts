@@ -6715,11 +6715,9 @@ test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the 
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
-    // Unlike the gitlab.example.com adds above (MURL-08, PROV-02), gitlab.com
-    // is claimed by GITLAB_PROVIDER (exact-match hostMatch) -- the real
-    // findProviderForHost/buildAuthForHost path (no mock auth registry) must
-    // attach its auth bundle to the SAME clone call that carries the
-    // verbatim wire URL.
+    // The production `authBundleFor` binds gitlab.com, the url's host, and
+    // the add must attach that bundle to the SAME clone call that carries
+    // the verbatim wire URL (MURL-08).
     // act
     await addMarketplace({
       ctx,
