@@ -663,8 +663,6 @@ async function addTargetScopeMarketplace(
     locations,
     source: parseAddableSource(rawSource),
     cwd: opts.cwd,
-    ctx: opts.ctx,
-    run: opts.run,
     removalOps: opts.removalOps,
     ...(notes !== undefined && { cloneNotes: underMarketplaceName(notes, marketplace) }),
   });

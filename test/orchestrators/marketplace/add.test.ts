@@ -7334,7 +7334,6 @@ for (const { title, marker } of [
 test("D-PL5-20: addMarketplaceToState returns the download directory of a hosted source", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const { ctx, run } = makeCtx(0);
     const { hostedManifestFetch } = createHostedManifestFetch();
     const snapshot: ExtensionState = { schemaVersion: 3, marketplaces: {} };
 
@@ -7344,8 +7343,6 @@ test("D-PL5-20: addMarketplaceToState returns the download directory of a hosted
       locations,
       source: parseAddableSource(HOSTED_URL),
       cwd,
-      ctx,
-      run,
       removalOps: createRemovalOps(),
       hostedManifestFetch,
     });
@@ -7371,7 +7368,6 @@ for (const { answer, clone } of [
   test(`D-SG-22: addMarketplaceToState returns the clone note of an owner/repo source whose ssh probe answers ${answer}`, async () => {
     await withTmpScope(async ({ cwd, locations }) => {
       // arrange
-      const { ctx, run } = makeCtx(0);
       const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       });
@@ -7383,8 +7379,6 @@ for (const { answer, clone } of [
         locations,
         source: parseAddableSource("acme/mp"),
         cwd,
-        ctx,
-        run,
         removalOps: createRemovalOps(),
         gitOps,
         gitHubSsh: userSsh(answer),

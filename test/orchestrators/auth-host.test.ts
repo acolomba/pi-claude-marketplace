@@ -6,6 +6,7 @@ import { mock, verify } from "strong-mock";
 import {
   DEFAULT_CREDENTIAL_OPS,
   NO_STORED_CREDENTIAL_CAUSE,
+  authBundleFor,
   buildAuthForHost,
   buildCloneAuth,
   buildGitHubAuth,
@@ -164,6 +165,128 @@ describe("hostFromCloneUrl", () => {
 
     // assert
     assert.strictEqual(host, "gitlab.example.com");
+  });
+});
+
+describe("authBundleFor", () => {
+  test("gives every address the production credential surface", () => {
+    // act
+    const bundles = [
+      authBundleFor("https://github.com/acme/tools.git", "github"),
+      authBundleFor("https://gitlab.com/team/plugin.git", "url"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(
+      bundles.map((bundle) => bundle.credentialOps),
+      [DEFAULT_CREDENTIAL_OPS, DEFAULT_CREDENTIAL_OPS],
+    );
+  });
+
+  for (const { cloneUrl, kind, host } of [
+    { cloneUrl: "not a valid URL", kind: "github", host: "github.com" },
+    { cloneUrl: "https://github.com/acme/tools.git", kind: "github", host: "github.com" },
+    { cloneUrl: "git@github.com:acme/tools", kind: "url", host: "github.com" },
+    { cloneUrl: "ssh://git@GitHub.com/acme/tools.git", kind: "url", host: "github.com" },
+    { cloneUrl: "ssh+git://git@github.com/acme/tools.git", kind: "url", host: "github.com" },
+    { cloneUrl: "https://www.github.com/acme/tools", kind: "url", host: "github.com" },
+    {
+      cloneUrl: "https://github.com/acme/tools.git#plugin",
+      kind: "git-subdir",
+      host: "github.com",
+    },
+    { cloneUrl: "https://gitlab.com/team/plugin.git", kind: "url", host: "gitlab.com" },
+    {
+      cloneUrl: "https://git.example:8443/team/repository.git#plugin",
+      kind: "git-subdir",
+      host: "git.example:8443",
+    },
+    { cloneUrl: "git@git.example:team/plugin.git", kind: "url", host: "git.example" },
+    { cloneUrl: "git@[::1]:acme/tools.git", kind: "git-subdir", host: "[::1]" },
+  ] as const) {
+    test(`GAUTH-03 / D-SG-23: binds the ${kind} address ${cloneUrl} to ${host} with no override`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, undefined);
+
+      // act
+      const { credentialOps: _credentialOps, ...binding } = authBundleFor(cloneUrl, kind);
+
+      // assert
+      assert.deepStrictEqual(binding, { kind: "stored-credential", host });
+    });
+  }
+
+  for (const { cloneUrl, kind, host } of [
+    { cloneUrl: "not a valid URL", kind: "github", host: "mirror.example:8443" },
+    { cloneUrl: "git@github.com:acme/tools", kind: "url", host: "mirror.example:8443" },
+    { cloneUrl: "ssh://git@GitHub.com/acme/tools.git", kind: "url", host: "mirror.example:8443" },
+    {
+      cloneUrl: "ssh+git://git@github.com/acme/tools.git",
+      kind: "url",
+      host: "mirror.example:8443",
+    },
+    { cloneUrl: "https://www.github.com/acme/tools", kind: "url", host: "mirror.example:8443" },
+    {
+      cloneUrl: "https://github.com/acme/tools.git#plugin",
+      kind: "git-subdir",
+      host: "mirror.example:8443",
+    },
+    {
+      cloneUrl: "git@ssh.github.com:/acme/tools.git",
+      kind: "git-subdir",
+      host: "mirror.example:8443",
+    },
+    { cloneUrl: "https://gitlab.com/team/plugin.git", kind: "url", host: "gitlab.com" },
+    { cloneUrl: "git@git.example:team/plugin.git", kind: "url", host: "git.example" },
+  ] as const) {
+    test(`GHB-02 / D-SG-21: binds the ${kind} address ${cloneUrl} to ${host} under the override`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+
+      // act
+      const { credentialOps: _credentialOps, ...binding } = authBundleFor(cloneUrl, kind);
+
+      // assert
+      assert.deepStrictEqual(binding, { kind: "stored-credential", host });
+    });
+  }
+
+  for (const { cloneUrl, kind } of [
+    { cloneUrl: "https://github.com/acme/tools.git", kind: "github" },
+    { cloneUrl: "git@github.com:acme/tools", kind: "url" },
+    { cloneUrl: "https://github.com/acme/tools.git#plugin", kind: "git-subdir" },
+  ] as const) {
+    test(`GHB-03: throws the typed error for the ${kind} address ${cloneUrl} under an invalid override`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+
+      // act & assert
+      assert.throws(
+        () => authBundleFor(cloneUrl, kind),
+        (error: unknown) => {
+          assert.ok(error instanceof InvalidGitHubBaseUrlError);
+          assert.deepStrictEqual(
+            { variable: error.variable, problem: error.problem },
+            { variable: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", problem: "scheme" },
+          );
+          return true;
+        },
+      );
+    });
+  }
+
+  test("GHB-04: binds a url address outside GitHub under an invalid override", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+
+    // act
+    const { credentialOps: _credentialOps, ...binding } = authBundleFor(
+      "https://gitlab.example.com:8443/acme/tools",
+      "url",
+    );
+
+    // assert
+    assert.deepStrictEqual(binding, { kind: "stored-credential", host: "gitlab.example.com:8443" });
   });
 });
 

@@ -14,7 +14,6 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
   AddedMarketplaces,
@@ -74,8 +73,6 @@ function addArgs(
     locations,
     source: pathSource(raw),
     cwd: "/work",
-    ctx: { mode: "tui", hasUI: true, ui: { notify: () => undefined } },
-    run: runWithNothingLoaded(),
     removalOps: createRemovalOps(),
   };
 }

@@ -38,6 +38,7 @@ import {
   gitHubWireUrl,
 } from "../shared/github-base-url.ts";
 
+import type { GitBackedSource } from "../domain/source.ts";
 import type { CredentialOps, GitAuthBundle } from "../platform/git-credential.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
@@ -95,7 +96,7 @@ export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
  * the bundle to https requests only), so this host only names a bundle that
  * no request consults.
  */
-export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git-subdir"): string {
+export function hostFromCloneUrl(cloneUrl: string, kind: GitBackedSource["kind"]): string {
   if (kind === "github" || gitHubAddressOf(cloneUrl) !== undefined) {
     return gitHubOverrideHost() ?? GITHUB_HOST;
   }
@@ -134,6 +135,27 @@ function scpHost(address: string): string {
  */
 export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
   String.raw`no credential was obtained for ${host}; store one with: printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
+
+/**
+ * The auth bundle of a clone address: the `stored-credential` bundle bound to
+ * the host `hostFromCloneUrl` reads from `cloneUrl` and `kind` (GAUTH-03,
+ * D-1-03, GHB-02). The bundle depends only on the address, so every command,
+ * load, and background pass gets the same bundle for the same address. It
+ * does no I/O. Like `hostFromCloneUrl`, it throws `InvalidGitHubBaseUrlError`
+ * when it reads an invalid `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`.
+ *
+ * git asks the user's credential helpers itself, a helper miss fails as git
+ * failed, and `platform/git.ts` maps a refused credential to
+ * `StoredCredentialRejectedError` only for a request to the bundle's host
+ * (GAUTH-04, D-1-03).
+ */
+export function authBundleFor(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
+  return {
+    kind: "stored-credential",
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
+    host: hostFromCloneUrl(cloneUrl, kind),
+  };
+}
 
 /**
  * Build the `stored-credential` bundle for `host`: the user's git credential
