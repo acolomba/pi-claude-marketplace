@@ -100,7 +100,6 @@ test("the committed schema lists each payload kind in declared order with schema
     { kind: "usage-info", schemaVersion: 1 },
     { kind: "autoapply-status", schemaVersion: 1 },
     { kind: "diagnostic", schemaVersion: 1 },
-    { kind: "device-flow-prompt", schemaVersion: 1 },
     { kind: "async-rewake-summary", schemaVersion: 1 },
     { kind: "stop-override-cap", schemaVersion: 1 },
     { kind: "reconcile-aborted", schemaVersion: 1 },
@@ -114,7 +113,7 @@ test("the committed schema lists each payload kind in declared order with schema
   ]);
 });
 
-test("the committed schema has exactly 25 payload members", async () => {
+test("the committed schema has exactly 24 payload members", async () => {
   // arrange
   const committed = await committedSchemaDocument();
 
@@ -122,7 +121,7 @@ test("the committed schema has exactly 25 payload members", async () => {
   const memberCount = committed.anyOf.length;
 
   // assert
-  assert.strictEqual(memberCount, 25);
+  assert.strictEqual(memberCount, 24);
 });
 
 test("a committed schema missing one payload kind fails the drift comparison", async () => {

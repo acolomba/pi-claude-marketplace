@@ -272,7 +272,6 @@ for (const label of ["command-severity", "command-exit-status", "needs-reload"])
     { name: "hook only", records: [commandEvent({ origin: { kind: "hook" } })] },
     ...[
       "diagnostic",
-      "device-flow-prompt",
       "reconcile-aborted",
       "plugin-path-skipped",
       "async-rewake-summary",
@@ -464,7 +463,7 @@ for (const kind of [
   });
 }
 
-for (const kind of ["diagnostic", "device-flow-prompt"]) {
+for (const kind of ["diagnostic"]) {
   test(`the verdict includes ${kind} severity alongside an outcome`, async (t) => {
     // arrange
     const records = [

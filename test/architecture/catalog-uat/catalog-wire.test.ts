@@ -156,16 +156,7 @@ function catalogOrigin(example: CatalogExample): NotificationOrigin {
   return { kind: "command", commandId, invocationId: tupleKey(example.section, example.state) };
 }
 
-/**
- * The raw kinds a run emits. No command emits `device-flow-prompt` after
- * D-SG-27, so no sample, origin, or helper exists for it.
- */
-type EmittedRawKind = Exclude<RawSurface["kind"], "device-flow-prompt">;
-
-/** The sample of one emitted raw kind. */
-type EmittedRawSurface = Extract<RawSurface, { kind: EmittedRawKind }>;
-
-const RAW_ORIGINS: Readonly<Record<EmittedRawKind, NotificationOrigin>> = {
+const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
   "usage-error": { kind: "command", commandId: "plugin install", invocationId: "raw-usage-error" },
   "usage-info": { kind: "command", commandId: "plugin list", invocationId: "raw-usage-info" },
   "autoapply-status": {
@@ -203,7 +194,7 @@ const ABSOLUTE_PATH =
   /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\\?\\|\\\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
 
 /** One sample per raw kind; a kind missing from the table fails typecheck. */
-const RAW_SAMPLES: { readonly [K in EmittedRawKind]: Extract<RawSurface, { kind: K }> } = {
+const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { kind: K }> } = {
   "usage-error": {
     kind: "usage-error",
     message: "unknown flag --bogus",
@@ -320,11 +311,7 @@ function presentRawSamples(): PresentedSource[] {
 }
 
 /** Dispatches each raw sample through the public helper that owns its kind. */
-function emitRawSample(
-  ctx: NotificationContext,
-  run: NotificationRun,
-  surface: EmittedRawSurface,
-): void {
+function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: RawSurface): void {
   switch (surface.kind) {
     case "usage-error":
       notifyUsageError(ctx, run, surface);
@@ -509,7 +496,7 @@ function realPayloads(): {
   }));
 }
 
-test("WIRE-02: the retained inventory and separate command error cover all 23 emitted kinds", () => {
+test("WIRE-02: the retained inventory and separate command error cover all 24 kinds", () => {
   // arrange
   const error = resolveCommandError(new Error("operation failed"), false);
   const origin = {

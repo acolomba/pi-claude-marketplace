@@ -2273,53 +2273,6 @@
     },
     {
       "type": "object",
-      "required": [
-        "schemaVersion",
-        "origin",
-        "severity",
-        "needsReload",
-        "kind",
-        "verificationUri",
-        "userCode"
-      ],
-      "properties": {
-        "schemaVersion": { "type": "number", "const": 1 },
-        "origin": {
-          "anyOf": [
-            {
-              "type": "object",
-              "required": ["kind", "commandId", "invocationId"],
-              "properties": {
-                "kind": { "type": "string", "const": "command" },
-                "commandId": { "type": "string", "minLength": 1 },
-                "invocationId": { "type": "string", "minLength": 1 }
-              },
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "required": ["kind"],
-              "properties": { "kind": { "type": "string", "const": "load" } },
-              "additionalProperties": false
-            },
-            {
-              "type": "object",
-              "required": ["kind"],
-              "properties": { "kind": { "type": "string", "const": "hook" } },
-              "additionalProperties": false
-            }
-          ]
-        },
-        "severity": { "enum": ["info", "warning", "error"] },
-        "needsReload": { "type": "boolean" },
-        "kind": { "type": "string", "const": "device-flow-prompt" },
-        "verificationUri": { "type": "string" },
-        "userCode": { "type": "string" }
-      },
-      "additionalProperties": false
-    },
-    {
-      "type": "object",
       "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "text"],
       "properties": {
         "schemaVersion": { "type": "number", "const": 1 },

@@ -2186,11 +2186,6 @@ describe("resolveRawSurface", () => {
 
   for (const surface of [
     { kind: "usage-info", usage: "usage: add <https://user:tok@host/o/r>" },
-    {
-      kind: "device-flow-prompt",
-      verificationUri: "https://github.com/login/device",
-      userCode: "ABCD-1234",
-    },
     { kind: "async-rewake-summary", summary: "rewake with Bearer abc" },
     { kind: "stop-override-cap", pluginId: "alpha@official", cap: 8 },
     { kind: "hook-notice", text: "UserPromptSubmit says: token Bearer abc" },

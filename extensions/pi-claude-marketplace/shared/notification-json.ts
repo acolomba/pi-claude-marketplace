@@ -222,13 +222,6 @@ function wireRawSurface(
       };
     case "diagnostic":
       return { ...envelope, kind: surface.kind, header: surface.header, lines: [...surface.lines] };
-    case "device-flow-prompt":
-      return {
-        ...envelope,
-        kind: surface.kind,
-        verificationUri: surface.verificationUri,
-        userCode: surface.userCode,
-      };
     case "async-rewake-summary":
       return { ...envelope, kind: surface.kind, text: surface.summary };
     case "stop-override-cap":

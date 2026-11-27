@@ -713,16 +713,6 @@ const DIAGNOSTIC_PAYLOAD = Type.Object(
   { additionalProperties: false },
 );
 
-const DEVICE_FLOW_PROMPT_PAYLOAD = Type.Object(
-  {
-    ...RAW_ENVELOPE_FIELDS,
-    kind: Type.Literal("device-flow-prompt"),
-    verificationUri: Type.String(),
-    userCode: Type.String(),
-  },
-  { additionalProperties: false },
-);
-
 /**
  * RAWS-05 / D-08: the plugin author's summary, verbatim, as `text`: D-01
  * reserves `summary` for the warning and error summary line.
@@ -977,7 +967,6 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   USAGE_INFO_PAYLOAD,
   AUTOAPPLY_STATUS_PAYLOAD,
   DIAGNOSTIC_PAYLOAD,
-  DEVICE_FLOW_PROMPT_PAYLOAD,
   ASYNC_REWAKE_SUMMARY_PAYLOAD,
   STOP_OVERRIDE_CAP_PAYLOAD,
   RECONCILE_ABORTED_PAYLOAD,

@@ -651,7 +651,6 @@ export const RAW_SURFACE_SEVERITY = {
   "autoapply-status": "info",
   "reload-started": "info",
   diagnostic: "warning",
-  "device-flow-prompt": "info",
   "mcp-config-notices": "warning",
   "async-rewake-summary": "info",
   "stop-override-cap": "warning",
@@ -766,7 +765,6 @@ export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
       return resolveBackgroundUpdate(surface);
     case "usage-info":
     case "autoapply-status":
-    case "device-flow-prompt":
     case "async-rewake-summary":
     case "stop-override-cap":
     case "hook-notice":

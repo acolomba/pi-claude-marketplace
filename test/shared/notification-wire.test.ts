@@ -368,8 +368,19 @@ test("APL-04 / D-14: rejects needsApply on a reconcile-applied payload", () => {
   assert.strictEqual(valid, false);
 });
 
-const DEVICE_FLOW_PROMPT_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[14];
-const ASYNC_REWAKE_SUMMARY_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[15];
+const ASYNC_REWAKE_SUMMARY_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[14];
+
+function diagnosticPayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    kind: "diagnostic",
+    severity: "warning",
+    needsReload: false,
+    header: "Plugin diagnostics",
+    lines: ["official:formatter: hooks.json is not valid JSON"],
+  };
+}
 
 for (const origin of [
   { kind: "command", commandId: "plugin list", invocationId: "run-a" },
@@ -383,7 +394,7 @@ for (const origin of [
     // act
     const accepted = [
       validator.Check({ ...cascadePayloadWith(failedRow()), origin }),
-      validator.Check({ ...deviceFlowPromptPayload(), origin }),
+      validator.Check({ ...diagnosticPayload(), origin }),
     ];
 
     // assert
@@ -426,7 +437,7 @@ for (const { title, origin } of [
     // act
     const accepted = [
       validator.Check({ ...cascadePayloadWith(failedRow()), origin }),
-      validator.Check({ ...deviceFlowPromptPayload(), origin }),
+      validator.Check({ ...diagnosticPayload(), origin }),
     ];
 
     // assert
@@ -438,50 +449,13 @@ test("rejects missing origin on raw and structured payloads", () => {
   // arrange
   const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
   const { origin: _cascadeOrigin, ...cascade } = cascadePayloadWith(failedRow());
-  const { origin: _rawOrigin, ...raw } = deviceFlowPromptPayload();
+  const { origin: _rawOrigin, ...raw } = diagnosticPayload();
 
   // act
   const accepted = [validator.Check(cascade), validator.Check(raw)];
 
   // assert
   assert.deepStrictEqual(accepted, [false, false]);
-});
-
-function deviceFlowPromptPayload(): Record<string, unknown> {
-  return {
-    schemaVersion: 1,
-    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-    kind: "device-flow-prompt",
-    severity: "info",
-    needsReload: false,
-    verificationUri: "https://github.com/login/device",
-    userCode: "ABCD-1234",
-  };
-}
-
-test("accepts a raw device-flow-prompt payload", () => {
-  // arrange
-  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
-  const payload = deviceFlowPromptPayload();
-
-  // act
-  const valid = validator.Check(payload);
-
-  // assert
-  assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
-});
-
-test("rejects a device-flow-prompt payload without its user code", () => {
-  // arrange
-  const { userCode: _userCode, ...payload } = deviceFlowPromptPayload();
-
-  // act
-  const errors = leafErrors(DEVICE_FLOW_PROMPT_MEMBER, payload);
-  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
-
-  // assert
-  assert.deepStrictEqual(errors, [{ keyword: "required", instancePath: "" }]);
-  assert.strictEqual(valid, false);
 });
 
 test("rejects an async-rewake-summary payload that carries summary", () => {
@@ -508,7 +482,7 @@ test("rejects an async-rewake-summary payload that carries summary", () => {
   assert.strictEqual(valid, false);
 });
 
-const HOOK_NOTICE_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[22];
+const HOOK_NOTICE_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[21];
 
 function hookNoticePayload(): Record<string, unknown> {
   return {
@@ -552,7 +526,7 @@ test("D-CF5-14: rejects a hook-notice payload that carries summary in place of t
   assert.strictEqual(valid, false);
 });
 
-const RELOAD_STARTED_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[23];
+const RELOAD_STARTED_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[22];
 
 function reloadStartedPayload(): Record<string, unknown> {
   return {

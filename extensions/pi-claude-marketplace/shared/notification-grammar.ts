@@ -1471,12 +1471,6 @@ export function formatRawSurface(
       return surface.lines.length === 0
         ? undefined
         : [`${surface.header}\n\n${surface.lines.join("\n")}`, RAW_SURFACE_SEVERITY[surface.kind]];
-    case "device-flow-prompt":
-      // D-09: the provider's values pass through verbatim.
-      return [
-        `Open ${surface.verificationUri} and enter: ${surface.userCode}`,
-        RAW_SURFACE_SEVERITY[surface.kind],
-      ];
     case "async-rewake-summary":
       return surface.summary.length === 0
         ? undefined

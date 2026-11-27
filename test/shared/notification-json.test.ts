@@ -2870,22 +2870,6 @@ const RAW_CASES: {
       lines: ["one", "two"],
     },
   },
-  "device-flow-prompt": {
-    surface: {
-      kind: "device-flow-prompt",
-      verificationUri: "https://github.com/login/device",
-      userCode: "ABCD-1234",
-    },
-    expected: {
-      schemaVersion: 1,
-      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-      kind: "device-flow-prompt",
-      severity: "info",
-      needsReload: false,
-      verificationUri: "https://github.com/login/device",
-      userCode: "ABCD-1234",
-    },
-  },
   "async-rewake-summary": {
     surface: { kind: "async-rewake-summary", summary: "rewoke" },
     expected: {

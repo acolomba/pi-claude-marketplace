@@ -461,21 +461,6 @@ An out-of-band warning. It does not establish a command outcome.
 
 <!-- /fields -->
 
-#### device-flow-prompt
-
-Authorization instructions. It does not establish a command outcome or carry an access token.
-
-<!-- fields: kind:device-flow-prompt -->
-
-<!-- use: common-fields -->
-
-| Field path        | Type   | Presence | Meaning                                       |
-| ----------------- | ------ | -------- | --------------------------------------------- |
-| `verificationUri` | string | required | Address where the user authorizes the device. |
-| `userCode`        | string | required | Code the user enters at that address.         |
-
-<!-- /fields -->
-
 #### async-rewake-summary
 
 A plugin author's asynchronous hook summary.

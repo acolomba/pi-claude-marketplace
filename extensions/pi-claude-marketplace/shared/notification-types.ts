@@ -1878,25 +1878,6 @@ export interface HookNoticeSurface {
 export type HookSurface = AsyncRewakeSummarySurface | StopOverrideCapSurface | HookNoticeSurface;
 
 /**
- * D-10 / AUTH-03: the device-flow values a user needs to authorize this
- * machine. AUTH-09: these two values are the only data that cross the
- * device-code callback; no token exists yet when they do.
- */
-export interface DeviceFlowPrompt {
-  readonly verificationUri: string;
-  readonly userCode: string;
-}
-
-/**
- * RAWS-03 / D-12: the device-flow prompt. It belongs to no fixed-origin group
- * (D-14), because the prompt fires during commands and during load-pass git
- * installs.
- */
-export interface DeviceFlowPromptSurface extends DeviceFlowPrompt {
-  readonly kind: "device-flow-prompt";
-}
-
-/**
  * RELOADCMD-D1: what `/claude:plugin reload` reports right before Pi reloads.
  * Pi makes the command's context stale once it reloads, so the command cannot
  * report after the reload. It carries no field.
@@ -1916,7 +1897,6 @@ export type RawSurface =
   | AutoapplyStatusSurface
   | ReloadStartedSurface
   | DiagnosticSurface
-  | DeviceFlowPromptSurface
   | McpConfigNoticesSurface
   | HookSurface
   | LoadSurface;

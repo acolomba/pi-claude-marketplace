@@ -125,7 +125,6 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
     case "internal-error":
       return true;
     case "diagnostic":
-    case "device-flow-prompt":
     case "reconcile-aborted":
     case "plugin-path-skipped":
     case "async-rewake-summary":
