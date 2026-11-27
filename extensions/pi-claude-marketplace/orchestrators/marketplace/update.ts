@@ -100,7 +100,7 @@
 
 import { isDeepStrictEqual } from "node:util";
 
-import { networkCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import {
   assertRecordedMarketplaceName,
@@ -149,13 +149,7 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import {
-  DEFAULT_CREDENTIAL_OPS,
-  NO_STORED_CREDENTIAL_CAUSE,
-  buildAuthForHost,
-  buildGitHubAuth,
-  hostFromCloneUrl,
-} from "../auth-host.ts";
+import { NO_STORED_CREDENTIAL_CAUSE, authBundleFor } from "../auth-host.ts";
 import { createGitHubCloneNotes, type GitHubCloneNotes } from "../github-transport.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
@@ -200,7 +194,6 @@ import {
 import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -312,7 +305,6 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     locations: resolved.locations,
     gitOps,
     gitHubSsh: opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS,
-    credentialOps: DEFAULT_CREDENTIAL_OPS,
     hostedManifestFetch: opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH,
     reportedDependencies: new Set(),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
@@ -379,7 +371,6 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       locations: t.locations,
       gitOps,
       gitHubSsh,
-      credentialOps: DEFAULT_CREDENTIAL_OPS,
       hostedManifestFetch,
       removalOps,
       renameOps: DEFAULT_RENAME_OPS,
@@ -412,7 +403,6 @@ interface RefreshOneArgs {
    */
   readonly reportedDependencies: Set<string>;
   readonly run: NotificationRun;
-  readonly credentialOps: CredentialOps;
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly hostedManifestFetch: HostedManifestFetch;
   readonly removalOps: RemovalOps;
@@ -489,22 +479,15 @@ function parseBaseline(name: string, text: string | undefined): unknown {
 }
 
 /**
- * The auth bundle a refresh of `source` asks and clones with. github: AUTH-02
- * / D-79-05: buildGitHubAuth binds github.com with the GitHub provider's
- * Device Flow, or the override host with a stored credential and no Device
- * Flow when PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set (GHB-02). url:
- * MURL-03 / GAUTH-03: the bundle is keyed by the source's host, and a registry
- * host adds that provider's Device Flow on a helper miss (PROV-03). A stored
- * credential answers first, so Device Flow runs only on a miss (AUTH-02), and
- * only the user code and the verification URI cross its onDeviceCode callback
- * (AUTH-09).
+ * The auth bundle a refresh of `source` asks and clones with: `authBundleFor`
+ * of the source's canonical address and kind. github: GHB-02: it binds
+ * github.com, or the override host while PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL
+ * is set. url: MURL-03 / GAUTH-03: it binds the host of `source.url`. git
+ * asks the user's credential helpers itself, and nothing is shown or asked
+ * on a helper miss (D-SG-27).
  */
-function refreshAuthFor(source: GitHubSource | UrlSource, args: RefreshOneArgs): GitAuthBundle {
-  const { ctx, credentialOps, run } = args;
-  const authArgs = { credentialOps, ctx, run };
-  return source.kind === "github"
-    ? buildGitHubAuth(authArgs)
-    : buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(source.url, "url") });
+function refreshAuthFor(source: GitHubSource | UrlSource): GitAuthBundle {
+  return authBundleFor(canonicalCloneUrl(source), source.kind);
 }
 
 /**
@@ -546,7 +529,7 @@ async function refreshGitSource(
   onReplaced: () => void,
 ): Promise<CloneSwapResult> {
   const { name, locations, gitOps } = args;
-  const auth = refreshAuthFor(source, args);
+  const auth = refreshAuthFor(source);
   const liveDir = await locations.sourceCloneDir(name);
   try {
     return await refreshCloneBySwap({

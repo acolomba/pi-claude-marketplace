@@ -1430,16 +1430,14 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.version, "0.0.2");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, projectTree.pluginRoot);
-  // D-SG-27: the add takes no credential, sign-in, or memo option, so its
-  // bundle carries the production credential surface.
+  // D-SG-27: the add takes no credential, sign-in, or notification option,
+  // because its bundle depends on the source's address alone.
   assert.deepStrictEqual(recordCalls, [
     {
       state: seeded.state,
       locations,
       source: { kind: "path", raw: "./marketplace", logical: "./marketplace" },
       cwd: environment.cwd,
-      ctx: options.ctx,
-      run: options.run,
       removalOps: options.removalOps,
     },
   ]);

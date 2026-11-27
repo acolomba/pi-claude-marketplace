@@ -61,7 +61,7 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
-import { networkCloneUrl } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
@@ -97,13 +97,7 @@ import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/not
 import { ownValue } from "../../shared/own-key.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
-import {
-  DEFAULT_CREDENTIAL_OPS,
-  NO_STORED_CREDENTIAL_CAUSE,
-  buildAuthForHost,
-  buildGitHubAuth,
-  hostFromCloneUrl,
-} from "../auth-host.ts";
+import { NO_STORED_CREDENTIAL_CAUSE, authBundleFor } from "../auth-host.ts";
 import { cloneNoteOf, createGitHubCloneNotes, withOwnCloneNotes } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
@@ -161,7 +155,6 @@ import type { CloneTransportNote } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
-import type { CredentialOps } from "../auth-host.ts";
 import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
 import type {
@@ -268,23 +261,12 @@ function logKeptSync(mpName: string, swapped: CloneSwapResult): void {
 
 /**
  * AUTH-02 / GAUTH-03: the auth bundle a PUP-2 sync asks and clones with, the
- * one `marketplace update` builds: github.com or the GitHub override host for
- * a github source (GHB-02), the clone URL's host for a url source, over the
- * production credential surface (D-SG-27).
+ * one `marketplace update` binds: `authBundleFor` of the source's canonical
+ * address, so github.com or the GitHub override host for a github source
+ * (GHB-02) and the clone URL's host for a url source (D-SG-27).
  */
-function syncAuthFor(
-  source: GitHubSource | UrlSource,
-  opts: UpdatePluginsOptions,
-  credentialOps: CredentialOps,
-): GitAuthBundle {
-  const authArgs = {
-    credentialOps,
-    ctx: opts.ctx,
-    run: opts.run,
-  };
-  return source.kind === "github"
-    ? buildGitHubAuth(authArgs)
-    : buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(source.url, "url") });
+function syncAuthFor(source: GitHubSource | UrlSource): GitAuthBundle {
+  return authBundleFor(canonicalCloneUrl(source), source.kind);
 }
 
 /**
@@ -388,7 +370,7 @@ function makeSyncCloneOnce(opts: UpdatePluginsOptions): MarketplaceSyncs {
 
     const source = mp.source as ParsedSource;
     if (source.kind === "github" || source.kind === "url") {
-      const auth = syncAuthFor(source, opts, DEFAULT_CREDENTIAL_OPS);
+      const auth = syncAuthFor(source);
       await refreshFramed(locations, source, () =>
         syncMarketplaceBySwap({
           source,

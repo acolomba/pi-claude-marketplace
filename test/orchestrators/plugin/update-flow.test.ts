@@ -33,7 +33,6 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -1544,8 +1543,10 @@ test("PUP-2 / AUTH-02: the github marketplace sync check carries a github.com bu
       // assert
       assert.equal(state.resolveRemoteRefCalls.length, 1);
       const auth = state.resolveRemoteRefCalls[0]?.auth;
-      assert.equal(auth?.host, "github.com");
-      assert.strictEqual(auth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
+      assert.deepStrictEqual(
+        { kind: auth?.kind, host: auth?.host },
+        { kind: "stored-credential", host: "github.com" },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -10826,8 +10827,10 @@ test("plugin update authentication: a pinned provider update gives the clone a g
       });
 
       // assert
-      assert.strictEqual(captured.cloneAuth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
-      assert.equal(captured.cloneAuth?.host, "github.com");
+      assert.deepStrictEqual(
+        { kind: captured.cloneAuth?.kind, host: captured.cloneAuth?.host },
+        { kind: "stored-credential", host: "github.com" },
+      );
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -10867,8 +10870,10 @@ test("plugin update authentication: an unpinned provider update gives the mirror
       });
 
       // assert
-      assert.strictEqual(captured.cloneAuth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
-      assert.equal(captured.cloneAuth?.host, "github.com");
+      assert.deepStrictEqual(
+        { kind: captured.cloneAuth?.kind, host: captured.cloneAuth?.host },
+        { kind: "stored-credential", host: "github.com" },
+      );
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });

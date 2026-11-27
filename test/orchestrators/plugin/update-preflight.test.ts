@@ -8,7 +8,6 @@ import test from "node:test";
 import lockfile from "proper-lockfile";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   isUpdatePreflightOutcome,
@@ -2728,11 +2727,8 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
     resolvePluginPin: () =>
       Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
     materializePluginClone: (options) => {
-      assert.deepStrictEqual(options.resolveAuth(), {
-        kind: "stored-credential",
-        credentialOps: DEFAULT_CREDENTIAL_OPS,
-        host: "github.com",
-      });
+      const { credentialOps: _credentialOps, ...binding } = options.resolveAuth();
+      assert.deepStrictEqual(binding, { kind: "stored-credential", host: "github.com" });
       return Promise.resolve(pinned.pluginRoot);
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
@@ -2742,11 +2738,10 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
     materializeOrRefreshPluginMirror: (options) => {
-      assert.deepStrictEqual(options.auth, {
-        kind: "stored-credential",
-        credentialOps: DEFAULT_CREDENTIAL_OPS,
-        host: "github.com",
-      });
+      assert.deepStrictEqual(
+        { kind: options.auth?.kind, host: options.auth?.host },
+        { kind: "stored-credential", host: "github.com" },
+      );
       return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
     },
     materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),

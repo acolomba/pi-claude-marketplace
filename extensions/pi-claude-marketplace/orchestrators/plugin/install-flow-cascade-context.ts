@@ -100,8 +100,8 @@ export type InstallLedgerCallerOptions = Pick<
  * The transport context is shared because one install command probes the
  * user's ssh once, and its dependencies clone by that answer (D-SG-18). No
  * credential collaborator is threaded: every member's clone and the tag query
- * that selected its pin build their bundles over the same production
- * credential surface (AUTH-09).
+ * that selected its pin bind the bundle of the address they reach
+ * (`authBundleFor`, AUTH-09).
  *
  * Per-member, necessarily: `sourcePin`, `resolvedVersion` and `pinVersion`.
  * The first two are facts about ONE member -- the commit its constraint

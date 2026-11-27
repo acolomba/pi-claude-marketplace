@@ -20,10 +20,7 @@ import test, { type TestContext } from "node:test";
 import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
-import {
-  DEFAULT_CREDENTIAL_OPS,
-  NO_STORED_CREDENTIAL_CAUSE,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import {
   addMarketplace as addMarketplaceWithCache,
   addMarketplaceToState,
@@ -3722,7 +3719,7 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
 // AUTH-01 auth-wiring tests
 // -----------------------------------------------------------------------
 
-test("AUTH-01 add: the clone's bundle carries the production credential surface by reference (no re-bundling)", async () => {
+test("AUTH-01 add: the clone carries the stored-credential bundle of github.com", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -3743,11 +3740,9 @@ test("AUTH-01 add: the clone's bundle carries the production credential surface 
 
     // assert
     assert.equal(state.cloneCalls.length, 1);
-    assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
-    assert.equal(
-      state.cloneCalls[0]?.auth?.credentialOps,
-      DEFAULT_CREDENTIAL_OPS,
-      "credentialOps must be reference-equal (no re-bundling)",
+    assert.deepStrictEqual(
+      { kind: state.cloneCalls[0]?.auth?.kind, host: state.cloneCalls[0]?.auth?.host },
+      { kind: "stored-credential", host: "github.com" },
     );
   });
 });
@@ -6715,11 +6710,9 @@ test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the 
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
 
-    // Unlike the gitlab.example.com adds above (MURL-08, PROV-02), gitlab.com
-    // is claimed by GITLAB_PROVIDER (exact-match hostMatch) -- the real
-    // findProviderForHost/buildAuthForHost path (no mock auth registry) must
-    // attach its auth bundle to the SAME clone call that carries the
-    // verbatim wire URL.
+    // The production `authBundleFor` binds gitlab.com, the url's host, and
+    // the add must attach that bundle to the SAME clone call that carries
+    // the verbatim wire URL (MURL-08).
     // act
     await addMarketplace({
       ctx,
@@ -7334,7 +7327,6 @@ for (const { title, marker } of [
 test("D-PL5-20: addMarketplaceToState returns the download directory of a hosted source", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const { ctx, run } = makeCtx(0);
     const { hostedManifestFetch } = createHostedManifestFetch();
     const snapshot: ExtensionState = { schemaVersion: 3, marketplaces: {} };
 
@@ -7344,8 +7336,6 @@ test("D-PL5-20: addMarketplaceToState returns the download directory of a hosted
       locations,
       source: parseAddableSource(HOSTED_URL),
       cwd,
-      ctx,
-      run,
       removalOps: createRemovalOps(),
       hostedManifestFetch,
     });
@@ -7371,7 +7361,6 @@ for (const { answer, clone } of [
   test(`D-SG-22: addMarketplaceToState returns the clone note of an owner/repo source whose ssh probe answers ${answer}`, async () => {
     await withTmpScope(async ({ cwd, locations }) => {
       // arrange
-      const { ctx, run } = makeCtx(0);
       const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       });
@@ -7383,8 +7372,6 @@ for (const { answer, clone } of [
         locations,
         source: parseAddableSource("acme/mp"),
         cwd,
-        ctx,
-        run,
         removalOps: createRemovalOps(),
         gitOps,
         gitHubSsh: userSsh(answer),

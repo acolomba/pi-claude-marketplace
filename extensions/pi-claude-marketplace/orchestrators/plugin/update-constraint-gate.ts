@@ -37,7 +37,6 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { CredentialOps } from "../auth-host.ts";
 import type {
   CatalogConstraintSeam,
   ConstraintHolder,
@@ -45,10 +44,7 @@ import type {
   UpdateConstraintVerdict,
 } from "./constraint-fold.ts";
 import type { AddressedDependency, ScopeDeclarationDetailOptions } from "./dependency-index.ts";
-import type {
-  DependencyTagListingFailureReason,
-  DependencyTagProbeOptions,
-} from "./dependency-tag-probe.ts";
+import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
 
 /**
  * The declaration-walk and tag-probe operations this leaf composes,
@@ -83,10 +79,12 @@ export interface UpdateConstraintOptions {
   readonly requesters?: readonly ConstraintRequester[];
   /** WR-1: the versions a dependency plan ruled out for the move. */
   readonly excludedVersions?: readonly string[] | undefined;
-  readonly auth: {
-    readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
-    readonly credentialOps: CredentialOps;
-  };
+  /**
+   * The command's notification context. Its presence keeps stage one's tag
+   * query of a git-backed entry source, and gives a git marketplace's tag
+   * listing the auth bundle of its address.
+   */
+  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
 }
 
 // D-PL2-06: the holders are read from their installed copies, so an update is
@@ -178,17 +176,17 @@ function decodeTagProbe(
 
 /**
  * Stage one on a git-backed entry source: probes the source repository's own
- * release tags through the SAME host auth bundle `preparePluginUpdate`
- * already built for the clone probe, passed through untouched -- no second
- * credential acquisition path (AUTH-09).
+ * release tags through the auth bundle of the source's address, the one the
+ * clone probe binds (`authBundleFor`) -- no second credential acquisition
+ * path (AUTH-09).
  *
  * Every REAL caller threads a `ctx` (`UpdatePluginsOptions.ctx` is required
- * the entire way down this call chain); `UpdateConstraintOptions.auth.notification`
+ * the entire way down this call chain); `UpdateConstraintOptions.notification`
  * stays optional only so a caller that never reaches this arm -- unconstrained,
  * or held before stage one -- needs none. Reaching here with no `ctx` at all
- * cannot safely authenticate a git host, so the query is skipped and the fold
- * admits the range unpinned, leaving the outcome to a later stage -- the same
- * "cannot decide, defer" shape D-10-16 gives an unreadable local listing.
+ * skips the query, and the fold admits the range unpinned, leaving the outcome
+ * to a later stage -- the same "cannot decide, defer" shape D-10-16 gives an
+ * unreadable local listing (NFR-5).
  */
 async function probeGitStageOne(
   options: UpdateConstraintOptions,
@@ -197,8 +195,7 @@ async function probeGitStageOne(
   range: string,
   holders: readonly ConstraintHolder[],
 ): Promise<UpdateConstraintVerdict> {
-  const auth = probeAuth(options);
-  if (auth === undefined) {
+  if (options.notification === undefined) {
     return admitsRange(range, holders);
   }
 
@@ -206,27 +203,9 @@ async function probeGitStageOne(
     pluginName: options.plugin,
     source,
     range,
-    auth,
     ...(options.tagMemo !== undefined && { tagMemo: options.tagMemo }),
   });
   return decodeTagProbe(range, holders, probed);
-}
-
-/**
- * The tag probes' auth context, built from the caller's notification context
- * and credential ops, or undefined when the caller threads no `ctx`.
- */
-function probeAuth(
-  options: UpdateConstraintOptions,
-): DependencyTagProbeOptions["auth"] | undefined {
-  if (options.auth.notification === undefined) {
-    return undefined;
-  }
-
-  return {
-    ...options.auth.notification,
-    credentialOps: options.auth.credentialOps,
-  };
 }
 
 /**
@@ -242,14 +221,13 @@ async function probePathStageOne(
   range: string,
   holders: readonly ConstraintHolder[],
 ): Promise<UpdateConstraintVerdict> {
-  const auth = probeAuth(options);
   const probed = await seam.probeMarketplaceTags({
     pluginName: options.plugin,
     marketplaceRoot: options.marketplaceRoot,
     marketplaceSource: options.marketplaceSource,
     range,
     ...(options.marketplaceTagMemo !== undefined && { tagMemo: options.marketplaceTagMemo }),
-    ...(auth !== undefined && { auth }),
+    ...(options.notification !== undefined && { withHostBundle: true }),
   });
 
   // D-10-14 / D-10-16: an unreadable listing and an empty one are the

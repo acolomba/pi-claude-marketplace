@@ -6474,7 +6474,7 @@ test("NFR-5: info renders an uninstalled git plugin `(remote)` with no plugin-cl
 //
 // A real clone-cache seam over a mock gitOps lets the fetch hook materialize a
 // cold clone/mirror without touching the network; the production
-// `buildAuthForHost` runs inside info. Tests inject this via
+// `authBundleFor` runs inside info. Tests inject this via
 // `GetPluginInfoOptions.cloneCacheSeam`.
 function fetchSeamWith(gitOps: GitOps): InfoCloneCacheSeam {
   return {

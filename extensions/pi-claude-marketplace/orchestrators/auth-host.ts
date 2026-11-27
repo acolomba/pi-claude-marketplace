@@ -2,21 +2,17 @@
  * Host-keyed auth bundle factory (GAUTH-03, D-1-03, GHB-02).
  *
  * This module binds a git request to the host whose stored credential it
- * uses, and it holds no sign-in (D-SG-27). EVERY host gets a
- * `stored-credential` bundle from `buildStoredCredentialAuth`: git asks the
- * user's credential helpers itself, a helper miss fails as git failed, and a
+ * uses, and it holds no sign-in (D-SG-27). EVERY clone address gets a
+ * `stored-credential` bundle from `authBundleFor`: git asks the user's
+ * credential helpers itself, a helper miss fails as git failed, and a
  * credential the host refuses fails as `StoredCredentialRejectedError` and
  * stays stored as far as this extension is concerned (GAUTH-04, D-SG-28). No
  * command, load, or background pass shows a device code or waits for input.
  *
- * The marketplace clone path (add.ts / update.ts) calls `buildAuthForHost`
- * directly, and the plugin clone paths reach it through `buildCloneAuth`.
- * GitHub bundles come from `buildGitHubAuth`: while
- * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it binds the override host;
- * unset, it binds github.com (GHB-02).
- *
- * The builders still take the command's notification context and run, unread,
- * so their callers stay as they are until the builders are replaced.
+ * The bundle depends only on the address, so no verb passes a notification
+ * context or a credential surface to get one. A GitHub address binds the
+ * override host while `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set and
+ * github.com otherwise (GHB-02).
  *
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
@@ -38,24 +34,14 @@ import {
   gitHubWireUrl,
 } from "../shared/github-base-url.ts";
 
+import type { GitBackedSource } from "../domain/source.ts";
 import type { CredentialOps, GitAuthBundle } from "../platform/git-credential.ts";
-import type { NotificationContext } from "../platform/pi-api.ts";
-import type { NotificationRun } from "../shared/notification-run.ts";
-
-// Re-export the credential type the network-gated plugin orchestrators still
-// name: the clone and tag probes and the internal auth contexts type their
-// `credentialOps` with it until the builders stop taking one (D-SG-27). Those
-// files MUST NOT import from `platform/git.ts` or `platform/git-credential.ts`
-// directly -- BLOCK F in `eslint.config.js` rejects any `platform/git` import,
-// even type-only -- so this gate-clean module is their single sanctioned
-// source for it (T-79-10).
-export type { CredentialOps };
 
 /** How long a `git credential` subprocess may run before its process tree is stopped. */
 const CREDENTIAL_TIMEOUT_MS = 5_000;
 
 /**
- * The production credential surface every verb defaults to: the platform
+ * The production credential surface every bundle carries: the platform
  * credential protocol bound to its production git process and the timeout
  * above.
  *
@@ -70,7 +56,7 @@ const CREDENTIAL_TIMEOUT_MS = 5_000;
  * The call builds three closures and launches nothing; the first subprocess
  * starts when a verb actually calls fill/approve/reject.
  */
-export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
+const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
   git: NODE_CREDENTIAL_GIT,
   timeoutMs: CREDENTIAL_TIMEOUT_MS,
 });
@@ -95,7 +81,7 @@ export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
  * the bundle to https requests only), so this host only names a bundle that
  * no request consults.
  */
-export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git-subdir"): string {
+function hostFromCloneUrl(cloneUrl: string, kind: GitBackedSource["kind"]): string {
   if (kind === "github" || gitHubAddressOf(cloneUrl) !== undefined) {
     return gitHubOverrideHost() ?? GITHUB_HOST;
   }
@@ -136,79 +122,22 @@ export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
   String.raw`no credential was obtained for ${host}; store one with: printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
 
 /**
- * Build the `stored-credential` bundle for `host`: the user's git credential
- * helper is the only credential source, a helper miss fails as git failed, and
- * a credential the server rejects stays stored because it is the only copy
- * (GAUTH-04, D-1-01). It does no I/O.
+ * The auth bundle of a clone address: the `stored-credential` bundle bound to
+ * the host `hostFromCloneUrl` reads from `cloneUrl` and `kind` (GAUTH-03,
+ * D-1-03, GHB-02). The bundle depends only on the address, so every command,
+ * load, and background pass gets the same bundle for the same address. It
+ * does no I/O. Like `hostFromCloneUrl`, it throws `InvalidGitHubBaseUrlError`
+ * when it reads an invalid `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`.
  *
- * Every builder of this module returns it (D-SG-27). The autoupdate cascade
- * asks for it directly, because it has no notification context (D-3-04).
+ * git asks the user's credential helpers itself, a helper miss fails as git
+ * failed, and `platform/git.ts` maps a refused credential to
+ * `StoredCredentialRejectedError` only for a request to the bundle's host
+ * (GAUTH-04, D-1-03).
  */
-export function buildStoredCredentialAuth(
-  host: string,
-  credentialOps: CredentialOps,
-): GitAuthBundle {
-  return { kind: "stored-credential", credentialOps, host };
-}
-
-/**
- * Build the `GitAuthBundle` for `host`: the stored-credential bundle, on every
- * host and every run, github.com and gitlab.com included (GAUTH-03, D-1-01,
- * D-SG-27).
- *
- * The bundle hands git no credential of its own: git makes every lookup in
- * the user's helpers itself, and `platform/git.ts` maps an authentication
- * failure only for a request to the bundle's host (D-1-03, T-79-04).
- */
-export function buildAuthForHost(args: {
-  host: string;
-  credentialOps: CredentialOps;
-  ctx: NotificationContext;
-  run: NotificationRun;
-}): GitAuthBundle {
-  return buildStoredCredentialAuth(args.host, args.credentialOps);
-}
-
-/**
- * GHB-02: build the auth bundle for a GitHub source. While
- * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it is bound to the override
- * host; unset, it is bound to github.com. An invalid value throws
- * `InvalidGitHubBaseUrlError`.
- */
-export function buildGitHubAuth(args: {
-  credentialOps: CredentialOps;
-  ctx: NotificationContext;
-  run: NotificationRun;
-}): GitAuthBundle {
-  return buildStoredCredentialAuth(gitHubOverrideHost() ?? GITHUB_HOST, args.credentialOps);
-}
-
-/**
- * T-79-09 / D-81-05 / GAUTH-03: build the host-keyed auth bundle for a
- * resolved clone url, so a private source on any host authenticates from the
- * user's credential helper.
- *
- * Shared by the install, reinstall, fetch, `info --fetch`, and update probes,
- * and by the pinned and unpinned arms within each, so none of those call
- * sites needs its own copy of this logic. The autoupdate cascade has no
- * notification context, so its update probe calls `buildStoredCredentialAuth`
- * instead (D-3-04).
- *
- * A github source, and a git-subdir url the GitHub base rewrites, get
- * `buildGitHubAuth`'s bundle (GHB-02, D-09).
- */
-export function buildCloneAuth(
-  cloneUrl: string,
-  kind: "url" | "git-subdir" | "github",
-  auth: {
-    readonly ctx: NotificationContext;
-    readonly run: NotificationRun;
-    readonly credentialOps: CredentialOps;
-  },
-): GitAuthBundle {
-  if (kind === "github" || gitHubWireUrl(cloneUrl) !== cloneUrl) {
-    return buildGitHubAuth(auth);
-  }
-
-  return buildAuthForHost({ ...auth, host: hostFromCloneUrl(cloneUrl, kind) });
+export function authBundleFor(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
+  return {
+    kind: "stored-credential",
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
+    host: hostFromCloneUrl(cloneUrl, kind),
+  };
 }

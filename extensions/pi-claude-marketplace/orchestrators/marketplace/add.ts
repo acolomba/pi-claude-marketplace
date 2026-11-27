@@ -60,7 +60,7 @@ import { mkdir, rename, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
+import { canonicalCloneUrl, networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
 import { isScpGitAddress } from "../../domain/git-url.ts";
 import { planMarketplaceClone } from "../../domain/github-transport.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
@@ -116,12 +116,7 @@ import {
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import {
-  DEFAULT_CREDENTIAL_OPS,
-  buildAuthForHost,
-  buildGitHubAuth,
-  hostFromCloneUrl,
-} from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import {
   cloneOverGitHubTransports,
   createGitHubCloneNotes,
@@ -160,7 +155,6 @@ import type {
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -914,8 +908,6 @@ export async function addMarketplaceToState(args: {
   readonly locations: ScopedLocations;
   readonly source: ReturnType<typeof parseAddableSource>;
   readonly cwd: string;
-  readonly ctx: NotificationContext;
-  readonly run: NotificationRun;
   readonly removalOps: RemovalOps;
   readonly gitOps?: GitOps | undefined;
   /** SG-SSH-02: the ssh probe of a GitHub clone. Defaults to DEFAULT_GITHUB_SSH_OPS. */
@@ -1004,9 +996,8 @@ interface StagingSteps {
  * an `owner/repo` source whose ssh probe found the user's ssh authenticated,
  * is the SSH URL (SG-SSH-02). The probe runs on every clone, and nothing
  * keeps its answer (CONTEXT [Probe]). The plan's note goes to the steps'
- * `cloneNotes` under the typed source (D-SG-22). Every host carries an auth bundle, which
- * an HTTPS attempt passes on; the provider lookup decides its Device Flow
- * half (PROV-03).
+ * `cloneNotes` under the typed source (D-SG-22). Every host carries the
+ * auth bundle of the source's address, which an HTTPS attempt passes on.
  */
 function gitStagingSteps(
   source: GitHubSource | UrlSource,
@@ -1016,11 +1007,7 @@ function gitStagingSteps(
   const { removalOps } = args;
   const cloneNotes = args.cloneNotes ?? createGitHubCloneNotes();
   const gitHubSsh = args.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
-  const auth = cloneAuthFor(source, {
-    credentialOps: DEFAULT_CREDENTIAL_OPS,
-    ctx: args.ctx,
-    run: args.run,
-  });
+  const auth = cloneAuthFor(source);
   return {
     async stage(stagingDir) {
       // GHB-04: a url source never reads the GitHub base, so an invalid base
@@ -1256,8 +1243,6 @@ async function runAddInGuard<U>(args: {
       locations,
       source: action?.source ?? source,
       cwd: opts.cwd,
-      ctx: opts.ctx,
-      run: opts.run,
       removalOps,
       gitOps: opts.gitOps,
       gitHubSsh: opts.gitHubSsh,
@@ -2073,43 +2058,19 @@ async function addStagedInGuard(args: {
   }
 }
 
-/** The credential half of a git add's auth bundle, shared by both source kinds. */
-interface CloneAuthArgs {
-  readonly credentialOps: CredentialOps;
-  readonly ctx: NotificationContext;
-  readonly run: NotificationRun;
-}
-
 /**
- * The auth bundle a github or url add clones with.
- *
- * github: AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's
- * Device Flow as the onAuthRequired closure for this clone. git first asks
- * the user's credential helpers itself; only when none answers does
- * platform/git.ts invoke the closure and run the clone once more (D-SG-14).
- * AUTH-09: the closure passes ONLY
- * user_code + verification_uri, through initiateDeviceFlow's onDeviceCode
- * callback -- the access token is acquired LATER in the poll loop and is never
- * passed back to a notify or Error. GHB-02: buildGitHubAuth binds github.com,
- * or the override host with a stored credential when
- * PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set.
- *
- * url: MURL-01 / D-76-06: `source.url` is stored as the canonical identity
- * form (parse-time `.git`-stripped) and NOT reconstructed against github.com;
- * the url actually cloned is derived from `source.raw` via `networkCloneUrl`
- * (D-2-01, D-2-03), preserving whatever `.git` decision the user's own input
- * made. GAUTH-03: the host is extracted from the url and `buildAuthForHost`
- * binds a bundle to it, so a private source on any host authenticates from the
- * user's git credential helper; the provider registry decides only whether a
- * Device Flow runs on a helper miss (PROV-03). git asks the user's helpers for
- * the host of the URL it requests. The bundle acts only on a failed request to
- * its own host, and a sign-in's token reaches git through a helper keyed to
- * that host alone (`platform/git.ts`, D-1-03, T-79-04).
+ * The auth bundle a github or url add clones with: `authBundleFor` of the
+ * source's canonical address and kind (GAUTH-03, GHB-02). A github source
+ * binds github.com, or the override host while
+ * PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set. A url source binds the host
+ * of `source.url`, the canonical identity form (MURL-01 / D-76-06); the url
+ * actually cloned derives from `source.raw` via `networkCloneUrl` (D-2-01,
+ * D-2-03). git asks the user's helpers for the host of the URL it requests,
+ * and the bundle acts only on a failed request to its own host
+ * (`platform/git.ts`, D-1-03, T-79-04).
  */
-function cloneAuthFor(source: GitHubSource | UrlSource, authArgs: CloneAuthArgs): GitAuthBundle {
-  return source.kind === "github"
-    ? buildGitHubAuth(authArgs)
-    : buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(source.url, "url") });
+function cloneAuthFor(source: GitHubSource | UrlSource): GitAuthBundle {
+  return authBundleFor(canonicalCloneUrl(source), source.kind);
 }
 
 async function addPathInGuard(args: {

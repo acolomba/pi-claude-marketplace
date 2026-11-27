@@ -32,7 +32,6 @@ import {
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { defaultPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -13373,14 +13372,14 @@ test("plugin install authentication: threads a github.com bundle over the produc
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl }) => ({
           authHost: auth?.host,
+          authKind: auth?.kind,
           cloneUrl,
-          credentialOps: auth?.credentialOps,
         })),
         [
           {
             authHost: "github.com",
+            authKind: "stored-credential",
             cloneUrl: "https://github.com/org/repo",
-            credentialOps: DEFAULT_CREDENTIAL_OPS,
           },
         ],
       );
@@ -13858,10 +13857,10 @@ test("plugin install authentication: threads a gitlab.com bundle over the produc
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl: recordedCloneUrl }) => ({
           authHost: auth?.host,
+          authKind: auth?.kind,
           cloneUrl: recordedCloneUrl,
-          credentialOps: auth?.credentialOps,
         })),
-        [{ authHost: "gitlab.com", cloneUrl, credentialOps: DEFAULT_CREDENTIAL_OPS }],
+        [{ authHost: "gitlab.com", authKind: "stored-credential", cloneUrl }],
       );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ url }) => url),

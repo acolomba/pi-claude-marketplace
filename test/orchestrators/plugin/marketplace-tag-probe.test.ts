@@ -5,10 +5,8 @@ import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/
 import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createGitTestRepository } from "../../platform/git-test-repository.ts";
 import { setGitHubBaseUrl, setPreferHttps } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ReleaseTagCandidate } from "../../../extensions/pi-claude-marketplace/domain/release-tag.ts";
-import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   MarketplaceTagListingSeam,
   MarketplaceTagProbeOptions,
@@ -18,7 +16,6 @@ import type {
   ListRemoteTagsOptions,
   RemoteTag,
 } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
 
 const MARKETPLACE_ROOT = "/marketplace/checkout";
@@ -71,20 +68,6 @@ function createFakeSeam(options: FakeSeamOptions = {}): FakeSeam {
   };
 
   return { seam, remoteCalls, localCalls };
-}
-
-function auth(): NonNullable<MarketplaceTagProbeOptions["auth"]> {
-  const ctx: NotificationContext = {
-    mode: "tui",
-    hasUI: true,
-    ui: { notify: () => undefined },
-  };
-  const credentialOps: CredentialOps = {
-    approve: () => Promise.resolve(),
-    fill: () => Promise.resolve(null),
-    reject: () => Promise.resolve(),
-  };
-  return { ctx, run: runWithNothingLoaded(), credentialOps };
 }
 
 function options(overrides: Partial<MarketplaceTagProbeOptions>): MarketplaceTagProbeOptions {
@@ -275,7 +258,7 @@ describe("probeMarketplaceTags on a git marketplace", () => {
 
     // act
     const result = await probeMarketplaceTags(
-      options({ seam: fake.seam, marketplaceSource: URL_SOURCE, auth: auth() }),
+      options({ seam: fake.seam, marketplaceSource: URL_SOURCE, withHostBundle: true }),
     );
 
     // assert
@@ -303,7 +286,7 @@ describe("probeMarketplaceTags on a git marketplace", () => {
 
     // act
     const result = await probeMarketplaceTags(
-      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, auth: auth(), tagMemo }),
+      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, withHostBundle: true, tagMemo }),
     );
 
     // assert
@@ -342,7 +325,12 @@ describe("probeMarketplaceTags on a git marketplace", () => {
 
       // act
       await probeMarketplaceTags(
-        options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, auth: auth(), tagMemo }),
+        options({
+          seam: fake.seam,
+          marketplaceSource: GITHUB_SOURCE,
+          withHostBundle: true,
+          tagMemo,
+        }),
       );
 
       // assert
@@ -367,7 +355,7 @@ describe("probeMarketplaceTags on a git marketplace", () => {
 
     // act
     const result = await probeMarketplaceTags(
-      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, auth: auth() }),
+      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, withHostBundle: true }),
     );
 
     // assert
@@ -377,11 +365,14 @@ describe("probeMarketplaceTags on a git marketplace", () => {
     );
   });
 
-  test("D-SG-09: with no auth context, the remote listing runs without a bundle", async () => {
+  test("D-SG-09: without withHostBundle, the remote listing runs without a bundle", async () => {
+    // arrange
     const fake = createFakeSeam({ tags: [] });
 
+    // act
     await probeMarketplaceTags(options({ seam: fake.seam, marketplaceSource: URL_SOURCE }));
 
+    // assert
     assert.deepStrictEqual(fake.remoteCalls, [{ url: URL_SOURCE }]);
   });
 

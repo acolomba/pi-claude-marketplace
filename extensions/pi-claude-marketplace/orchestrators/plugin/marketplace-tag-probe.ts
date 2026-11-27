@@ -40,13 +40,10 @@ import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/
 import { parsePluginSource } from "../../domain/source.ts";
 import { listLocalTags, listRemoteTags } from "../../platform/git.ts";
 import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
-import { buildCloneAuth } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { transportForce } from "../github-transport.ts";
 
 import type { ReleaseTagCandidate, SelectedReleaseTag } from "../../domain/release-tag.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { CredentialOps } from "../auth-host.ts";
 
 /** The tag listings this probe reaches the marketplace repository through. */
 export interface MarketplaceTagListingSeam {
@@ -81,14 +78,10 @@ export interface MarketplaceTagProbeOptions {
    */
   readonly tagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   /**
-   * The command's auth context, which a git marketplace's listing
-   * authenticates with; the listing runs without a bundle when it is absent.
+   * Set when a git marketplace's listing carries the auth bundle of its
+   * address (`authBundleFor`); absent, the listing runs without a bundle.
    */
-  readonly auth?: {
-    readonly ctx: NotificationContext;
-    readonly run: NotificationRun;
-    readonly credentialOps: CredentialOps;
-  };
+  readonly withHostBundle?: true;
 }
 
 /**
@@ -127,14 +120,14 @@ function tagListingOf(
   const source = parsePluginSource(options.marketplaceSource);
   if (source.kind === "github" || source.kind === "url") {
     const url = tagReadUrl(source, transportForce(process.env));
-    const { auth } = options;
+    const { withHostBundle } = options;
     return {
       key: url,
       list: () =>
         seam.listRemoteTags({
           url,
-          ...(auth !== undefined && {
-            auth: buildCloneAuth(canonicalCloneUrl(source), source.kind, auth),
+          ...(withHostBundle === true && {
+            auth: authBundleFor(canonicalCloneUrl(source), source.kind),
           }),
         }),
     };

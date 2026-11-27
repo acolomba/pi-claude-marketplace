@@ -1,5 +1,5 @@
 import { canonicalCloneUrl } from "../../domain/clone-key.ts";
-import { buildCloneAuth } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { pluginCloneTransport } from "../github-transport.ts";
 import { defaultPluginTransportContext } from "../marketplace/shared.ts";
 
@@ -16,9 +16,6 @@ import {
 import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 
 /** Clone-cache operations used to materialize an install source. */
@@ -35,11 +32,6 @@ export interface InstallCloneProbeOptions {
   readonly locations: ScopedLocations;
   readonly seam?: InstallCloneCacheSeam;
   readonly cloneCandidates?: Set<string>;
-  readonly auth: {
-    readonly ctx: NotificationContext;
-    readonly run: NotificationRun;
-    readonly credentialOps: CredentialOps;
-  };
   /**
    * D-SG-18: the command's transport context, whose checks and notes every
    * clone of the command shares. Omitted, the call makes one of its own, so
@@ -78,7 +70,8 @@ function installCloneTransport(options: InstallCloneProbeOptions): CloneTranspor
  * A resolved sha is returned only with a materialized result. Missing or
  * escaping subdirectories cannot leak a stale sha into the install record, and
  * clone failures retain their original thrown value. D-SG-18: every clone the
- * source needs runs over the transport `installCloneTransport` plans.
+ * source needs runs over the transport `installCloneTransport` plans, with the
+ * auth bundle of the source's address (`authBundleFor`).
  */
 export async function probeInstallClone(options: InstallCloneProbeOptions): Promise<{
   readonly result: GitPluginRootResult;
@@ -99,7 +92,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     const result = await materializeUnpinnedSource(seam, {
       locations,
       source,
-      auth: buildCloneAuth(cloneUrl, source.kind, options.auth),
+      auth: authBundleFor(cloneUrl, source.kind),
       onCloneCreated,
       transport,
     });
@@ -115,7 +108,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     cloneUrl: pin.cloneUrl,
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
-    resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),
+    resolveAuth: () => authBundleFor(cloneUrl, source.kind),
     onCloneCreated,
     transport,
   });

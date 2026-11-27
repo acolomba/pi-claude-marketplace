@@ -111,7 +111,6 @@ import {
 import { DependencyCascadeError } from "../../shared/errors.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import { cascadeUnstagePlugin, foldUnstageNotices } from "../marketplace/shared.ts";
 
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
@@ -405,14 +404,6 @@ interface MemberConstraintOptions {
    * and never installed.
    */
   readonly alreadyInstalled: readonly ClosureMember[];
-  /**
-   * The caller's per-member ledger options.
-   *
-   * The probe's credential bundle is read from the SAME builder that threads
-   * those collaborators into every member's install, so a cascade cannot
-   * authenticate a tag query differently from the clone that follows it.
-   */
-  readonly ledgerOptionsFor: (member: ResolvedCascadeMember) => InstallLedgerOptions;
   readonly tagProbe: CascadeTagProbe;
   readonly tagMemo: CascadeTagMemo;
   /**
@@ -535,7 +526,7 @@ export interface InstallCascadeOptions {
   readonly rootRequiredBy?: readonly string[];
   readonly lookup: ClosureLookup;
   /**
-   * Per-member ledger options; the caller owns scope, cwd and the auth bundle.
+   * Per-member ledger options; the caller owns scope and cwd.
    *
    * The member handed over carries the pin its constraint selected, so the
    * caller's builder is where a re-pinned tag enters that member's install.
@@ -862,14 +853,6 @@ type MemberConstraintOutcome =
   | { readonly kind: "failed"; readonly failure: CascadeConstraintFailure };
 
 /**
- * Query a constrained member's release tags and turn the answer into a pin.
- *
- * The auth bundle is lifted from the member's own ledger options rather than
- * composed here, so the tag query and the clone that follows it authenticate
- * against one host bundle and one per-host memo. No credential value is read
- * or placed on any returned arm (AUTH-09).
- */
-/**
  * Map a tag probe's answer -- local or network, they converge on this ONE
  * shape -- onto the member's constraint outcome. Shared by both branches of
  * `probeMemberPin` below so the three-way decode (pinned / no-matching-tag /
@@ -917,6 +900,14 @@ function toMemberConstraintOutcome(
   };
 }
 
+/**
+ * Query a constrained member's release tags and turn the answer into a pin.
+ *
+ * Each listing binds the auth bundle of the address it reads
+ * (`authBundleFor`), as the clone that follows binds its own, so a tag query
+ * and a clone of one host authenticate alike. No credential value is read or
+ * placed on any returned arm (AUTH-09).
+ */
 async function probeMemberPin(
   options: MemberConstraintOptions,
   member: ClosureMember,
@@ -931,7 +922,6 @@ async function probeMemberPin(
     };
   }
 
-  const auth = probeAuth(options.ledgerOptionsFor(member));
   if (tagSource.kind === "path") {
     // TAGS-01/03: a satisfying tag pins the member exactly like a git-backed
     // source does.
@@ -942,7 +932,7 @@ async function probeMemberPin(
       marketplaceSource: tagSource.marketplaceSource,
       range,
       tagMemo: options.marketplaceTagMemo,
-      auth,
+      withHostBundle: true,
     });
 
     // TAGS-02 / D-07-07: no tag satisfies the constraint, or the
@@ -964,22 +954,8 @@ async function probeMemberPin(
     source: tagSource.source,
     range,
     tagMemo: options.tagMemo,
-    auth,
   });
   return toMemberConstraintOutcome(member, declared, probed);
-}
-
-/**
- * The auth context a member's tag query authenticates with, lifted from its
- * own ledger options so the query and the clone that follows it build the
- * same host bundle over the production credential surface (AUTH-09).
- */
-function probeAuth(ledger: InstallLedgerOptions): DependencyTagProbeOptions["auth"] {
-  return {
-    ctx: ledger.ctx,
-    run: ledger.run,
-    credentialOps: DEFAULT_CREDENTIAL_OPS,
-  };
 }
 
 /**
@@ -1690,7 +1666,6 @@ async function resolveCascade(
     declared,
     readThrough,
     alreadyInstalled: closure.alreadyInstalled,
-    ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
     tagMemo: options.tagMemo ?? new Map<string, readonly RemoteTag[]>(),
     marketplaceTagMemo:
