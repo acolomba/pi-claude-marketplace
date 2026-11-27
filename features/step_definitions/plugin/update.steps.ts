@@ -53,10 +53,14 @@ Then("the failed update names these repairs:", function (this: ScenarioWorld, ta
   const [result] = cascades;
   assert.ok(result !== undefined);
 
+  // D-SG-22: a block that names a marketplace re-clone adds its note and url,
+  // so no clone goes unseen.
+  const namesClone = result.marketplaces.some((marketplace) => marketplace.clone !== undefined);
   const repairs = result.marketplaces.flatMap((marketplace) =>
     marketplace.plugins.map((plugin) => [
       marketplace.name,
       marketplace.scope,
+      ...(namesClone ? [marketplace.clone?.note ?? "", marketplace.clone?.url ?? ""] : []),
       plugin.id,
       plugin.name,
       plugin.status,
@@ -75,6 +79,7 @@ Then("the failed update names these repairs:", function (this: ScenarioWorld, ta
       [
         "marketplace name",
         "marketplace scope",
+        ...(namesClone ? ["marketplace clone note", "marketplace clone url"] : []),
         "id",
         "name",
         "status",

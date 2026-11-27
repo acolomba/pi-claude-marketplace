@@ -188,6 +188,30 @@ Feature: Plugin github transport update
       | tools | project | via-ssh    | git@github.com:acme/tools.git |
     Then the git host receives no request
 
+  Scenario: Updating every plugin when one update fails after the github marketplace moved names the re-clone once
+    Given the marketplace "tools" is published as a github source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   |              |
+      | zed  | 1.0.0   |              |
+    Given the user's ssh authenticates to "github.com" as "acme"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin install zed@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   |              |
+      | zed  | 1.1.0   |              |
+    Given the published plugin "zed" of the marketplace "tools" adds the skill "extra" over a file in the project scope
+    When the user runs "/claude:plugin update --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                        | tally label   | tally failures | tally warnings |
+      | cascade | error    | false        | A plugin operation has failed. | Plugin update | 1              | 0              |
+    Then the failed update names these repairs:
+      | marketplace name | marketplace scope | marketplace clone note | marketplace clone url         | id        | name | status | reasons          | scope   | from  | version | repair                                                                                              | cause truncated | leaks | rollback phases |
+      | tools            | project           | via-ssh                | git@github.com:acme/tools.git | zed@tools | zed  | failed | rollback partial | project | 1.0.0 | 1.1.0   | Plugin "zed" failed during physical replace. Run /claude:plugin reinstall zed@tools to repair it. | false           |       | skills          |
+
   Scenario: Updating every plugin re-clones a github plugin's gone clone at the same commit and names that clone
     Given the user's ssh is denied for "github.com"
     Given pi runs with github's requests routed to the git host

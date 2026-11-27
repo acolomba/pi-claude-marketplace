@@ -212,13 +212,16 @@ function cascadeRows(
  * Groups the rows of `outcomes` by marketplace and scope. D-SG-22: every
  * outcome makes its marketplace's group, so the group carries the note of the
  * PUP-2 sync that re-cloned that marketplace; a group with no rows is kept
- * only when it carries that note.
+ * only when it carries that note and the batch was not aborted. An aborted
+ * batch's failure notification already shows the failing target's block with
+ * that sync's note, so a block with no rows would only repeat it.
  */
 function groupCascadeOutcomes(
   outcomes: readonly UpdateCascadeOutcome[],
   probe: SoftDepStatus,
   cardinality: "single" | "plural",
   clones: UpdateCloneNotes | undefined,
+  abortedByFailure: boolean,
 ): Plural<MarketplaceRows<UpdateMsg>> {
   const byMarketplace = new Map<string, MarketplaceGroup>();
   for (const { target, outcome, notes } of outcomes) {
@@ -240,7 +243,7 @@ function groupCascadeOutcomes(
   }
 
   return [...byMarketplace.values()]
-    .filter((group) => group.plugins.length > 0 || group.clone !== undefined)
+    .filter((group) => group.plugins.length > 0 || (!abortedByFailure && group.clone !== undefined))
     .sort((left, right) =>
       compareByNameThenScope(
         { name: left.name, scope: left.scope },
@@ -269,7 +272,13 @@ export function composeUpdateCascade(
   abortedByFailure = false,
   clones?: UpdateCloneNotes,
 ): void {
-  const marketplaces = groupCascadeOutcomes(outcomes, run.softDeps, cardinality, clones);
+  const marketplaces = groupCascadeOutcomes(
+    outcomes,
+    run.softDeps,
+    cardinality,
+    clones,
+    abortedByFailure,
+  );
   const updatedCount = outcomes.filter(({ outcome }) => outcome.partition === "updated").length;
   const hasErrorOrWarningRow = marketplaces.some((marketplace) =>
     marketplace.plugins.some(

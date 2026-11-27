@@ -1014,6 +1014,21 @@ test("D-SG-22: a bulk update that changed nothing keeps the block of the sync th
   boundary.verifyBoundary();
 });
 
+test("D-SG-22: an aborted bulk update sends no block that only repeats the failed target's sync note", () => {
+  // arrange
+  const boundary = createNotificationBoundary(0);
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), [unchanged("hello")], "plural", true, {
+    plugins: createGitHubCloneNotes(),
+    marketplace: () => ({ note: "via-ssh", url: "git@github.com:acme/mp.git" }),
+  });
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, []);
+  boundary.verifyBoundary();
+});
+
 test("D-SG-22: a bulk update keeps the up-to-date row of a plugin its update cloned and drops the others", () => {
   // arrange
   const boundary = createNotificationBoundary(1);
