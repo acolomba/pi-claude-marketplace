@@ -283,7 +283,7 @@ describe("classifyGitFailure", () => {
         { label: "an ssh-host-key-changed", failure: { kind: "ssh-host-key-changed" } },
       ] satisfies ReadonlyArray<{ label: string; failure: GitFailure }>
     ).map(({ label, failure }) => ({
-      title: `SG-PRC-05, D-SG-14: classifies ${label} failure as authentication required with no frame`,
+      title: `SG-PRC-05: classifies ${label} failure as authentication required with no frame`,
       createFailure: () => gitCommandFailure(failure),
       rule: UNKNOWN_RULE,
       remoteUrl: REMOTE_URL,

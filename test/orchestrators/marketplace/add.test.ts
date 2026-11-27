@@ -400,7 +400,7 @@ function hostAnswer(statusCode: number): GitFailure {
 }
 
 /** D-SG-14: a clone whose Device Flow sign-in failed, after git found no credential. */
-function signInFailed(): GitCommandError {
+function noCredentialFailure(): GitCommandError {
   return new GitCommandError(
     { kind: "https-auth", detail: "no-credential" },
     { operation: "clone", exitCode: 128 },
@@ -6319,7 +6319,7 @@ test("GAUTH-02: a declined/failed Device Flow renders (failed) {authentication r
     const { ctx, run, notifications } = makeCtx();
     // D-SG-14: a denied/expired Device Flow (or a poll network error) leaves
     // the clone's own https-auth failure, NOT a network failure.
-    const authError = signInFailed();
+    const authError = noCredentialFailure();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: authError,
@@ -6339,7 +6339,7 @@ test("GAUTH-02: a declined/failed Device Flow renders (failed) {authentication r
 
     const note = notifications.find((n) => n.severity === "error");
     // assert
-    assert.ok(note, "a declined Device Flow must render a notify()-routed error");
+    assert.ok(note, "a clone with no credential must render a notify()-routed error");
     assert.ok(
       note.message.includes("(failed) {authentication required}"),
       `expected authentication-required row, got: ${note.message}`,
@@ -6353,7 +6353,7 @@ test("GAUTH-02 orchestrated mode -- a failed Device Flow returns { status: 'fail
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
-    const authError = signInFailed();
+    const authError = noCredentialFailure();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: authError,
@@ -6687,7 +6687,7 @@ test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a 
     const cloneCall = state.cloneCalls[0];
     assert.ok(cloneCall);
     assert.equal(cloneCall.url, "https://github.com/acme/mp.git");
-    assert.ok(cloneCall.auth, "provider-registered host must attach an auth bundle");
+    assert.ok(cloneCall.auth, "a github.com host must attach an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
   });
 });
@@ -6722,7 +6722,7 @@ test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the 
     assert.equal(cloneCall.url, "https://gitlab.com/team/mp");
     // GAUTH-02: the clone carries a bundle bound to gitlab.com, the host the
     // registry claims for the GitLab provider.
-    assert.ok(cloneCall.auth, "gitlab.com must attach the GitLab provider's auth bundle");
+    assert.ok(cloneCall.auth, "gitlab.com must attach the auth bundle of its host");
     assert.equal(cloneCall.auth.host, "gitlab.com");
   });
 });

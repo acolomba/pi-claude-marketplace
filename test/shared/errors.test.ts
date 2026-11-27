@@ -812,13 +812,13 @@ describe("GitCommandError", () => {
     // act
     const error = new GitCommandError(
       { kind: "timeout", timeoutMs: 5000 },
-      { operation: "credential fill" },
+      { operation: "ls-remote" },
     );
 
     // assert
     assert.deepStrictEqual(
       { kind: error.kind, message: error.message },
-      { kind: "timeout", message: "git credential fill timed out after 5000 ms" },
+      { kind: "timeout", message: "git ls-remote timed out after 5000 ms" },
     );
   });
 

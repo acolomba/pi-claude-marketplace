@@ -627,7 +627,7 @@ describe("composeInstallFailureMessage", () => {
     const failure = new GitCommandError(
       { kind: "https-auth", detail: "no-credential" },
       { operation: "clone", exitCode: 128 },
-      { cause: new Error("device flow cancelled") },
+      { cause: new Error("credential lookup cancelled") },
     );
 
     // act

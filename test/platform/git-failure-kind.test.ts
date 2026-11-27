@@ -54,7 +54,7 @@ const CORPUS: readonly CorpusRow[] = [
     failure: { kind: "https-auth", detail: "rejected" },
   },
   {
-    label: "credential fill with no helper",
+    label: "a username prompt with no helper",
     exitCode: 128,
     stderr:
       "fatal: could not read Username for 'https://example.test': terminal prompts disabled\n",
