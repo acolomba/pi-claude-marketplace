@@ -1,17 +1,18 @@
 /**
- * @fileoverview Pins the routing rule of the GitHub redirect: github.com goes
- * to the loopback stand-ins, loopback passes, and every other host is refused,
- * so no request of a sign-in scenario leaves the machine (D-BG-01).
+ * @fileoverview Pins the routing rule of the GitHub redirect: every https
+ * request for github.com goes to the git host, loopback passes, and every
+ * other host is refused, so no request of a routed scenario leaves the
+ * machine (D-BG-01).
  */
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { routeRequest } from "../../features/lib/github-device-flow/routing.ts";
+import { routeRequest } from "../../features/lib/github-redirect/routing.ts";
 
-import type { RedirectConfig } from "../../features/lib/github-device-flow/routing.ts";
+import type { RedirectConfig } from "../../features/lib/github-redirect/routing.ts";
 
-const config = { gitHost: "127.0.0.1:1111", signIn: "127.0.0.1:2222" } satisfies RedirectConfig;
+const config = { gitHost: "127.0.0.1:1111" } satisfies RedirectConfig;
 
 test("routes a git request for github.com to the git host with its path kept", () => {
   // arrange
@@ -28,22 +29,20 @@ test("routes a git request for github.com to the git host with its path kept", (
   });
 });
 
-for (const { path } of [{ path: "/login/device/code" }, { path: "/login/oauth/access_token" }]) {
-  test(`routes https://github.com${path} to the sign-in stand-in`, () => {
-    // arrange
-    const url = new URL(`https://github.com${path}`);
+test("routes a request for a /login/ path of github.com to the git host like any other path", () => {
+  // arrange
+  const url = new URL("https://github.com/login/device/code");
 
-    // act
-    const route = routeRequest(url, config);
+  // act
+  const route = routeRequest(url, config);
 
-    // assert
-    assert.deepStrictEqual(route, {
-      decision: "routed",
-      target: "sign-in",
-      url: `https://127.0.0.1:2222${path}`,
-    });
+  // assert
+  assert.deepStrictEqual(route, {
+    decision: "routed",
+    target: "git host",
+    url: "https://127.0.0.1:1111/login/device/code",
   });
-}
+});
 
 for (const { address } of [
   { address: "https://127.0.0.1:1111/acme/tools.git" },
@@ -83,32 +82,6 @@ for (const { address, host } of [
     assert.deepStrictEqual(route, { decision: "refused", host });
   });
 }
-
-test("routes a git request to the git host when the config names no sign-in stand-in", () => {
-  // arrange
-  const url = new URL("https://github.com/acme/tools.git/info/refs?service=git-upload-pack");
-
-  // act
-  const route = routeRequest(url, { gitHost: "127.0.0.1:1111" });
-
-  // assert
-  assert.deepStrictEqual(route, {
-    decision: "routed",
-    target: "git host",
-    url: "https://127.0.0.1:1111/acme/tools.git/info/refs?service=git-upload-pack",
-  });
-});
-
-test("refuses a sign-in request when the config names no sign-in stand-in", () => {
-  // arrange
-  const url = new URL("https://github.com/login/device/code");
-
-  // act
-  const route = routeRequest(url, { gitHost: "127.0.0.1:1111" });
-
-  // assert
-  assert.deepStrictEqual(route, { decision: "refused", host: "github.com" });
-});
 
 test("refuses a request for github.com when the redirect has no config", () => {
   // arrange

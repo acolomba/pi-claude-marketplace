@@ -3,26 +3,23 @@
  * requests of a Pi without the GitHub base override on this machine, for the
  * request functions it replaces (D-BG-01).
  *
- * Such a Pi signs in through Device Flow at `https://github.com/login/...`
- * and clones from `https://github.com/...`, because GHB-02 runs Device Flow
- * only when the override is unset. When Pi loads this module, it reads
- * `<home>/github-redirect.json`, which a step writes before Pi starts, and
- * replaces `request` and `get` of `node:https` and `node:http`, for CommonJS
- * callers and ESM named imports alike, and `globalThis.fetch` in Pi's process.
- * The redirect covers Pi's own `fetch` and `https` requests: the product's
- * Device Flow sign-in calls the global `fetch`, so it goes through the
- * replacements. git runs as a child process and never passes through them;
- * it reaches the git host stand-in through the CONNECT proxy in
- * `connect-proxy.ts` (D-SG-14). The redirect does not see `net`, `tls`, or
- * `http2` connections, a `fetch` that a module captured before the redirect
- * loaded, or a request sent before it loaded. An https request for
- * `github.com` goes to the Device Flow stand-in when its path starts with
- * `/login/`, and to the run's git host
- * otherwise, with its path kept. A config that names no sign-in stand-in
- * refuses a sign-in request. Its host becomes `127.0.0.1`, so TLS checks
- * the git host's certificate, which both stand-ins serve. A request to a
- * loopback host passes unchanged. Any other request through the replaced
- * functions is refused with an error that names its host, and so is every non-loopback request when the config
+ * Such a Pi clones from `https://github.com/...` and runs GitHub's transport
+ * rules, the ssh probe included, because the override is unset. When Pi loads
+ * this module, it reads `<home>/github-redirect.json`, which a step writes
+ * before Pi starts, and replaces `request` and `get` of `node:https` and
+ * `node:http`, for CommonJS callers and ESM named imports alike, and
+ * `globalThis.fetch` in Pi's process. The redirect covers Pi's own `fetch` and
+ * `https` requests: the product's only `fetch`, the hosted catalog download,
+ * calls the global `fetch`, so it goes through the replacements. git runs as a
+ * child process and never passes through them; it reaches the git host
+ * stand-in through the CONNECT proxy in `connect-proxy.ts` (D-BG-01). The
+ * redirect does not see `net`, `tls`, or `http2` connections, a `fetch` that a
+ * module captured before the redirect loaded, or a request sent before it
+ * loaded. Every https request for `github.com` goes to the run's git host,
+ * with its path and query kept. Its host becomes `127.0.0.1`, so TLS checks
+ * the git host's certificate. A request to a loopback host passes unchanged.
+ * Any other request through the replaced functions is refused with an error
+ * that names its host, and so is every non-loopback request when the config
  * is missing. At load it appends one `loaded` line with its process id, and it
  * appends one line per routed or refused request, synchronously, to
  * `<harness dir>/github-redirect.jsonl`, so a scenario can state that nothing
@@ -93,8 +90,7 @@ function isRedirectConfig(value: unknown): value is RedirectConfig {
     typeof value === "object" &&
     value !== null &&
     "gitHost" in value &&
-    typeof value.gitHost === "string" &&
-    (!("signIn" in value) || typeof value.signIn === "string")
+    typeof value.gitHost === "string"
   );
 }
 

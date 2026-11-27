@@ -1,12 +1,13 @@
 /**
  * @fileoverview The loopback HTTP `CONNECT` proxy that lets a system git ask
  * for `https://github.com/...` while its bytes reach the https git host
- * stand-in (D-SG-14).
+ * stand-in (D-BG-01).
  *
  * The GitHub redirect replaces Node's request functions in Pi's process, so a
  * git child never passes through it. git keys a credential by its request
- * host, so a Device Flow token approved for `github.com` is found only when git
- * still asks for `github.com`. Through this proxy, git sends `CONNECT
+ * host, so a credential stored for `github.com`, as a scenario's credential
+ * step stores one, is found only when git still asks for `github.com`. Through
+ * this proxy, git sends `CONNECT
  * github.com:443` and runs TLS inside the tunnel with the host name
  * `github.com`, and the git host's certificate names `github.com`, so git
  * verifies it with the harness CA alone. The proxy tunnels `github.com:443`

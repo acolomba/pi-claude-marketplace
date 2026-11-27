@@ -5,21 +5,18 @@
  */
 
 const GITHUB_HOST = "github.com";
-const SIGN_IN_PREFIX = "/login/";
 const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 /**
- * The `127.0.0.1:<port>` addresses the redirect sends `github.com` requests
- * to. A scenario with no sign-in stand-in names none, and a sign-in request
- * is then refused.
+ * The `127.0.0.1:<port>` address of the run's git host, which the redirect
+ * sends every `github.com` request to.
  */
 export interface RedirectConfig {
   readonly gitHost: string;
-  readonly signIn?: string;
 }
 
 /** The stand-in a routed request goes to. */
-export type RouteTarget = "git host" | "sign-in";
+export type RouteTarget = "git host";
 
 /** What the redirect does with one request. */
 export type Route =
@@ -30,10 +27,8 @@ export type Route =
 /**
  * Returns what the redirect does with a request for `url` under `config`:
  * a loopback host passes; an https request for `github.com` is routed to the
- * sign-in stand-in when its path starts with `/login/`, else to the git host,
- * with its path and query kept; anything else is refused, and so is
- * `github.com` with no config, or a sign-in request when the config names no
- * sign-in stand-in.
+ * git host, with its path and query kept; anything else is refused, and so is
+ * `github.com` with no config.
  */
 export function routeRequest(url: URL, config: RedirectConfig | undefined): Route {
   if (LOOPBACK_HOSTS.has(url.hostname)) {
@@ -44,11 +39,9 @@ export function routeRequest(url: URL, config: RedirectConfig | undefined): Rout
     return { decision: "refused", host: url.hostname };
   }
 
-  const target: RouteTarget = url.pathname.startsWith(SIGN_IN_PREFIX) ? "sign-in" : "git host";
-  const address = target === "sign-in" ? config.signIn : config.gitHost;
-  if (address === undefined) {
-    return { decision: "refused", host: url.hostname };
-  }
-
-  return { decision: "routed", target, url: `https://${address}${url.pathname}${url.search}` };
+  return {
+    decision: "routed",
+    target: "git host",
+    url: `https://${config.gitHost}${url.pathname}${url.search}`,
+  };
 }

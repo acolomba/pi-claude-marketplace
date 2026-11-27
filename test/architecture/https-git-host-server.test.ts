@@ -4,7 +4,7 @@
  * request percent-encodes, and the catalog files it serves for hosted
  * marketplaces (HOST-01, HOST-03, HOST-04, D-PL5-06), the headers it records
  * for each request (SG-AUTH-01), and the certificate's
- * `github.com` name (D-SG-14). It also checks that a system git client trusts
+ * `github.com` name for the routed profile's tunnel (D-BG-01). It also checks that a system git client trusts
  * the host through the host's CA file alone, fetches a commit by SHA over
  * protocols v2 and v0, and sees upload-pack's own refusal of a commit the
  * repository does not have (SG-HRN-02).
@@ -395,7 +395,7 @@ describe("HttpsGitHost", () => {
     );
   });
 
-  test("names github.com beside 127.0.0.1 in its certificate, so a tunnel for github.com verifies it (D-SG-14)", async (t) => {
+  test("names github.com beside 127.0.0.1 in its certificate, so a tunnel for github.com verifies it (D-BG-01)", async (t) => {
     // arrange
     const host = await startHost(t);
 

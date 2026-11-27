@@ -1,7 +1,7 @@
 /**
  * @fileoverview Checks the loopback CONNECT proxy that keeps a system git's
  * request host `github.com` while its bytes reach the https git host stand-in
- * (D-SG-14): a real `git ls-remote https://github.com/acme/tools.git` through
+ * (D-BG-01): a real `git ls-remote https://github.com/acme/tools.git` through
  * it lists the stand-in's refs and verifies the stand-in with the harness CA
  * alone, a CONNECT to any other target is refused before a byte reaches it,
  * each CONNECT is one line of the GitHub redirect's log, two gits get a tunnel
@@ -16,11 +16,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
-import { startGitHubConnectProxy } from "../../features/lib/github-device-flow/connect-proxy.ts";
+import { startGitHubConnectProxy } from "../../features/lib/github-redirect/connect-proxy.ts";
 import {
   GITHUB_REDIRECT_LOG,
   readRedirectLog,
-} from "../../features/lib/github-device-flow/extension.ts";
+} from "../../features/lib/github-redirect/extension.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import {
   createGitTestDirectory,
@@ -28,7 +28,7 @@ import {
   runSystemGit,
 } from "../platform/git-test-repository.ts";
 
-import type { RedirectLogLine } from "../../features/lib/github-device-flow/extension.ts";
+import type { RedirectLogLine } from "../../features/lib/github-redirect/extension.ts";
 import type { Socket } from "node:net";
 import type { TestContext } from "node:test";
 
@@ -124,7 +124,7 @@ async function sendConnect(address: string, target: string): Promise<RawTunnel> 
 }
 
 describe("startGitHubConnectProxy", () => {
-  test("tunnels a system git's request for github.com to the git host and logs one routed CONNECT (D-SG-14)", async (t) => {
+  test("tunnels a system git's request for github.com to the git host and logs one routed CONNECT (D-BG-01)", async (t) => {
     // arrange
     const fixture = await startFixture(t);
 

@@ -45,7 +45,7 @@ import {
 } from "@cucumber/cucumber";
 
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
-import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-device-flow/extension.ts";
+import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-redirect/extension.ts";
 import { openHookGate, stopHookScripts } from "../lib/hook-files.ts";
 import {
   classifyMcpImplementation,
@@ -191,7 +191,7 @@ export interface PiProfile {
   /**
    * The `https_proxy` of a profile Pi without the GitHub base override and of
    * its terminal session: the harness CONNECT proxy that keeps every system
-   * git request of that Pi on this machine (D-SG-14). `usePiWithProfile()`
+   * git request of that Pi on this machine (D-BG-01). `usePiWithProfile()`
    * refuses it on a profile that keeps the override.
    */
   readonly httpsProxy?: string;
@@ -356,7 +356,7 @@ export class ScenarioWorld extends World {
   // The ssh stand-in's launch count when the last `When` step started; `support/ssh-git-host.ts` sets it.
   sshLaunchWindow: number | undefined = undefined;
   // The line count of each log in the profile Pi's harness directory when the
-  // last `When` step started; `support/github-device-flow.ts` sets it.
+  // last `When` step started; `support/github-redirect.ts` sets it.
   harnessLogWindow: ReadonlyMap<string, number> | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
@@ -1460,7 +1460,7 @@ async function savedPayloads(pi: PiProcess): Promise<readonly NotificationPayloa
 
 // The run's git environment for a profile Pi, without the GitHub base
 // override and with the profile's proxy and upstream variables when the
-// profile asks for that (D-BG-01, D-SG-14, D-SG-24).
+// profile asks for that (D-BG-01, D-SG-24).
 function profileGitEnvironment(
   profile: Pick<PiProfile, "withoutGitHubBaseOverride" | "httpsProxy" | "variables">,
 ): RpcGitEnvironment {

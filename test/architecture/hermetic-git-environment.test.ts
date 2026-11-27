@@ -704,7 +704,7 @@ describe("rpcChildEnvironment", () => {
     });
   });
 
-  test("D-SG-14: adds the Device Flow profile's https_proxy and no_proxy, not the shell's", (t) => {
+  test("D-BG-01: adds the routed profile's https_proxy and no_proxy, not the shell's", (t) => {
     // arrange
     inheritVariables(t);
     const git = {

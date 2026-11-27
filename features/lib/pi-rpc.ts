@@ -65,7 +65,8 @@ export interface RpcGitEnvironment {
   /**
    * The GitHub base override, copied only when set. A scenario Pi that
    * reaches GitHub's real address through an in-process redirect starts
-   * without it, so GHB-02 does not turn Device Flow off (D-BG-01).
+   * without it, so it runs GitHub's transport rules and the ssh probe
+   * (D-BG-01).
    */
   readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL?: string;
   /**
@@ -120,16 +121,17 @@ export interface RpcGitEnvironment {
   /** The GitHub CLI's token variable, under the same rule as `GITHUB_TOKEN` (SG-AUTH-01). */
   readonly GH_TOKEN?: string;
   /**
-   * The harness CONNECT proxy, set only for the Device Flow profile, so a
-   * system git request of that Pi reaches `github.com` through the git host
-   * or is refused and logged (D-SG-14). Lowercase, the spelling git and curl
+   * The harness CONNECT proxy, set only for the routed profile, which runs
+   * without the GitHub base override, so a system git request of that Pi
+   * reaches `github.com` through the git host or is refused and logged
+   * (D-BG-01). Lowercase, the spelling git and curl
    * read. The shell's own proxy never reaches a child.
    */
   readonly https_proxy?: string;
   /**
    * The hosts the proxy leaves out, set with `https_proxy`. Pi's own `fetch`
    * honors the proxy variables too (undici's `EnvHttpProxyAgent`), and the
-   * GitHub redirect sends Pi's sign-in requests to `127.0.0.1`, which the
+   * GitHub redirect sends Pi's `github.com` requests to `127.0.0.1`, which the
    * proxy refuses, so `127.0.0.1` is left out.
    */
   readonly no_proxy?: string;

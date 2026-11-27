@@ -25,7 +25,7 @@ export interface HermeticGitVariables {
   readonly GIT_SSL_CAINFO?: string;
   readonly GIT_PROTOCOL?: string;
   readonly PATH?: string;
-  /** The harness CONNECT proxy a git reaches `github.com` through, never the shell's (D-SG-14). */
+  /** The harness CONNECT proxy a git reaches `github.com` through, never the shell's (D-BG-01). */
   readonly https_proxy?: string;
 }
 

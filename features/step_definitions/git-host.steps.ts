@@ -28,13 +28,13 @@ import path from "node:path";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { startGitHubConnectProxy } from "../lib/github-device-flow/connect-proxy.ts";
+import { startGitHubConnectProxy } from "../lib/github-redirect/connect-proxy.ts";
 import {
   GITHUB_REDIRECT_EXTENSION,
   GITHUB_REDIRECT_LOG,
   readRedirectLog,
   writeRedirectConfig,
-} from "../lib/github-device-flow/extension.ts";
+} from "../lib/github-redirect/extension.ts";
 import { runGit } from "../lib/hermetic-git.ts";
 import { armedStatus } from "../lib/https-git-host/server.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
@@ -407,8 +407,9 @@ async function startPiWithGitHubRouted(
   );
 }
 
-// The redirect names only the git host, so a request to any other
-// github.com address, such as a returning sign-in, is refused and logged.
+// D-BG-01: the redirect sends every github.com request of the pi to the git
+// host, with its path kept, and refuses and logs every other non-loopback
+// request.
 Given(
   "pi runs with github's requests routed to the git host",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },

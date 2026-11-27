@@ -40,7 +40,7 @@ const DEFAULT_OWNER = "acme";
 // A one-day P-256 certificate for the loopback address the host binds. It
 // also names `github.com`: a system git that reaches the host through the
 // harness CONNECT proxy keeps `github.com` as its request host inside the
-// tunnel, so it verifies the host under that name (D-SG-14).
+// tunnel, so it verifies the host under that name (D-BG-01).
 const CERTIFICATE_ARGUMENTS = [
   "req",
   "-x509",

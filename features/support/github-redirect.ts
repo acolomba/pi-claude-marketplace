@@ -1,6 +1,7 @@
 /**
- * @fileoverview The request window of the GitHub sign-in stand-in and the
- * GitHub redirect, whose logs lie in the profile Pi's harness directory.
+ * @fileoverview The request window of the logs in the profile Pi's harness
+ * directory, such as the GitHub redirect's log, which its CONNECT proxy
+ * shares.
  *
  * Each `When` step opens a new window, so a request step reads only the
  * requests of the last `When`, and a request that a `Given` made is never
