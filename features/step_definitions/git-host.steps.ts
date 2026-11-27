@@ -5,7 +5,8 @@
  * refuse fetches by SHA, or to require a credential, serving a catalog of a
  * given size, letting it serve again, the GitHub base address pi runs with, a
  * pi with no git on its path, a pi with upstream's git timeout or keep
- * variable, the credential a user stores for the host, and
+ * variable, the credential a user stores for the host or for github.com, the
+ * credentials the user's git credential store holds after a command, and
  * the requests the host receives, with a check that no path or header of
  * them carries a secret. A step names a repository
  * through the `git repository` parameter type, by the marketplace or the
@@ -269,20 +270,43 @@ Given("pi runs without git on its path", async function (this: ScenarioWorld): P
   await this.usePiWithoutGit();
 });
 
-// The credential lives only in the sandbox HOME, which Pi's git reads through
-// its global config (DRV-03); no git process runs to store it.
+/**
+ * Stores the credential of `user` and `password` for `host` in the credential
+ * store of the sandbox HOME, which Pi's git reads through its global config
+ * (DRV-03), and asserts what the two files hold. No git process runs to store
+ * it.
+ */
+async function storeCredential(
+  world: ScenarioWorld,
+  host: string,
+  user: string,
+  password: string,
+): Promise<void> {
+  const credentials = path.join(world.tokens.home, ".git-credentials");
+  const credentialsText = `https://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${host}\n`;
+  const config = await useCredentialStore(world);
+  await writeFile(credentials, credentialsText, { flag: "wx", mode: 0o600 });
+  world.onRelease(() => rm(credentials, { force: true }));
+  assert.deepStrictEqual(
+    [await readFile(config, "utf8"), await readFile(credentials, "utf8")],
+    [CREDENTIAL_STORE_CONFIG, credentialsText],
+  );
+}
+
 Given(
   "the user has stored a credential for the git host with the user {string} and the password {string}",
   async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
-    const credentials = path.join(this.tokens.home, ".git-credentials");
-    const credentialsText = `https://${encodeURIComponent(user)}:${encodeURIComponent(password)}@${this.gitHost.address}\n`;
-    const config = await useCredentialStore(this);
-    await writeFile(credentials, credentialsText, { flag: "wx", mode: 0o600 });
-    this.onRelease(() => rm(credentials, { force: true }));
-    assert.deepStrictEqual(
-      [await readFile(config, "utf8"), await readFile(credentials, "utf8")],
-      [CREDENTIAL_STORE_CONFIG, credentialsText],
-    );
+    await storeCredential(this, this.gitHost.address, user, password);
+  },
+);
+
+// D-BG-1105: the git host's stored-credential step stores the loopback address
+// of the override host, so a credential that answers a github.com fill needs
+// its own step.
+Given(
+  "the user has stored a credential for github.com with the user {string} and the password {string}",
+  async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
+    await storeCredential(this, "github.com", user, password);
   },
 );
 
@@ -631,5 +655,41 @@ Then(
   "the credential helper has recorded no run",
   async function (this: ScenarioWorld): Promise<void> {
     assert.deepStrictEqual(await readUserGitProgramRuns(this.tokens.home, "credential-helper"), []);
+  },
+);
+
+// The lines of the credential store in the sandbox HOME, in file order and
+// without blank lines. An absent store holds no lines.
+async function credentialStoreLines(world: ScenarioWorld): Promise<string[]> {
+  const text = await readOptionalText(path.join(world.tokens.home, ".git-credentials"));
+  return (text ?? "").split("\n").filter((line) => line !== "");
+}
+
+// D-BG-1102: the store lies in the sandbox HOME, so a credential that git
+// keeps never reaches the user's own store. D-SG-28: the extension runs no
+// `git credential reject` and deletes no stored credential, so an entry the
+// command never sent stays in the store.
+Then(
+  "the user's git credential store holds these credentials:",
+  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
+    const rows = (await credentialStoreLines(this)).map((line) => {
+      const credential = new URL(line);
+      return [
+        credential.protocol.replace(/:$/u, ""),
+        credential.host,
+        decodeURIComponent(credential.username),
+        decodeURIComponent(credential.password),
+      ];
+    });
+    assert.deepStrictEqual([["protocol", "host", "user", "password"], ...rows], table.raw());
+  },
+);
+
+// Git's `store` helper can leave an empty file after it erases a credential,
+// so an empty store and an absent one both hold no credentials.
+Then(
+  "the user's git credential store holds no credentials",
+  async function (this: ScenarioWorld): Promise<void> {
+    assert.deepStrictEqual(await credentialStoreLines(this), []);
   },
 );
