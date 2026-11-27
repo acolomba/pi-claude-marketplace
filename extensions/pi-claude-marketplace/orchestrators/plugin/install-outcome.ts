@@ -600,9 +600,6 @@ export type TargetScopeAddOptions = Pick<
   | "scope"
   | "cwd"
   | "removalOps"
-  | "credentialOps"
-  | "deviceFlowHttp"
-  | "authMemo"
   | "marketplaceAdd"
   | "addedMarketplaces"
   | "transportContext"
@@ -678,9 +675,6 @@ async function addTargetScopeMarketplace(
     ctx: opts.ctx,
     run: opts.run,
     removalOps: opts.removalOps,
-    credentialOps: opts.credentialOps,
-    deviceFlowHttp: opts.deviceFlowHttp,
-    authMemo: opts.authMemo,
     ...(notes !== undefined && { cloneNotes: underMarketplaceName(notes, marketplace) }),
   });
   opts.addedMarketplaces?.push({ marketplace: added.name, rawSource, cloneDir: added.cloneDir });

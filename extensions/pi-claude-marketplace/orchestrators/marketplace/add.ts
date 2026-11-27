@@ -121,7 +121,6 @@ import {
   buildAuthForHost,
   buildGitHubAuth,
   hostFromCloneUrl,
-  type AuthAttemptResult,
 } from "../auth-host.ts";
 import {
   cloneOverGitHubTransports,
@@ -151,7 +150,6 @@ import {
   type GitOps,
 } from "./shared.ts";
 
-import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type {
   GitHubSource,
   HostedManifestSource,
@@ -258,19 +256,6 @@ export interface AddMarketplaceOptions {
    * transports. Defaults to DEFAULT_GITHUB_SSH_OPS, the user's own ssh.
    */
   readonly gitHubSsh?: GitHubSshOps;
-  /**
-   * AUTH-01 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
-   * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
-   * so the developer's OS keychain is never touched.
-   */
-  readonly credentialOps?: CredentialOps;
-  /**
-   * Test seam; production callers omit and get the default github.com
-   * fetch. When provided, threads into the onAuthRequired closure so tests
-   * can drive Device Flow end-to-end without network.
-   */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
   /**
    * D-PL5-07 injection seam that downloads a hosted catalog. Defaults to
    * DEFAULT_HOSTED_MANIFEST_FETCH, which wraps platform/hosted-manifest-fetch.ts.
@@ -932,8 +917,6 @@ export async function addMarketplaceToState(args: {
   readonly ctx: NotificationContext;
   readonly run: NotificationRun;
   readonly removalOps: RemovalOps;
-  readonly credentialOps?: CredentialOps | undefined;
-  readonly deviceFlowHttp?: DeviceFlowHttp | undefined;
   readonly gitOps?: GitOps | undefined;
   /** SG-SSH-02: the ssh probe of a GitHub clone. Defaults to DEFAULT_GITHUB_SSH_OPS. */
   readonly gitHubSsh?: GitHubSshOps | undefined;
@@ -944,11 +927,6 @@ export async function addMarketplaceToState(args: {
   readonly cloneNotes?: GitHubCloneNotes | undefined;
   /** D-PL5-07: downloads a hosted catalog. Defaults to DEFAULT_HOSTED_MANIFEST_FETCH. */
   readonly hostedManifestFetch?: HostedManifestFetch | undefined;
-  /**
-   * FTCH-06 / D-79-02: the command's once-per-host Device Flow memo. An
-   * install passes its own, so its add and its plugin clones share one memo.
-   */
-  readonly authMemo?: Map<string, AuthAttemptResult> | undefined;
   /**
    * D-PL5-17: the record whose checkout a repair re-materializes. The clone
    * or download must declare its name, and the record keeps its source and
@@ -1035,15 +1013,13 @@ function gitStagingSteps(
   gitOps: GitOps,
   args: AddToStateArgs,
 ): StagingSteps {
-  const { deviceFlowHttp, authMemo, removalOps } = args;
+  const { removalOps } = args;
   const cloneNotes = args.cloneNotes ?? createGitHubCloneNotes();
   const gitHubSsh = args.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
   const auth = cloneAuthFor(source, {
-    credentialOps: args.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
     ctx: args.ctx,
     run: args.run,
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-    ...(authMemo !== undefined && { authMemo }),
   });
   return {
     async stage(stagingDir) {
@@ -1283,8 +1259,6 @@ async function runAddInGuard<U>(args: {
       ctx: opts.ctx,
       run: opts.run,
       removalOps,
-      credentialOps: opts.credentialOps,
-      deviceFlowHttp: opts.deviceFlowHttp,
       gitOps: opts.gitOps,
       gitHubSsh: opts.gitHubSsh,
       cloneNotes,
@@ -2104,8 +2078,6 @@ interface CloneAuthArgs {
   readonly credentialOps: CredentialOps;
   readonly ctx: NotificationContext;
   readonly run: NotificationRun;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
 }
 
 /**
@@ -2133,9 +2105,6 @@ interface CloneAuthArgs {
  * the host of the URL it requests. The bundle acts only on a failed request to
  * its own host, and a sign-in's token reaches git through a helper keyed to
  * that host alone (`platform/git.ts`, D-1-03, T-79-04).
- *
- * FTCH-06 / D-79-02: `authMemo` caps the Device Flow at once per host across
- * the command.
  */
 function cloneAuthFor(source: GitHubSource | UrlSource, authArgs: CloneAuthArgs): GitAuthBundle {
   return source.kind === "github"

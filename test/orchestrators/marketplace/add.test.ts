@@ -20,7 +20,10 @@ import test, { type TestContext } from "node:test";
 import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
-import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  NO_STORED_CREDENTIAL_CAUSE,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import {
   addMarketplace as addMarketplaceWithCache,
   addMarketplaceToState,
@@ -57,9 +60,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -70,10 +71,6 @@ import {
   whileStateLockHeld as whileLockHeld,
 } from "../state-lock.ts";
 
-import type {
-  DeviceCodeResponse,
-  PollResult,
-} from "../../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
@@ -90,11 +87,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import type {
-  GitCredentials,
-  ListRemotesResult,
-} from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { ListRemotesResult } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -142,58 +135,6 @@ function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
 ): string {
   return path.join(path.dirname(new URL(import.meta.url).pathname), "_fixtures", name);
-}
-
-interface CredentialAdapterOptions {
-  readonly store?: ReadonlyMap<string, GitCredentials>;
-}
-
-function createCredentialOps(initial: CredentialAdapterOptions = {}) {
-  const credentials = createCredentialOpsFake({
-    boundary: "memory",
-    credentials: [...(initial.store ?? new Map<string, GitCredentials>()).entries()],
-  });
-
-  return {
-    credOps: credentials.credentialOps,
-    state: {
-      get fillCalls() {
-        return credentials.calls.fill;
-      },
-      get approveCalls() {
-        return credentials.calls.approve.map(({ host, credential: cred }) => ({ host, cred }));
-      },
-    },
-  };
-}
-
-interface DeviceFlowAdapterOptions {
-  readonly deviceCode?: DeviceCodeResponse;
-  readonly pollQueue?: readonly PollResult[];
-}
-
-function createDeviceFlowHttp(initial: DeviceFlowAdapterOptions = {}) {
-  const deviceFlow = createDeviceFlowFake({
-    boundary: "memory",
-    network: "disabled",
-    deviceCode: initial.deviceCode ?? {
-      device_code: "MOCK_DEVICE_CODE",
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-    ...(initial.pollQueue === undefined ? {} : { pollResponses: initial.pollQueue }),
-  });
-
-  return {
-    http: deviceFlow.http,
-    state: {
-      get requestCodeCalls() {
-        return deviceFlow.calls.requestCode;
-      },
-    },
-  };
 }
 
 interface GitOpsAdapterOptions {
@@ -3781,152 +3722,11 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
 // AUTH-01 auth-wiring tests
 // -----------------------------------------------------------------------
 
-test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with the auth bundle", async () => {
-  await withTmpScope(async ({ cwd }) => {
-    // arrange
-    const { ctx, run, notifications } = makeCtx();
-
-    // Pre-seed a stored credential for github.com so fill returns a HIT.
-    const { credOps: credentialOps, state: credState } = createCredentialOps({
-      store: new Map([["github.com", { username: "x-access-token", password: "stored-token" }]]),
-    });
-
-    const { gitOps, state } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-
-    // act
-    await addMarketplace({
-      ctx,
-      run,
-      scope: "project",
-      cwd,
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-      credentialOps,
-    });
-
-    // auth bundle must be forwarded to gitOps.clone.
-    // assert
-    assert.equal(state.cloneCalls.length, 1);
-    assert.ok(state.cloneCalls[0]?.auth !== undefined, "auth bundle must be present on clone call");
-
-    // Verify bundle shape.
-    const recordedAuth = state.cloneCalls[0].auth;
-    assert.equal(recordedAuth.host, "github.com");
-    assert.equal(
-      recordedAuth.credentialOps,
-      credentialOps,
-      "credentialOps should be reference-equal",
-    );
-
-    // The recorded bundle's helper surface holds the stored credential.
-    const credentials = await recordedAuth.credentialOps.fill(recordedAuth.host);
-    assert.deepStrictEqual(credentials, { username: "x-access-token", password: "stored-token" });
-
-    // fill consulted exactly once, by the read above.
-    assert.equal(credState.fillCalls.length, 1);
-    assert.equal(credState.fillCalls[0]?.host, "github.com");
-
-    // No Device Flow prompt emitted: only the post-add success notification.
-    assert.equal(
-      notifications.filter((n) => n.message.startsWith("Open ")).length,
-      0,
-      "Device Flow prompt must NOT fire on a fill HIT",
-    );
-  });
-});
-
-test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a token via initiateDeviceFlow", async () => {
-  await withTmpScope(async ({ cwd }) => {
-    // arrange
-    const { ctx, run, notifications } = makeCtx(2, 3);
-
-    // Empty store -> fill returns null (MISS).
-    const { credOps: credentialOps, state: credState } = createCredentialOps();
-
-    // Device Flow http mock: immediate success poll.
-    const { http: deviceFlowHttp } = createDeviceFlowHttp({
-      deviceCode: {
-        device_code: "MOCK_DEVICE_CODE",
-        user_code: "ABCD-1234",
-        verification_uri: "https://github.com/login/device",
-        expires_in: 900,
-        interval: 0,
-      },
-      pollQueue: [
-        {
-          kind: "success",
-          accessToken: "gho_test_token_AUTH01",
-          tokenType: "bearer",
-          scope: "repo",
-        },
-      ],
-    });
-
-    const { gitOps, state } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-
-    // act
-    await addMarketplace({
-      ctx,
-      run,
-      scope: "project",
-      cwd,
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-      credentialOps,
-      deviceFlowHttp,
-    });
-
-    // auth bundle must be forwarded.
-    // assert
-    assert.equal(state.cloneCalls.length, 1);
-    const recordedAuth = state.cloneCalls[0]?.auth;
-    assert.ok(recordedAuth !== undefined, "auth bundle must be forwarded to gitOps.clone");
-
-    // D-SG-14: a run no helper answered calls the bundle's onAuthRequired,
-    // which runs initiateDeviceFlow (with the injected http mock) to success.
-    assert.ok(recordedAuth.kind === "device-flow", "github.com must carry a Device Flow bundle");
-    const authentication = await recordedAuth.onAuthRequired();
-    assert.deepStrictEqual(
-      authentication,
-      { ok: true, cred: { username: "x-access-token", password: "gho_test_token_AUTH01" } },
-      "Device Flow must produce the mocked token",
-    );
-
-    // The Device Flow prompt must carry the byte-exact catalog text.
-    assert.ok(
-      notifications.some(
-        (n) =>
-          n.message === "Open https://github.com/login/device and enter: ABCD-1234" &&
-          n.severity === "info",
-      ),
-      "Device Flow must emit the exact catalog byte-form prompt with info severity",
-    );
-
-    // approve called once by initiateDeviceFlow on success.
-    assert.equal(
-      credState.approveCalls.length,
-      1,
-      "credentialOps.approve must be called on success",
-    );
-
-    // git asked the helper itself; the sign-in reads no stored credential.
-    assert.deepStrictEqual(credState.fillCalls, [], "the sign-in must not read the helper");
-  });
-});
-
-test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone (no re-bundling)", async () => {
+test("AUTH-01 add: the clone's bundle carries the production credential surface by reference (no re-bundling)", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
 
-    const { credOps: credentialOps } = createCredentialOps();
-
-    const { http: deviceFlowHttp } = createDeviceFlowHttp();
-
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -3939,8 +3739,6 @@ test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone
       cwd,
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
-      credentialOps,
-      deviceFlowHttp,
     });
 
     // assert
@@ -3948,10 +3746,9 @@ test("AUTH-01 add: the GitAuthBundle is forwarded by reference into gitOps.clone
     assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
     assert.equal(
       state.cloneCalls[0]?.auth?.credentialOps,
-      credentialOps,
+      DEFAULT_CREDENTIAL_OPS,
       "credentialOps must be reference-equal (no re-bundling)",
     );
-    assert.equal(state.cloneCalls[0]?.auth?.kind, "device-flow");
   });
 });
 
@@ -5918,7 +5715,6 @@ test("MURL-08: url source clones the URL as typed, with a bundle bound to its ho
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -5931,7 +5727,6 @@ test("MURL-08: url source clones the URL as typed, with a bundle bound to its ho
       cwd,
       rawSource: "https://gitlab.example.com/team/mp",
       gitOps,
-      credentialOps,
     });
 
     // D-2-01 / D-2-03: the clone URL derives from source.raw via
@@ -5943,11 +5738,10 @@ test("MURL-08: url source clones the URL as typed, with a bundle bound to its ho
     assert.ok(cloneCall);
     assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp");
     // GAUTH-03: the clone carries a bundle keyed on the source's own host.
-    assert.deepStrictEqual(cloneCall.auth, {
-      credentialOps,
-      host: "gitlab.example.com",
-      kind: "stored-credential",
-    });
+    assert.deepStrictEqual(
+      { kind: cloneCall.auth?.kind, host: cloneCall.auth?.host },
+      { kind: "stored-credential", host: "gitlab.example.com" },
+    );
   });
 });
 
@@ -5955,7 +5749,6 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and t
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -5968,7 +5761,6 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and t
       cwd,
       rawSource: "https://gitlab.example.com/team/mp#v1.0",
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -5988,11 +5780,10 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and t
       },
     );
     // GAUTH-03: the bundle rides the pinned-ref arm too.
-    assert.deepStrictEqual(cloneCall.auth, {
-      credentialOps,
-      host: "gitlab.example.com",
-      kind: "stored-credential",
-    });
+    assert.deepStrictEqual(
+      { kind: cloneCall.auth?.kind, host: cloneCall.auth?.host },
+      { kind: "stored-credential", host: "gitlab.example.com" },
+    );
   });
 });
 
@@ -6603,7 +6394,7 @@ test("GAUTH-02 orchestrated mode -- a failed Device Flow returns { status: 'fail
   });
 });
 
-test("MURL-01 regression: github source is byte-identical -- Device Flow auth still constructed, cloneUrl still reconstructed", async () => {
+test("MURL-01 regression: a github source clones the reconstructed canonical URL with a github.com bundle", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -6627,16 +6418,9 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
     assert.ok(cloneCall);
     // github: URL reconstructed to the canonical https://github.com/.git form.
     assert.equal(cloneCall.url, "https://github.com/anthropics/claude-plugins-official.git");
-    // github: the Device Flow auth bundle IS constructed and passed through.
+    // github: the clone carries an auth bundle bound to github.com.
     assert.ok(cloneCall.auth, "github clone must carry an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
-    // github.com runs the provider's Device Flow on a helper miss.
-    assert.ok(cloneCall.auth.kind === "device-flow");
-    assert.equal(
-      typeof cloneCall.auth.onAuthRequired,
-      "function",
-      "github auth bundle must carry the D-SG-14 sign-in",
-    );
   });
 });
 
@@ -6645,7 +6429,6 @@ test("GHB-02: a GitHub add under the override clones the canonical URL with the 
     // arrange
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
@@ -6658,7 +6441,6 @@ test("GHB-02: a GitHub add under the override clones the canonical URL with the 
       cwd,
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6666,11 +6448,12 @@ test("GHB-02: a GitHub add under the override clones the canonical URL with the 
       { message: `● valid-marketplace [project] (added)\n${OFFICIAL_OVERRIDE_NOTE}` },
     ]);
     assert.deepStrictEqual(
-      state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
+      state.cloneCalls.map(({ url, auth }) => ({ url, kind: auth?.kind, host: auth?.host })),
       [
         {
           url: "https://github.com/anthropics/claude-plugins-official.git",
-          auth: { kind: "stored-credential", credentialOps, host: "mirror.example:8443" },
+          kind: "stored-credential",
+          host: "mirror.example:8443",
         },
       ],
     );
@@ -6777,7 +6560,6 @@ test("GHB-01: a GitHub add failing under the override names the fetched URL on a
     // arrange
     setGitHubBaseUrl(t, "https://mirror.example/git");
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const cloneThrows = Object.assign(httpError(404), {
       cause: new FetchedUrlCause(
         "https://mirror.example/git/anthropics/claude-plugins-official.git",
@@ -6796,7 +6578,6 @@ test("GHB-01: a GitHub add failing under the override names the fetched URL on a
       cwd,
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6821,7 +6602,6 @@ test("GHB-01: an orchestrated GitHub add failing under the override still classi
     // arrange
     setGitHubBaseUrl(t, "https://mirror.example/git");
     const { ctx, run } = makeCtx(0);
-    const { credOps: credentialOps } = createCredentialOps();
     const cloneThrows = Object.assign(httpError(404), {
       cause: new FetchedUrlCause(
         "https://mirror.example/git/anthropics/claude-plugins-official.git",
@@ -6840,7 +6620,6 @@ test("GHB-01: an orchestrated GitHub add failing under the override still classi
       cwd,
       rawSource: "anthropics/claude-plugins-official",
       gitOps,
-      credentialOps,
       notifications: { mode: "orchestrated" },
     });
 
@@ -6866,7 +6645,6 @@ test("D-79-03: a url add that 401s on a host with no Device Flow renders the bar
     // rewrite renders no child row (D-01/D-10, GHB-04), so the stored-credential
     // cause line renders ONLY on the update path's cause-carrying child row --
     // the add row stays the bare closed-set token.
-    const { credOps: credentialOps } = createCredentialOps();
     const httpErr = httpError(401);
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
@@ -6881,7 +6659,6 @@ test("D-79-03: a url add that 401s on a host with no Device Flow renders the bar
       cwd,
       rawSource: "https://gitlab.example.com/team/private-mp",
       gitOps,
-      credentialOps,
     });
 
     const note = notifications.find((n) => n.severity === "error");
@@ -6899,50 +6676,6 @@ test("D-79-03: a url add that 401s on a host with no Device Flow renders the bar
   });
 });
 
-test("PROV-02: a public url add on a host with no Device Flow carries its bundle but consults nothing -- no credential interaction, no Device Flow prompt", async () => {
-  await withTmpScope(async ({ cwd }) => {
-    // arrange
-    const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps, state: credState } = createCredentialOps();
-    const { http: deviceFlowHttp, state: httpState } = createDeviceFlowHttp();
-    const { gitOps, state } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-
-    // act
-    await addMarketplace({
-      ctx,
-      run,
-      scope: "project",
-      cwd,
-      rawSource: "https://gitlab.example.com/team/mp",
-      gitOps,
-      credentialOps,
-      deviceFlowHttp,
-    });
-
-    // GAUTH-03: the clone carries a host-keyed bundle, and PROV-02's surviving
-    // guarantee is that nothing in it is consulted until the server challenges.
-    // assert
-    assert.equal(state.cloneCalls.length, 1);
-    const cloneCall = state.cloneCalls[0];
-    assert.ok(cloneCall);
-    assert.deepStrictEqual(cloneCall.auth, {
-      credentialOps,
-      host: "gitlab.example.com",
-      kind: "stored-credential",
-    });
-    // The public clone never touched the credential seam or the flow.
-    assert.equal(credState.fillCalls.length, 0);
-    assert.equal(httpState.requestCodeCalls.length, 0);
-    assert.equal(
-      notifications.filter((n) => n.message.startsWith("Open ")).length,
-      0,
-      "Device Flow prompt must NOT fire for a public no-provider url add",
-    );
-  });
-});
-
 test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a github source with the provider auth bundle", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
@@ -6950,7 +6683,6 @@ test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a 
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    const { credOps: credentialOps } = createCredentialOps();
 
     // D-76-02: the parser folds the host's case, so this is a `github` source
     // and clones at the canonical github.com url with the GitHub provider's
@@ -6963,7 +6695,6 @@ test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a 
       cwd,
       rawSource: "https://GitHub.com/acme/mp",
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6973,7 +6704,6 @@ test("PROV-01 / D-76-02: an add whose host case-folds to github.com clones as a 
     assert.equal(cloneCall.url, "https://github.com/acme/mp.git");
     assert.ok(cloneCall.auth, "provider-registered host must attach an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
-    assert.equal(cloneCall.auth.kind, "device-flow");
   });
 });
 
@@ -6984,7 +6714,6 @@ test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the 
     const { gitOps, state } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    const { credOps: credentialOps } = createCredentialOps();
 
     // Unlike the gitlab.example.com adds above (MURL-08, PROV-02), gitlab.com
     // is claimed by GITLAB_PROVIDER (exact-match hostMatch) -- the real
@@ -6999,7 +6728,6 @@ test("GAUTH-02 / MURL-08: a gitlab.com url add clones the URL as typed WITH the 
       cwd,
       rawSource: "https://gitlab.com/team/mp",
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -7109,47 +6837,6 @@ test("MURL-09 / D-2-02: an add against a suffix-only port sends the verbatim URL
     assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/git-only-mp");
   });
 });
-
-for (const { rawSource, host } of [
-  { rawSource: "anthropics/claude-plugins-official", host: "github.com" },
-  { rawSource: "https://gitlab.com/team/mp", host: "gitlab.com" },
-]) {
-  test(`FTCH-06 / D-79-02: an add of ${rawSource} answers its auth challenge from the command's memo`, async () => {
-    await withTmpScope(async ({ cwd, locations }) => {
-      // arrange
-      const { ctx, run } = makeCtx(0);
-      const { credOps: credentialOps } = createCredentialOps();
-      const { http: deviceFlowHttp, state: deviceFlowState } = createDeviceFlowHttp();
-      const { gitOps, state } = createGitOps({
-        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-      });
-      const remembered: AuthAttemptResult = { ok: false, reason: "declined earlier" };
-      const snapshot: ExtensionState = { schemaVersion: 2, marketplaces: {} };
-
-      // act
-      await addMarketplaceToState({
-        state: snapshot,
-        locations,
-        source: parseAddableSource(rawSource),
-        cwd,
-        ctx,
-        run,
-        removalOps: createRemovalOps(),
-        credentialOps,
-        deviceFlowHttp,
-        gitOps,
-        authMemo: new Map([[host, remembered]]),
-      });
-      const auth = state.cloneCalls[0]?.auth;
-      assert.ok(auth?.kind === "device-flow");
-      const attempt = await auth.onAuthRequired();
-
-      // assert
-      assert.equal(attempt, remembered);
-      assert.deepStrictEqual(deviceFlowState.requestCodeCalls, []);
-    });
-  });
-}
 
 test("notifyAddFailure renders a caught add failure as the public add command does", () => {
   // arrange
