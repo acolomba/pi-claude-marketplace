@@ -27,6 +27,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts";
 import {
   updateAllMarketplaces,
@@ -60,9 +61,7 @@ import {
   hygieneWarning,
 } from "../../../extensions/pi-claude-marketplace/shared/staging-warnings.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
@@ -70,6 +69,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
 import type {
+  GitAuthBundle,
   GitHubSshOps,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -82,7 +82,6 @@ import type {
   ScopeDependencyInstallRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type {
   ExtensionContext,
   NotificationContext,
@@ -195,21 +194,18 @@ function createGitOps(options: MarketplaceGitOpsSeed = {}) {
   };
 }
 
-function createCredentialOps(
-  options: { readonly store?: ReadonlyMap<string, GitCredentials> } = {},
-) {
-  const credentials = createCredentialOpsFake({
-    boundary: "memory",
-    credentials: [...(options.store ?? new Map()).entries()],
-  });
-  return {
-    credOps: credentials.credentialOps,
-    state: {
-      fillCalls: credentials.calls.fill,
-      approveCalls: credentials.calls.approve,
-      rejectCalls: credentials.calls.reject,
-    },
-  };
+/**
+ * The recorded git calls with each bundle cut to the fields a request reads:
+ * its kind and its host. Every bundle carries the production credential
+ * surface (D-SG-27).
+ */
+function withBundleFields<T extends { readonly auth?: GitAuthBundle | undefined }>(
+  calls: readonly T[],
+): Array<Omit<T, "auth"> & { auth: Pick<GitAuthBundle, "kind" | "host"> | undefined }> {
+  return calls.map(({ auth, ...call }) => ({
+    ...call,
+    auth: auth === undefined ? undefined : { kind: auth.kind, host: auth.host },
+  }));
 }
 
 /**
@@ -235,20 +231,6 @@ function makeForbiddenGitOps(): { readonly calls: Array<keyof GitOps>; readonly 
       listRemotes: () => reject("listRemotes"),
     },
   };
-}
-
-function createDeviceFlowHttp() {
-  return createDeviceFlowFake({
-    boundary: "memory",
-    network: "disabled",
-    deviceCode: {
-      device_code: "device-code",
-      user_code: "user-code",
-      verification_uri: "https://github.com/login/device",
-      expires_in: 900,
-      interval: 0,
-    },
-  });
 }
 
 interface NotifyRecord {
@@ -552,7 +534,6 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-403", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const transportError = remoteFailure({ kind: "https-auth", detail: "rejected" });
     const { gitOps, state } = createGitOps({ remoteThrows: transportError });
 
@@ -565,7 +546,6 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -577,15 +557,11 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
       },
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
-    assert.deepStrictEqual(state.lsRemoteCalls, [
+    assert.deepStrictEqual(withBundleFields(state.lsRemoteCalls), [
       {
         url: "https://gitlab.example.com/team/urlmp-403",
         ref: "main",
-        auth: {
-          credentialOps,
-          host: "gitlab.example.com",
-          kind: "stored-credential",
-        },
+        auth: { kind: "stored-credential", host: "gitlab.example.com" },
       },
     ]);
     assert.deepStrictEqual(
@@ -600,7 +576,6 @@ test("marketplace update transport: names the status and URL of a providerless H
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-500", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const transportError = remoteFailure({ kind: "network", httpStatus: 500 });
     const { gitOps, state } = createGitOps({ remoteThrows: transportError });
 
@@ -613,7 +588,6 @@ test("marketplace update transport: names the status and URL of a providerless H
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -625,15 +599,11 @@ test("marketplace update transport: names the status and URL of a providerless H
       },
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
-    assert.deepStrictEqual(state.lsRemoteCalls, [
+    assert.deepStrictEqual(withBundleFields(state.lsRemoteCalls), [
       {
         url: "https://gitlab.example.com/team/urlmp-500",
         ref: "main",
-        auth: {
-          credentialOps,
-          host: "gitlab.example.com",
-          kind: "stored-credential",
-        },
+        auth: { kind: "stored-credential", host: "gitlab.example.com" },
       },
     ]);
     assert.deepStrictEqual(
@@ -653,7 +623,6 @@ test("marketplace update transport: names a 404 answer as a network error with i
       host: "user:secret@gitlab.example.com",
     });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const transportError = remoteFailure({ kind: "repository-not-found", httpStatus: 404 });
     const { gitOps } = createGitOps({ remoteThrows: transportError });
 
@@ -666,7 +635,6 @@ test("marketplace update transport: names a 404 answer as a network error with i
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -719,58 +687,7 @@ test("marketplace update transport: renders a non-Error rejection with no reason
   });
 });
 
-test("marketplace update transport: leaves Device Flow idle for a public URL refresh", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-device", ref: "main" });
-    const { ctx, run, notifications } = makeCtx();
-    const { gitOps, state } = createGitOps();
-    const { credOps: credentialOps, state: credentialState } = createCredentialOps();
-    const deviceFlow = createDeviceFlowHttp();
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "urlmp-device",
-      scope: "project",
-      cwd,
-      gitOps,
-      credentialOps,
-      deviceFlowHttp: deviceFlow.http,
-    });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      { message: "● urlmp-device [project] (skipped) {up-to-date}" },
-    ]);
-    assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
-    assert.deepStrictEqual(state.lsRemoteCalls, [
-      {
-        url: "https://gitlab.example.com/team/urlmp-device",
-        ref: "main",
-        auth: {
-          credentialOps,
-          host: "gitlab.example.com",
-          kind: "stored-credential",
-        },
-      },
-    ]);
-    assert.deepStrictEqual(
-      state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
-      [{ url: "https://gitlab.example.com/team/urlmp-device", auth: state.lsRemoteCalls[0]?.auth }],
-    );
-    assert.deepStrictEqual(credentialState, {
-      fillCalls: [],
-      approveCalls: [],
-      rejectCalls: [],
-    });
-    assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
-  });
-});
-
-test("marketplace update transport: carries the GitHub auth bundle without invoking Device Flow", async () => {
+test("marketplace update transport: checks and re-clones a GitHub source with one github.com bundle", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedGithubMarketplace({
@@ -780,8 +697,6 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
     });
     const { ctx, run, notifications } = makeCtx();
     const { gitOps, state } = createGitOps();
-    const { credOps: credentialOps, state: credentialState } = createCredentialOps();
-    const deviceFlow = createDeviceFlowHttp();
 
     // act
     await updateMarketplace({
@@ -792,8 +707,6 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
-      deviceFlowHttp: deviceFlow.http,
     });
 
     // assert
@@ -802,30 +715,16 @@ test("marketplace update transport: carries the GitHub auth bundle without invok
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
     assert.deepStrictEqual(
-      state.lsRemoteCalls.map(({ url, ref, auth }) => ({
-        url,
-        ref,
-        kind: auth?.kind,
-        host: auth?.host,
-        credentialOps: auth?.credentialOps,
-      })),
+      state.lsRemoteCalls.map(({ url, ref, auth }) => ({ url, ref, host: auth?.host })),
       [
         {
           url: "https://github.com/anthropics/claude-plugins-official.git",
           ref: "main",
-          kind: "device-flow",
           host: "github.com",
-          credentialOps,
         },
       ],
     );
     assert.strictEqual(state.cloneCalls[0]?.auth, state.lsRemoteCalls[0]?.auth);
-    assert.deepStrictEqual(credentialState, {
-      fillCalls: [],
-      approveCalls: [],
-      rejectCalls: [],
-    });
-    assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
   });
 });
 
@@ -1052,7 +951,6 @@ for (const { kind, seed } of [
       const recordBefore = (await loadState(locations.extensionRoot)).marketplaces.tools;
       const cloneBefore = await directoryBytes(cloneDir);
       const { ctx, run, notifications } = makeCtx();
-      const { credOps: credentialOps } = createCredentialOps();
       const lsRemoteError = unreachableRemote();
       const { gitOps, state } = createGitOps({ remoteThrows: lsRemoteError });
       const cascadeCalls: string[] = [];
@@ -1070,7 +968,6 @@ for (const { kind, seed } of [
         scope: "project",
         cwd,
         gitOps,
-        credentialOps,
         pluginUpdate,
         environment: KEEP_ENVIRONMENT,
       });
@@ -1897,7 +1794,6 @@ test("MURL-03 + D-SG-10: a stale url source is re-cloned with its host-keyed aut
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps();
 
     // act
@@ -1909,7 +1805,6 @@ test("MURL-03 + D-SG-10: a stale url source is re-cloned with its host-keyed aut
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -1920,15 +1815,11 @@ test("MURL-03 + D-SG-10: a stale url source is re-cloned with its host-keyed aut
       { message: "● urlmp [project] (skipped) {up-to-date}" },
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
-    assert.deepStrictEqual(state.lsRemoteCalls, [
+    assert.deepStrictEqual(withBundleFields(state.lsRemoteCalls), [
       {
         url: "https://gitlab.example.com/team/urlmp",
         ref: "main",
-        auth: {
-          credentialOps,
-          host: "gitlab.example.com",
-          kind: "stored-credential",
-        },
+        auth: { kind: "stored-credential", host: "gitlab.example.com" },
       },
     ]);
     assert.deepStrictEqual(
@@ -1948,7 +1839,6 @@ test("GHB-04: updating a url marketplace ignores an invalid override", async (t)
     setGitHubBaseUrl(t, "http://mirror.example");
     await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps();
 
     // act
@@ -1960,7 +1850,6 @@ test("GHB-04: updating a url marketplace ignores an invalid override", async (t)
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -1968,11 +1857,12 @@ test("GHB-04: updating a url marketplace ignores an invalid override", async (t)
       { message: "● urlmp [project] (skipped) {up-to-date}" },
     ]);
     assert.deepStrictEqual(
-      state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
+      state.cloneCalls.map(({ url, auth }) => ({ url, kind: auth?.kind, host: auth?.host })),
       [
         {
           url: "https://gitlab.example.com/team/urlmp",
-          auth: { credentialOps, host: "gitlab.example.com", kind: "stored-credential" },
+          kind: "stored-credential",
+          host: "gitlab.example.com",
         },
       ],
     );
@@ -1984,7 +1874,6 @@ test("MURL-03: an unpinned url source asks the remote for its HEAD and clones it
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-default" });
     const { ctx, run } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps();
 
     // act
@@ -1996,7 +1885,6 @@ test("MURL-03: an unpinned url source asks the remote for its HEAD and clones it
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -2024,7 +1912,6 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-private", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     // D-SG-14: no credential helper answered git, which fails as https-auth
     // with no credential -- NOT a network failure.
     const authError = remoteFailure({ kind: "https-auth", detail: "no-credential" });
@@ -2039,16 +1926,14 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
     const fetchedAuth = state.lsRemoteCalls[0]?.auth;
-    assert.deepStrictEqual(fetchedAuth, {
-      credentialOps,
-      host: "gitlab.example.com",
-      kind: "stored-credential",
-    });
+    assert.deepStrictEqual(
+      { kind: fetchedAuth?.kind, host: fetchedAuth?.host },
+      { kind: "stored-credential", host: "gitlab.example.com" },
+    );
     assert.deepStrictEqual(notifications, [
       {
         message:
@@ -2064,7 +1949,6 @@ test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same s
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-401", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     // git reads a 401 or 403 answer as https-auth (mirrors D-76-08), so both
     // details must reach the cause line.
     const httpErr = remoteFailure({ kind: "https-auth", detail: "rejected" });
@@ -2079,7 +1963,6 @@ test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same s
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -2098,7 +1981,6 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-chained", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const authError = remoteFailure(
       { kind: "https-auth", detail: "no-credential" },
       new Error("helper exited 128"),
@@ -2114,7 +1996,6 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -2133,7 +2014,6 @@ test("GAUTH-04: a stored credential that a host with no Device Flow rejects rend
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-rejected", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps } = createGitOps({
       remoteThrows: new StoredCredentialRejectedError("gitlab.example.com"),
     });
@@ -2147,7 +2027,6 @@ test("GAUTH-04: a stored credential that a host with no Device Flow rejects rend
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -2155,53 +2034,6 @@ test("GAUTH-04: a stored credential that a host with no Device Flow rejects rend
       {
         message:
           'Some operations have failed.\n\n⊘ urlmp-rejected [project] (failed)\n  ⊘ urlmp-rejected (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-rejected". -> gitlab.example.com rejected the stored credential',
-        severity: "error",
-      },
-    ]);
-  });
-});
-
-test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {authentication required} with NO stored-credential cause line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    // The case-sensitive github.com prefix check leaves this a `url` source,
-    // but URL host parsing lowercases it to the provider-registered host.
-    await seedUrlMarketplace({ cwd, name: "urlmp-github", ref: "main", host: "GitHub.com" });
-    const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
-    const authError = remoteFailure(
-      { kind: "https-auth", detail: "no-credential" },
-      new Error("cancelled"),
-    );
-    const { gitOps, state } = createGitOps({ remoteThrows: authError });
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "urlmp-github",
-      scope: "project",
-      cwd,
-      gitOps,
-      credentialOps,
-    });
-
-    // assert
-    const fetchedAuth = state.lsRemoteCalls[0]?.auth;
-    assert.ok(fetchedAuth?.kind === "device-flow");
-    assert.deepStrictEqual(fetchedAuth, {
-      credentialOps,
-      host: "github.com",
-      kind: "device-flow",
-      onAuthRequired: fetchedAuth.onAuthRequired,
-    });
-    // On a registry host the story is a declined or expired Device Flow, not a
-    // missing stored credential, so no cause line is attached.
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          'Some operations have failed.\n\n⊘ urlmp-github [project] (failed)\n  Cloning via HTTPS: https://github.com/team/urlmp-github.git\n  ⊘ urlmp-github (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-github". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
         severity: "error",
       },
     ]);
@@ -2536,7 +2368,6 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
     // arrange
     await seedUrlMarketplace({ cwd, name: "urloffline" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     // cloneAdvanced stays false because onFetchSucceeded never fires.
     const { gitOps } = createGitOps({
       remoteThrows: remoteFailure({ kind: "network", curlCode: 7 }),
@@ -2551,7 +2382,6 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -2570,7 +2400,6 @@ test("D-PL10-17: url-source clone advances to an invalid manifest without a retr
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlbroken" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps: brokenGitOps } = createGitOps({
       async onRefresh(dir): Promise<void> {
         // The fetch succeeded (cloneAdvanced via onFetchSucceeded), then the
@@ -2588,7 +2417,6 @@ test("D-PL10-17: url-source clone advances to an invalid manifest without a retr
       scope: "project",
       cwd,
       gitOps: brokenGitOps,
-      credentialOps,
     });
 
     // assert
@@ -2764,7 +2592,6 @@ for (const { kind, seed } of [
       const recordBefore = (await loadState(extensionRoot)).marketplaces.tools;
       const { ctx, run, notifications } = makeCtx();
       const { calls, gitOps } = makeForbiddenGitOps();
-      const { credOps: credentialOps } = createCredentialOps();
       let parseMessage = "";
       try {
         JSON.parse("");
@@ -2781,7 +2608,6 @@ for (const { kind, seed } of [
         scope: "project",
         cwd,
         gitOps,
-        credentialOps,
       });
 
       // assert
@@ -5763,7 +5589,7 @@ test("SC-6 / MU-1: updateAllMarketplaces (no scope) with both scopes empty notif
   });
 });
 
-test("updateAllMarketplaces forwards optional Device Flow and plugin cascade ports", async (testContext) => {
+test("updateAllMarketplaces forwards the optional plugin cascade port", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const now = new Date("2026-09-01T12:00:00.000Z");
@@ -5780,7 +5606,6 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     const locations = locationsFor("project", cwd);
     const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const { ctx, run, notifications } = makeCtx();
-    const deviceFlow = createDeviceFlowHttp();
     const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
     const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
       cascadeCalls.push({ marketplace, plugin, scope });
@@ -5803,7 +5628,6 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
       run,
       scope: "project",
       cwd,
-      deviceFlowHttp: deviceFlow.http,
       pluginUpdate,
     });
 
@@ -5816,7 +5640,6 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
     assert.deepStrictEqual(cascadeCalls, [
       { marketplace: "batch-mp", plugin: "alpha", scope: "project" },
     ]);
-    assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
       schemaVersion: 3,
       marketplaces: {
@@ -6219,82 +6042,19 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// AUTH-02: silent-reuse contract + auth bundle forwarding
+// AUTH-02: auth bundle forwarding
 //
-// These tests lock the two halves of the AUTH-02 contract for marketplace
-// update:
-//   (a) When credentialOps.fill hits the keychain (post-add scenario),
-//       Device Flow does NOT trigger and no "Open ..." notification is
-//       emitted.
-//   (b) The GitAuthBundle is forwarded by reference into the D-SG-10
-//       re-clone (recorded on gitOps.clone's auth), proving no re-bundling
-//       occurs.
+// The GitAuthBundle is forwarded by reference into the D-SG-10 re-clone
+// (recorded on gitOps.clone's auth), proving no re-bundling occurs.
 // ───────────────────────────────────────────────────────────────────────────
-
-test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Flow notification emitted", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    await seedGithubMarketplace({ cwd, name: "private-mp", ref: "main" });
-    const { ctx, run, notifications } = makeCtx();
-
-    // Pre-seed the credential store for github.com so fill() returns the
-    // stored token without triggering Device Flow.
-    const { credOps: credentialOps, state: credState } = createCredentialOps({
-      store: new Map([["github.com", { username: "x-access-token", password: "stored-token" }]]),
-    });
-
-    const { gitOps, state } = createGitOps();
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "private-mp",
-      scope: "project",
-      cwd,
-      gitOps,
-      credentialOps,
-    });
-
-    // assert
-
-    // AUTH-02: Device Flow must NOT fire when credentialOps.fill hits the
-    // keychain. The "Open ..." notification is the Device Flow prompt; its
-    // absence confirms the silent-reuse path.
-    assert.equal(
-      notifications.filter((n) => n.message.startsWith("Open ")).length,
-      0,
-      "AUTH-02: Device Flow notify must NOT fire when credentialOps.fill hits the keychain",
-    );
-
-    // The re-clone was called exactly once and the auth bundle was forwarded.
-    assert.equal(state.cloneCalls.length, 1);
-    assert.ok(state.cloneCalls[0]?.auth !== undefined);
-    assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
-    assert.strictEqual(state.cloneCalls[0]?.auth?.credentialOps, credentialOps);
-
-    // The forwarded bundle's helper surface holds the stored credential.
-    const cloneAuth = state.cloneCalls[0]?.auth;
-    assert.ok(cloneAuth !== undefined);
-    const credentials = await cloneAuth.credentialOps.fill(cloneAuth.host);
-    assert.deepStrictEqual(credentials, { username: "x-access-token", password: "stored-token" });
-    // fill was called once, by the read above.
-    assert.equal(credState.fillCalls.length, 1);
-  });
-});
 
 test("AUTH-02 update: the GitAuthBundle is forwarded by reference into the re-clone", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
     const { ctx, run } = makeCtx();
-
-    // Empty store: fill() returns null. Device Flow would normally trigger
-    // when onAuth is invoked, but gitOps.clone is a pure stub so the
-    // callbacks are never called -- only the bundle reference is checked.
-    const { credOps: credentialOps } = createCredentialOps();
-
+    // gitOps.clone is a pure stub, so the bundle is never used: only its
+    // reference is checked.
     const { gitOps, state } = createGitOps();
 
     // act
@@ -6306,7 +6066,6 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into the re-cl
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6315,11 +6074,9 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into the re-cl
     assert.equal(state.cloneCalls.length, 1);
     assert.ok(state.cloneCalls[0]?.auth !== undefined);
     assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
-    // Reference equality: the same credentialOps instance passed to
-    // updateMarketplace must appear on the recorded clone auth bundle --
-    // proves no re-bundling occurred.
-    assert.strictEqual(state.cloneCalls[0]?.auth?.credentialOps, credentialOps);
-    assert.equal(state.cloneCalls[0]?.auth?.kind, "device-flow");
+    // Reference equality: the production credential surface appears on the
+    // recorded clone auth bundle -- proves no re-bundling occurred.
+    assert.strictEqual(state.cloneCalls[0]?.auth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
   });
 });
 
@@ -6329,7 +6086,6 @@ test("GHB-02: updating a GitHub marketplace under the override clones with the o
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
     await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps();
 
     // act
@@ -6341,7 +6097,6 @@ test("GHB-02: updating a GitHub marketplace under the override clones with the o
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6349,8 +6104,8 @@ test("GHB-02: updating a GitHub marketplace under the override clones with the o
       { message: `● ref-mp [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.deepStrictEqual(
-      state.cloneCalls.map(({ auth }) => auth),
-      [{ credentialOps, host: "mirror.example:8443", kind: "stored-credential" }],
+      state.cloneCalls.map(({ auth }) => ({ kind: auth?.kind, host: auth?.host })),
+      [{ kind: "stored-credential", host: "mirror.example:8443" }],
     );
   });
 });
@@ -6363,7 +6118,6 @@ test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under th
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
     await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const authError = remoteFailure(
       { kind: "https-auth", detail: "no-credential" },
       new FetchedUrlCause(OVERRIDE_WIRE_URL),
@@ -6379,7 +6133,6 @@ test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under th
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6398,7 +6151,6 @@ test("UPD-12 / GHB-01: a GitHub update under the override that the host answers 
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
     await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const httpErr = remoteFailure(
       { kind: "network", httpStatus: 500 },
       new FetchedUrlCause(OVERRIDE_WIRE_URL),
@@ -6414,7 +6166,6 @@ test("UPD-12 / GHB-01: a GitHub update under the override that the host answers 
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6433,7 +6184,6 @@ test("UPD-12 / GHB-01: a stored credential that the override host rejects keeps 
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
     await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const rejection = new StoredCredentialRejectedError("mirror.example:8443");
     rejection.cause = new FetchedUrlCause(OVERRIDE_WIRE_URL);
     const { gitOps } = createGitOps({ remoteThrows: rejection });
@@ -6447,7 +6197,6 @@ test("UPD-12 / GHB-01: a stored credential that the override host rejects keeps 
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6466,7 +6215,6 @@ test("UPD-12: a non-Error remote rejection on a GitHub update under the override
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
     await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const gitOps: GitOps = {
       ...createGitOps().gitOps,
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the case is a non-Error rejection
@@ -6484,7 +6232,6 @@ test("UPD-12: a non-Error remote rejection on a GitHub update under the override
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6503,7 +6250,6 @@ test("GHB-04: a declined Device Flow on a GitHub update without the override kee
     // arrange
     await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const authError = remoteFailure(
       { kind: "https-auth", detail: "no-credential" },
       new Error("cancelled"),
@@ -6519,7 +6265,6 @@ test("GHB-04: a declined Device Flow on a GitHub update without the override kee
       scope: "project",
       cwd,
       gitOps,
-      credentialOps,
     });
 
     // assert
@@ -6541,7 +6286,6 @@ test("GHB-03: updating a GitHub marketplace on an invalid base fails the command
     const stateJsonPath = locationsFor("project", cwd).stateJsonPath;
     const stateBefore = await readFile(stateJsonPath, "utf8");
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps, state } = createGitOps();
 
     // act & assert
@@ -6555,7 +6299,6 @@ test("GHB-03: updating a GitHub marketplace on an invalid base fails the command
           scope: "project",
           cwd,
           gitOps,
-          credentialOps,
         }),
       (error: unknown) => {
         assert.deepStrictEqual(
@@ -7223,7 +6966,6 @@ for (const { kind, seed, cloneLines } of [
       const extensionRoot = locationsFor("project", cwd).extensionRoot;
       const recordBefore = (await loadState(extensionRoot)).marketplaces.tools;
       const { ctx, run, notifications } = makeCtx();
-      const { credOps: credentialOps } = createCredentialOps();
       const { gitOps: renamingGitOps } = createGitOps({
         async onRefresh(dir): Promise<void> {
           await writeFile(
@@ -7242,7 +6984,6 @@ for (const { kind, seed, cloneLines } of [
         scope: "project",
         cwd,
         gitOps: renamingGitOps,
-        credentialOps,
       });
 
       // assert
@@ -7430,7 +7171,6 @@ test("D-PL5-28: a github refresh to one of Claude Code's own names fails and lea
     const extensionRoot = locationsFor("project", cwd).extensionRoot;
     const recordBefore = (await loadState(extensionRoot)).marketplaces.tools;
     const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
     const { gitOps: renamingGitOps } = createGitOps({
       async onRefresh(dir): Promise<void> {
         await writeFile(path.join(dir, ".claude-plugin", "marketplace.json"), manifestNamed("uv"));
@@ -7446,7 +7186,6 @@ test("D-PL5-28: a github refresh to one of Claude Code's own names fails and lea
       scope: "project",
       cwd,
       gitOps: renamingGitOps,
-      credentialOps,
     });
 
     // assert

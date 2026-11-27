@@ -57,7 +57,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { EXTENSION_ROOT_REL, MARKETPLACE_LEDGER_TARGETS } from "./gate-targets.ts";
+import { EXTENSION_ROOT_REL } from "./gate-targets.ts";
 import { assertNoForbiddenSurface, REPO_ROOT, stripComments } from "./source-scan.ts";
 
 /**
@@ -161,9 +161,7 @@ interface ClassifiedSeam {
 }
 
 /*
- * The modules the classified seams live on. The marketplace update ledger
- * carries the `MARKETPLACE_LEDGER_TARGETS` annotation, so naming a path that
- * group does not hold stops compiling (D-07-05). The four plugin owners are
+ * The modules the classified seams live on. The four plugin owners are
  * spelled here: `eslint.config.js` gates them by glob, so there is no list
  * this file could read a type from.
  */
@@ -173,8 +171,6 @@ const FETCH_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/fetch.t
 const PLUGIN_INFO_REL = "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
 const REINSTALL_FLOW_REL =
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
-const MARKETPLACE_UPDATE_REL: (typeof MARKETPLACE_LEDGER_TARGETS)[number] =
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
 
 /**
  * Every optional collaborator seam under `extensions/` that is kept by
@@ -183,8 +179,7 @@ const MARKETPLACE_UPDATE_REL: (typeof MARKETPLACE_LEDGER_TARGETS)[number] =
  * `cloneCacheSeam` is the authorized typed-optional port form, shared across the
  * install, fetch, info, and reinstall owners. `stateTransaction` and
  * `removeDataDir` are the promoted reinstall collaborators that replaced the
- * two `__`-prefixed bags. `credentialOps` and
- * `deviceFlowHttp` are the marketplace update ledger's auth ports.
+ * two `__`-prefixed bags.
  */
 const CLASSIFIED_SEAMS: ReadonlyArray<ClassifiedSeam> = [
   { member: "cloneCacheSeam", target: INSTALL_FLOW_REL },
@@ -193,8 +188,6 @@ const CLASSIFIED_SEAMS: ReadonlyArray<ClassifiedSeam> = [
   { member: "cloneCacheSeam", target: REINSTALL_FLOW_REL },
   { member: "stateTransaction", target: REINSTALL_FLOW_REL },
   { member: "removeDataDir", target: REINSTALL_FLOW_REL },
-  { member: "credentialOps", target: MARKETPLACE_UPDATE_REL },
-  { member: "deviceFlowHttp", target: MARKETPLACE_UPDATE_REL },
 ];
 
 function labelSeam(seam: ClassifiedSeam): string {

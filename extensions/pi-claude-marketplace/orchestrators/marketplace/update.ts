@@ -197,7 +197,6 @@ import {
   type UpdateRowMsg,
 } from "./update.messaging.ts";
 
-import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -206,7 +205,6 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AuthAttemptResult } from "../auth-host.ts";
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
@@ -246,19 +244,6 @@ export interface UpdateMarketplaceOptions {
    */
   readonly run: NotificationRun;
   /**
-   * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
-   * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
-   * so the developer's OS keychain is never touched.
-   */
-  readonly credentialOps?: CredentialOps;
-  /**
-   * Test seam for Device Flow integration tests. Production callers omit
-   * this field and get DEFAULT_DEVICE_FLOW_HTTP (real github.com fetch)
-   * inside the orchestrator's onAuthRequired closure.
-   */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  /**
    * D-12-style injection seam for the locked-state transaction around the
    * refresh. Tests inject a `loadState` that omits the target record, which
    * is the only deterministic way to reach the in-lock disappearance arm: the
@@ -296,19 +281,6 @@ export interface UpdateAllMarketplacesOptions {
   readonly installMissingDependencies?: ScopeDependencyInstallFn;
   /** See `UpdateMarketplaceOptions.run`. */
   readonly run: NotificationRun;
-  /**
-   * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
-   * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
-   * so the developer's OS keychain is never touched.
-   */
-  readonly credentialOps?: CredentialOps;
-  /**
-   * Test seam for Device Flow integration tests. Production callers omit
-   * this field and get DEFAULT_DEVICE_FLOW_HTTP (real github.com fetch)
-   * inside the orchestrator's onAuthRequired closure.
-   */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
   /** See `UpdateMarketplaceOptions.hostedManifestFetch`. */
   readonly hostedManifestFetch?: HostedManifestFetch;
   /** See `UpdateMarketplaceOptions.environment`. */
@@ -318,7 +290,6 @@ export interface UpdateAllMarketplacesOptions {
 /** MU-1 single-name form. */
 export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
-  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const userLocations = locationsFor("user", opts.cwd);
   const projectLocations = locationsFor("project", opts.cwd);
 
@@ -341,10 +312,9 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     locations: resolved.locations,
     gitOps,
     gitHubSsh: opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS,
-    credentialOps,
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
     hostedManifestFetch: opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH,
     reportedDependencies: new Set(),
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
     ...(opts.installMissingDependencies !== undefined && {
       installMissingDependencies: opts.installMissingDependencies,
@@ -363,7 +333,6 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
 export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions): Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const gitHubSsh = opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
-  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const hostedManifestFetch = opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
   const removalOps = createRemovalOps();
   const keepOnFailure = keepMarketplaceOnFailure(opts.environment);
@@ -410,13 +379,12 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       locations: t.locations,
       gitOps,
       gitHubSsh,
-      credentialOps,
+      credentialOps: DEFAULT_CREDENTIAL_OPS,
       hostedManifestFetch,
       removalOps,
       renameOps: DEFAULT_RENAME_OPS,
       keepOnFailure,
       reportedDependencies,
-      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
       ...(opts.installMissingDependencies !== undefined && {
         installMissingDependencies: opts.installMissingDependencies,
@@ -445,7 +413,6 @@ interface RefreshOneArgs {
   readonly reportedDependencies: Set<string>;
   readonly run: NotificationRun;
   readonly credentialOps: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly hostedManifestFetch: HostedManifestFetch;
   readonly removalOps: RemovalOps;
@@ -530,18 +497,11 @@ function parseBaseline(name: string, text: string | undefined): unknown {
  * host adds that provider's Device Flow on a helper miss (PROV-03). A stored
  * credential answers first, so Device Flow runs only on a miss (AUTH-02), and
  * only the user code and the verification URI cross its onDeviceCode callback
- * (AUTH-09). D-79-02: `authMemo` caps the Device Flow at once per host, so
- * the freshness `ls-remote` and the clone after it ask the user once.
+ * (AUTH-09).
  */
 function refreshAuthFor(source: GitHubSource | UrlSource, args: RefreshOneArgs): GitAuthBundle {
-  const { ctx, credentialOps, deviceFlowHttp, run } = args;
-  const authArgs = {
-    credentialOps,
-    ctx,
-    run,
-    authMemo: new Map<string, AuthAttemptResult>(),
-    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-  };
+  const { ctx, credentialOps, run } = args;
+  const authArgs = { credentialOps, ctx, run };
   return source.kind === "github"
     ? buildGitHubAuth(authArgs)
     : buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(source.url, "url") });

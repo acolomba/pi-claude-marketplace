@@ -37,18 +37,6 @@ export const OPTIONAL_PEER_SUITE_VERSIONS_REL =
   "test/integration/optional-peer-suite-versions.json";
 
 /**
- * D-v1.0-01-11: the four marketplace ledger entry points. BLOCK C in `eslint.config.js`
- * keeps the ledgers from importing each other; a plugin ledger reaches
- * marketplace code only through `orchestrators/marketplace/shared.ts`.
- */
-export const MARKETPLACE_LEDGER_TARGETS = [
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts",
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
-  "extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts",
-] as const;
-
-/**
  * WR-01 / WR-03 / D-60-05: the lifecycle verbs that must emit a hooks
  * re-materialization signal -- three files, since reinstall shares
  * update-swap's wiring (D-18-02) -- plus the event router where the WR-01
