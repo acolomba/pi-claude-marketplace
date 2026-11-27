@@ -373,11 +373,13 @@ function forceApplies(source: GitBackedSource): boolean {
  * the context's notes under `subject`, `<plugin>@<marketplace>`. The force is
  * read only for a source it applies to (GHB-04).
  *
- * IN-A-01 / upstream `zHi`: the plan of a `github` source whose
- * `<owner>/<repo>` is not an `owner/repo` pair rejects with
- * `InvalidGitHubRepositoryError`. It rejects before it reads the force or
- * any check, so no probe, skip check, or attempt runs and no note is kept,
- * forced HTTPS included.
+ * IN-A-01 / upstream `zHi`: the plan of a `github` source whose repository
+ * is not an `owner/repo` pair rejects with `InvalidGitHubRepositoryError`.
+ * The repository is the manifest's own `repo` when the source carries it,
+ * so `acme/ghp#main`, `acme/ghp@v1`, and a github.com URL there are refused
+ * as Claude Code refuses them, and `<owner>/<repo>` otherwise (D-SG-18). It
+ * rejects before it reads the force or any check, so no probe, skip check,
+ * or attempt runs and no note is kept, forced HTTPS included.
  */
 export function pluginCloneTransport(
   context: PluginTransportContext,
@@ -387,7 +389,7 @@ export function pluginCloneTransport(
   return {
     plan: () => {
       if (source.kind === "github") {
-        const repository = `${source.owner}/${source.repo}`;
+        const repository = source.repository ?? `${source.owner}/${source.repo}`;
         if (!isGitHubRepositoryFormat(repository)) {
           return Promise.reject(new InvalidGitHubRepositoryError(repository));
         }

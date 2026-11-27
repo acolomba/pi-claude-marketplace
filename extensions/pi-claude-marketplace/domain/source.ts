@@ -38,6 +38,14 @@ export interface GitHubSource {
   readonly repo: string;
   readonly ref?: string; // optional, populated from `#<ref>` fragment
   readonly sha?: string;
+  /**
+   * D-SG-18 / upstream `zHi`: the `repo` of a manifest `{ source: "github" }`
+   * object as the manifest wrote it, before Pi folds a `#<ref>` or `@<ref>`
+   * suffix or a github.com URL into `owner`/`repo`. Claude Code checks this
+   * value against its `owner/repo` pattern before it clones. Absent for every
+   * other spelling, whose `<owner>/<repo>` is checked instead.
+   */
+  readonly repository?: string;
 }
 
 export interface UrlSource {
@@ -394,9 +402,13 @@ function parseDiscriminatorObjectSource(
   switch (discriminator) {
     case "github": {
       const repo = optionalString(raw, "repo");
-      return repo === undefined
-        ? unknownObjectSource(raw, "github source is missing repo")
-        : githubObjectSource(repo, raw);
+      if (repo === undefined) {
+        return unknownObjectSource(raw, "github source is missing repo");
+      }
+
+      // D-SG-18: the clone plan checks the manifest's own `repo`, as `zHi` does.
+      const parsed = githubObjectSource(repo, raw);
+      return parsed.kind === "github" ? { ...parsed, repository: repo } : parsed;
     }
 
     case "url":

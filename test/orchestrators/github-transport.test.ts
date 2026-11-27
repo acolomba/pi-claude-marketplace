@@ -1100,6 +1100,39 @@ describe("pluginCloneTransport", () => {
     });
   }
 
+  for (const repository of [
+    "acme/ghp#main",
+    "acme/ghp@v1",
+    "https://github.com/acme/ghp",
+    "https://github.com/acme/ghp.git",
+  ]) {
+    test(`D-SG-18, upstream zHi: refuses the manifest repo ${repository} although its owner/repo pair is valid`, async () => {
+      // arrange
+      const port = countingPort({});
+      const context = createPluginTransportContext({ env: {}, ssh: port.ssh, platform: "linux" });
+      const source = {
+        kind: "github",
+        raw: repository,
+        owner: "acme",
+        repo: "ghp",
+        repository,
+      } satisfies GitBackedSource;
+
+      // act
+      const planned = pluginCloneTransport(context, source, "ghp@gits").plan();
+
+      // assert
+      await assert.rejects(planned, (error: unknown) => {
+        assert.ok(error instanceof InvalidGitHubRepositoryError);
+        assert.deepStrictEqual(
+          { repository: error.repository, calls: port.calls },
+          { repository, calls: [] },
+        );
+        return true;
+      });
+    });
+  }
+
   test("SG-SSH-05: plans SSH first on the context's Windows platform", async () => {
     // arrange
     const port = countingPort({});

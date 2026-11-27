@@ -347,6 +347,30 @@ const PARSE_CASES: readonly ParseCase[] = [
       owner: "o",
       repo: "r",
       sha: FULL_SHA,
+      repository: "o/r",
+    },
+  },
+  {
+    name: "D-SG-18: keeps a GitHub object repo with a # reference as written",
+    raw: { source: "github", repo: "acme/ghp#main" },
+    source: {
+      kind: "github",
+      raw: "acme/ghp#main",
+      owner: "acme",
+      repo: "ghp",
+      ref: "main",
+      repository: "acme/ghp#main",
+    },
+  },
+  {
+    name: "D-SG-18: keeps a GitHub object repo that is a github.com URL as written",
+    raw: { source: "github", repo: "https://github.com/acme/ghp.git" },
+    source: {
+      kind: "github",
+      raw: "https://github.com/acme/ghp.git",
+      owner: "acme",
+      repo: "ghp",
+      repository: "https://github.com/acme/ghp.git",
     },
   },
   {
@@ -416,7 +440,14 @@ const PARSE_CASES: readonly ParseCase[] = [
   {
     name: "SG-TRN-02: lowercases a full uppercase SHA-256 commit",
     raw: { source: "github", repo: "o/r", sha: FULL_SHA_256.toUpperCase() },
-    source: { kind: "github", raw: "o/r", owner: "o", repo: "r", sha: FULL_SHA_256 },
+    source: {
+      kind: "github",
+      raw: "o/r",
+      owner: "o",
+      repo: "r",
+      sha: FULL_SHA_256,
+      repository: "o/r",
+    },
   },
   {
     name: "SG-TRN-02: refuses a GitHub object reference that starts with a dash",

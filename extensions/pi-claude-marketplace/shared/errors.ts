@@ -1450,8 +1450,9 @@ export class GitHubTransportsFailedError extends Error {
  * IN-A-01 / D-SG-18: a `github` plugin source whose repository is not an
  * `owner/repo` pair. Claude Code's plugin clone (`zHi`, 2.1.332) refuses it
  * before it builds a clone URL, runs a probe, or reads its HTTPS force, and
- * this class carries its message. `repository` is `<owner>/<repo>` as Pi
- * joins it to build both clone URLs, the value upstream checks.
+ * this class carries its message. `repository` is the value upstream checks:
+ * the `repo` of a manifest `{ source: "github" }` object as written, or
+ * `<owner>/<repo>` for a source spelled any other way.
  */
 export class InvalidGitHubRepositoryError extends Error {
   readonly repository: string;
