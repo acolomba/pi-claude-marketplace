@@ -41,6 +41,34 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
+### Autenticación de Git
+
+Para clonar un repositorio privado, git usa las credenciales que tu máquina ya tiene, como en Claude Code. Para una dirección ssh, git usa tu clave ssh o tu agente ssh. Para una dirección `https://`, git usa un asistente de credenciales de git, un programa que guarda contraseñas y tokens para git. Para configurar un asistente de credenciales, usa uno de estos métodos:
+
+- Para GitHub, ejecuta `gh auth login` y después ejecuta `gh auth setup-git`.
+- Para GitLab, ejecuta `glab auth setup-git`.
+- Para cualquier host, instala [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager).
+
+La extensión nunca te pide iniciar sesión. No lee ningún token de una variable de entorno como `GITHUB_TOKEN`.
+
+#### Tokens de una versión anterior
+
+Una versión anterior de esta extensión podía iniciar tu sesión en GitHub o GitLab con un código de un solo uso. Guardaba el token en tu asistente de credenciales de git. El token sigue ahí, y git lo sigue usando. La extensión nunca lo borra.
+
+Para quitar el token de GitHub, ejecuta este comando o borra la entrada de `github.com` en tu aplicación de llavero:
+
+```bash
+printf 'protocol=https\nhost=github.com\nusername=x-access-token\n\n' | git credential reject
+```
+
+El comando nombra el usuario del inicio de sesión antiguo, así que tus otras credenciales de `github.com` se quedan.
+
+Un token de GitLab del inicio de sesión antiguo caduca después de unas dos horas. Antes de que caduque, configura `glab auth setup-git`, Git Credential Manager o una clave ssh. Para quitar el token antiguo de GitLab, ejecuta este comando:
+
+```bash
+printf 'protocol=https\nhost=gitlab.com\nusername=oauth2\n\n' | git credential reject
+```
+
 ## Uso
 
 Para scripts, consulta [Salida JSON](docs/json-output.md).
@@ -199,7 +227,7 @@ El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga 
 
 Cualquier configuración puede fijar `autoapply`. Gana la configuración más específica que la fija, en este orden: la configuración local del proyecto, la configuración base del proyecto, la configuración local del usuario y la configuración base del usuario. Si una configuración no es válida, por ejemplo porque `autoapply` no es `true` ni `false`, la carga no aplica nada e informa de esa configuración.
 
-Una configuración de usuario no puede desactivar el `autoapply` de un proyecto, porque las configuraciones del proyecto son más específicas. Para desactivarlo en tu máquina, pon `"autoapply": false` en la configuración local del proyecto. Una carga nunca te pide iniciar sesión. Si un clon necesita una credencial que no guardaste, su fila falla, y después `/claude:plugin apply` puede pedirte que inicies sesión.
+Una configuración de usuario no puede desactivar el `autoapply` de un proyecto, porque las configuraciones del proyecto son más específicas. Para desactivarlo en tu máquina, pon `"autoapply": false` en la configuración local del proyecto. Una carga nunca te pide una credencial. Si un clon necesita una credencial que tu máquina no tiene, su fila falla como `{authentication required}`. Configura la [autenticación de Git](#autenticaci%C3%B3n-de-git) y después ejecuta `/claude:plugin apply`.
 
 > [!WARNING]
 > La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
@@ -243,7 +271,7 @@ Agrega un mercado desde la abreviatura de repositorio de GitHub `owner/repo`.
 ```
 
 > [!NOTE]
-> Si Git no está autenticado, un repositorio privado desencadenará una autenticación Device Flow.
+> Un repositorio privado necesita autenticación de Git en tu máquina. Para más información, consulta [Autenticación de Git](#autenticaci%C3%B3n-de-git).
 
 Agrega el mismo mercado desde una URL de GitHub.
 

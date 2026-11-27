@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- Private repositories now authenticate only through your machine's own git setup, as in Claude Code, and the GitHub and GitLab sign-in prompt is gone.
+
+  - To set up HTTPS authentication, run `gh auth login`, then `gh auth setup-git`, or install Git Credential Manager. For GitLab, run `glab auth setup-git`.
+  - A token that the old sign-in stored keeps working, and the extension never deletes it. To remove it, run `printf 'protocol=https\nhost=github.com\nusername=x-access-token\n\n' | git credential reject`.
+  - A GitLab token from the old sign-in expires after about two hours. Set up `glab auth setup-git`, Git Credential Manager, or an ssh key before then.
+  - JSON and RPC output no longer has the `device-flow-prompt` kind, and `schemaVersion` stays 1.
+
 - `/claude:plugin reload` now reloads Pi, also over RPC, where Pi has no `/reload`, and plugin `SessionStart` hooks now behave more like Claude Code. (#332)
 
   - Reload hints and refusals now name the command your Pi offers, and a one-shot run such as `pi -p` shows none.

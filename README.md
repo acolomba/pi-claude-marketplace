@@ -41,6 +41,34 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). It supports more MCP features than Pi's built-in MCP.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or newer (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
+### Git authentication
+
+To clone a private repository, git uses the credentials that your machine already has, as in Claude Code. For an ssh address, git uses your ssh key or your ssh agent. For an `https://` address, git uses a git credential helper, a program that stores passwords and tokens for git. To set up a credential helper, use one of these methods:
+
+- For GitHub, run `gh auth login`, then run `gh auth setup-git`.
+- For GitLab, run `glab auth setup-git`.
+- For any host, install [Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager).
+
+The extension never asks you to sign in. It reads no token from an environment variable such as `GITHUB_TOKEN`.
+
+#### Tokens from an earlier release
+
+An earlier release of this extension could sign you in to GitHub or GitLab with a one-time code. It stored the token in your git credential helper. The token stays there, and git continues to use it. The extension never deletes it.
+
+To remove the GitHub token, run this command, or delete the `github.com` entry in your keychain app:
+
+```bash
+printf 'protocol=https\nhost=github.com\nusername=x-access-token\n\n' | git credential reject
+```
+
+The command names the username of the old sign-in, so your other credentials for `github.com` stay.
+
+A GitLab token from the old sign-in expires after about two hours. Before it expires, set up `glab auth setup-git`, Git Credential Manager, or an ssh key. To remove the old GitLab token, run this command:
+
+```bash
+printf 'protocol=https\nhost=gitlab.com\nusername=oauth2\n\n' | git credential reject
+```
+
 ## Usage
 
 For scripts, see [JSON output](docs/json-output.md).
@@ -199,7 +227,7 @@ The default is `false`. When `autoapply` is on, the load runs `/claude:plugin ap
 
 Any config can set `autoapply`. The most specific config that sets it wins, in this order: the project local config, the project base config, the user local config, and the user base config. If a config is not valid, for example because `autoapply` is not `true` or `false`, the load does not apply anything and reports the config.
 
-A user config cannot turn off a project's `autoapply`, because the project configs are more specific. To stop it on your machine, set `"autoapply": false` in the project local config. A load never asks you to sign in. If a clone needs a credential that you have not stored, its row fails, and `/claude:plugin apply` can then ask you to sign in.
+A user config cannot turn off a project's `autoapply`, because the project configs are more specific. To stop it on your machine, set `"autoapply": false` in the project local config. A load never asks you for a credential. If a clone needs a credential that your machine does not have, its row fails as `{authentication required}`. Set up [Git authentication](#git-authentication), then run `/claude:plugin apply`.
 
 > [!WARNING]
 > A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
@@ -243,7 +271,7 @@ Add a marketplace from a GitHub repository `owner/repo` shorthand.
 ```
 
 > [!NOTE]
-> If Git is not already authenticated, a private repository will trigger Device Flow authentication.
+> A private repository needs git authentication on your machine. For more information, see [Git authentication](#git-authentication).
 
 Add the same marketplace from a GitHub URL.
 
