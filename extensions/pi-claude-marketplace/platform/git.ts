@@ -12,7 +12,6 @@ import {
 import { GITHUB_HOST, gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 
-import { withOneShotCredential } from "./git-one-shot-credential.ts";
 import { configValues, NODE_GIT_PROCESS, SSH_CONFIG_READ } from "./git-process.ts";
 import { gitTimeoutMs } from "./git-timeout.ts";
 
@@ -27,9 +26,10 @@ import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from
  * verbs `clone`, `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags`
  * send their requests through `runRemote`, the one network request path of
  * this module: the network lane, the D-SG-13 limit, the D-PL8-24 abort
- * signal, the D-SG-16 `insteadOf` pair, and the D-SG-14 retry. With no
- * usable git on PATH they reject with the git process module's `git-missing`
- * GitCommandError before a request goes out (SG-PRC-06). `checkout`,
+ * signal, the D-SG-16 `insteadOf` pair, and the GAUTH-04 failure mapping. A
+ * request runs once (D-SG-27). With no usable git on PATH they reject with
+ * the git process module's `git-missing` GitCommandError before a request
+ * goes out (SG-PRC-06). `checkout`,
  * `resolveRef`, `listLocalTags`, and `listRemotes` run on the local lane,
  * which reaches no transport. `resolveRef` answers undefined for a ref that
  * names no commit, and `resolveRemoteRef` for a ref the remote does not
@@ -89,8 +89,8 @@ export interface CloneOptions {
   noCheckout?: boolean;
   /**
    * Optional auth bundle. git asks the user's credential helpers itself; the
-   * bundle decides what an auth failure of the clone leads to (D-SG-14,
-   * GAUTH-04). A public clone never fails on auth, so the bundle is not
+   * bundle decides what an auth failure of the clone leads to (GAUTH-04).
+   * A public clone never fails on auth, so the bundle is not
    * consulted.
    */
   auth?: GitAuthBundle;
@@ -115,7 +115,7 @@ export interface FetchCommitOptions {
   unshallow?: boolean;
   /**
    * Optional auth bundle. git asks the user's credential helpers itself; the
-   * bundle decides what an auth failure of a rung leads to (D-SG-14, GAUTH-04).
+   * bundle decides what an auth failure of a rung leads to (GAUTH-04).
    */
   auth?: GitAuthBundle;
 }
@@ -311,8 +311,7 @@ async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise
 /**
  * D-1-03, T-79-04: the origin git contacts for `wireUrl`, when that is an
  * https URL of `host`, else undefined. A bundle is bound to one host, so it
- * maps only the failure of a request to that host, and a sign-in's token goes
- * to that origin only.
+ * maps only the failure of a request to that host.
  */
 function bundleOrigin(wireUrl: string, host: string): string | undefined {
   if (!URL.canParse(wireUrl)) {
@@ -326,18 +325,15 @@ function bundleOrigin(wireUrl: string, host: string): string | undefined {
 /**
  * Runs `request` once and maps an `https-auth` failure by the bundle, reading
  * only the failure's kind and detail (SG-PRC-05). git asked the user's
- * credential helpers itself, so the bundle never answers a challenge here.
- * The bundle maps only a failure of a request to its own host, `wireUrl`
- * after the D-SG-16 rewrite (D-1-03, T-79-04):
- *   - `no-credential` under a `device-flow` bundle: no helper answered, so the
- *     sign-in runs once and the request runs once more (D-SG-14).
- *   - `rejected` under a `stored-credential` bundle: the host refused the
- *     credential a helper gave, the GAUTH-04 `StoredCredentialRejectedError`
- *     with the git failure as its cause.
- *   - anything else, a missing bundle and a request to another host
- *     included, is thrown as it failed. A
- *     refused Device Flow token signs in no second time, and the extension
- *     erases no stored credential (git's own helpers may, as under Claude Code).
+ * credential helpers itself, so the bundle never answers a challenge, and no
+ * failure runs the request a second time (D-SG-27). The bundle maps only a
+ * failure of a request to its own host, `wireUrl` after the D-SG-16 rewrite
+ * (D-1-03, T-79-04):
+ *   - `rejected`: the host refused the credential a helper gave, the GAUTH-04
+ *     `StoredCredentialRejectedError` with the git failure as its cause.
+ *   - anything else, a missing bundle, a helper miss, and a request to
+ *     another host included, is thrown as it failed. The extension erases no
+ *     stored credential (git's own helpers may, as under Claude Code).
  */
 async function runWithAuthBundle(
   request: RemoteGitRequest,
@@ -348,63 +344,18 @@ async function runWithAuthBundle(
   try {
     return await gitProcess.run(request);
   } catch (error: unknown) {
-    const origin = auth === undefined ? undefined : bundleOrigin(wireUrl, auth.host);
     if (
-      auth === undefined ||
-      origin === undefined ||
-      !(error instanceof GitCommandError) ||
-      error.failure.kind !== "https-auth"
+      auth !== undefined &&
+      error instanceof GitCommandError &&
+      error.failure.kind === "https-auth" &&
+      error.failure.detail === "rejected" &&
+      bundleOrigin(wireUrl, auth.host) !== undefined
     ) {
-      throw error;
-    }
-
-    const { detail } = error.failure;
-    if (detail === "rejected" && auth.kind === "stored-credential") {
       throw new StoredCredentialRejectedError(auth.host, { cause: error });
     }
 
-    if (detail === "rejected" || auth.kind === "stored-credential") {
-      throw error;
-    }
-
-    return retryAfterSignIn(request, { auth, origin }, error, gitProcess);
+    throw error;
   }
-}
-
-/**
- * D-SG-14: runs the Device Flow sign-in of `auth`, which stores the token with
- * `git credential approve` (D-BG-1102), then `request` once more with the
- * token in a one-shot helper only, keyed to `origin`, the bundle host's
- * origin (D-1-03). The command's auth memo keeps the sign-in
- * to once per host. A failed sign-in throws `failure`, the first run's error,
- * with the sign-in's reason as its cause; the retry's own failure is thrown
- * as it failed. `DeviceFlowUnavailableError` propagates unchanged.
- */
-async function retryAfterSignIn(
-  request: RemoteGitRequest,
-  bound: {
-    readonly auth: Extract<GitAuthBundle, { kind: "device-flow" }>;
-    readonly origin: string;
-  },
-  failure: GitCommandError,
-  gitProcess: GitProcess,
-): Promise<GitResult> {
-  const { auth, origin } = bound;
-  const signedIn = await auth.onAuthRequired();
-  if (!signedIn.ok) {
-    // An https-auth failure carries no cause of its own.
-    failure.cause = new Error(signedIn.reason);
-    throw failure;
-  }
-
-  // AUTH-09: the line names the host and the operation, never the credential.
-  hookDebugLog(
-    `git ${failure.operation}: has a sign-in for ${auth.host}, running it once more`,
-    "auth",
-  );
-  return withOneShotCredential(signedIn.cred, origin, (pairs) =>
-    gitProcess.run({ ...request, config: [...request.config, ...pairs] }),
-  );
 }
 
 /**
@@ -429,7 +380,7 @@ function advertisedRefs(stdout: string): Map<string, string> {
  * in Claude Code's shape, `clone --depth 1 --no-recurse-submodules
  * [--no-checkout] [--branch=<ref>] [--single-branch] --end-of-options <url>
  * <dir>`, through `runRemote`, so the clone has the D-SG-13 limit, the
- * scope's abort signal, the D-SG-16 `insteadOf` pair, and the D-SG-14 retry.
+ * scope's abort signal, the D-SG-16 `insteadOf` pair, and the GAUTH-04 mapping.
  * `--depth` comes first, so a failure names the operation `clone --depth`.
  * `--branch=<ref>` is one argv word, so git never reads the ref as an option
  * of its own (SG-PRC-01).
@@ -437,8 +388,8 @@ function advertisedRefs(stdout: string): Map<string, string> {
  * D-SG-16: git records the URL it was given as the clone's origin, so a
  * github.com clone keeps its canonical identity under the base override and
  * needs no second config write. A clone that fails removes the directory git
- * made, or empties one that already existed, so the D-SG-14 retry starts
- * from an empty target (03-RESEARCH A10, measured on git 2.43.0).
+ * made, or empties one that already existed, so a clone into the same target
+ * starts from an empty one (measured on git 2.43.0).
  */
 export async function clone(
   opts: CloneOptions,
@@ -641,8 +592,7 @@ export async function resolveRef(
  * names it, so the `^{}` name must be one of them. The extra lines a tail
  * match brings, such as `refs/heads/x/<ref>`, never match a name.
  *
- * The optional `opts.auth` bundle maps an auth failure (PROV-03, D-SG-14,
- * GAUTH-04). GHB-01: under the base override, a failure names the URL fetched.
+ * The optional `opts.auth` bundle maps an auth failure (PROV-03, GAUTH-04). GHB-01: under the base override, a failure names the URL fetched.
  */
 export async function resolveRemoteRef(
   opts: ResolveRemoteRefOptions,
@@ -1119,8 +1069,7 @@ export async function sshShowsDirectGitHubThroughGit(
 /**
  * A credential as git's credential helpers store it: the `username` and
  * `password` attributes of `git credential` (D-31). The keychain protocol of
- * `platform/git-credential.ts` and the one-shot helper of a D-SG-14 retry
- * read and write this shape.
+ * `platform/git-credential.ts` reads and writes this shape.
  */
 export interface GitCredentials {
   username?: string;

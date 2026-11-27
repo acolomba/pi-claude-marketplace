@@ -147,16 +147,13 @@ describe("createGitOpsFake", () => {
     });
   });
 
-  test("records callable authentication on every remote operation", async () => {
+  test("records the auth bundle of every remote operation", async () => {
     // arrange
-    const authenticationError = new Error("credential provider unavailable");
     const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const onAuthRequired = (): Promise<never> => Promise.reject(authenticationError);
     const auth = {
       credentialOps: credentials.credentialOps,
       host: "git.example.invalid",
-      kind: "device-flow",
-      onAuthRequired,
+      kind: "stored-credential",
     } satisfies GitAuthBundle;
     const git = createGitOpsFake({
       boundary: "memory",
@@ -192,10 +189,6 @@ describe("createGitOpsFake", () => {
     assert.strictEqual(git.state.calls.clone[0]?.auth, auth);
     assert.strictEqual(git.state.calls.fetchCommit[0]?.auth, auth);
     assert.strictEqual(git.state.calls.resolveRemoteRef[0]?.auth, auth);
-    await assert.rejects(git.state.calls.clone[0]?.auth?.onAuthRequired(), (error: unknown) => {
-      assert.strictEqual(error, authenticationError);
-      return true;
-    });
   });
 });
 

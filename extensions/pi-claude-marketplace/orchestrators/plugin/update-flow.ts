@@ -334,7 +334,7 @@ async function syncMarketplaceBySwap(args: {
     });
     logKeptSync(mpName, swapped);
   } catch (err) {
-    if (source.kind === "url" && lacksStoredCredential(err, auth) && err.cause === undefined) {
+    if (source.kind === "url" && lacksStoredCredential(err) && err.cause === undefined) {
       err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host));
     }
 

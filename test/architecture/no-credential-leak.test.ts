@@ -79,7 +79,6 @@ const [
   GIT_PLATFORM_FILE,
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
-  GIT_ONE_SHOT_CREDENTIAL_FILE,
   HOSTED_MANIFEST_FETCH_FILE,
   GIT_PROCESS_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
@@ -96,7 +95,6 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "platform/git.ts",
   "orchestrators/marketplace/add.ts",
   "orchestrators/marketplace/update.ts",
-  "platform/git-one-shot-credential.ts",
   "platform/hosted-manifest-fetch.ts",
   "platform/git-process.ts",
 ];
@@ -302,9 +300,9 @@ test("AUTH-09 / D-PL5-07: platform/hosted-manifest-fetch.ts sends no header, cre
 });
 
 test("AUTH-09: the git hookDebugLog calls never interpolate a credential field", async () => {
-  // The git modules that hold a credential log near it with hookDebugLog:
-  // the D-SG-14 retry in git.ts after a sign-in, and the keychain approve and
-  // reject failures in git-credential.ts. That call form is not `new
+  // The git modules log with hookDebugLog: git.ts around the ssh probe and
+  // settings reads, and git-credential.ts on the keychain approve and reject
+  // failures, near the credential it was handed. That call form is not `new
   // Error(...)`, so it falls outside every other gate in this file; this test
   // closes that gap.
   //
@@ -318,14 +316,11 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   // following each `hookDebugLog(` as one token and scans it in full, so a
   // leak appended after a nested function call's closing paren (e.g. after
   // `${errorMessage(err)}`) is caught too.
-  // The three git modules that hold a credential are scanned as one subject:
-  // `git.ts` and `git-credential.ts` carry the calls, and the one-shot helper
-  // module is covered so a call added there is caught rather than landing
-  // outside the gate.
+  // The two git modules are scanned as one subject, and both carry calls.
   const hookDebugLogWithToken =
     /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
   const hookDebugLogCall = /hookDebugLog\s*\(/g;
-  const SCANNED = [GIT_PLATFORM_FILE, GIT_CREDENTIAL_FILE, GIT_ONE_SHOT_CREDENTIAL_FILE];
+  const SCANNED = [GIT_PLATFORM_FILE, GIT_CREDENTIAL_FILE];
 
   const sources = new Map<string, string>();
   let scannedCallSites = 0;

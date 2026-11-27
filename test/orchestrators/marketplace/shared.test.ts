@@ -43,12 +43,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
-  GitAuthBundle,
   GitOps,
   MarketplaceLayerVerdict,
   UnstageOutcome,
@@ -489,32 +487,15 @@ function noCredential(): GitCommandError {
   );
 }
 
-function storedCredentialAuth(): GitAuthBundle {
-  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
-  return { kind: "stored-credential", credentialOps, host: "gitlab.example.com" };
-}
-
-function deviceFlowAuth(): GitAuthBundle {
-  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
-  return {
-    kind: "device-flow",
-    credentialOps,
-    host: "gitlab.com",
-    onAuthRequired: () => Promise.resolve({ ok: false, reason: "declined" }),
-  };
-}
-
-for (const { title, makeError, makeAuth, lacks } of [
+for (const { title, makeError, lacks } of [
   {
-    title: "GAUTH-04: reports a no-credential failure on a stored-credential host",
+    title: "GAUTH-04: reports a no-credential failure",
     makeError: (): unknown => noCredential(),
-    makeAuth: storedCredentialAuth,
     lacks: true,
   },
   {
     title: "GAUTH-04: does not report a stored credential the host rejected",
     makeError: (): unknown => new StoredCredentialRejectedError("gitlab.example.com"),
-    makeAuth: storedCredentialAuth,
     lacks: false,
   },
   {
@@ -524,29 +505,20 @@ for (const { title, makeError, makeAuth, lacks } of [
         { kind: "network", curlCode: 6 },
         { operation: "ls-remote", exitCode: 128 },
       ),
-    makeAuth: storedCredentialAuth,
     lacks: false,
   },
   {
     title: "does not report a non-Error rejection",
     makeError: (): unknown => "socket closed",
-    makeAuth: storedCredentialAuth,
-    lacks: false,
-  },
-  {
-    title: "does not report a no-credential failure on a Device Flow host",
-    makeError: (): unknown => noCredential(),
-    makeAuth: deviceFlowAuth,
     lacks: false,
   },
 ]) {
   test(`lacksStoredCredential ${title}`, () => {
     // arrange
     const failure = makeError();
-    const auth = makeAuth();
 
     // act
-    const reported = lacksStoredCredential(failure, auth);
+    const reported = lacksStoredCredential(failure);
 
     // assert
     assert.strictEqual(reported, lacks);

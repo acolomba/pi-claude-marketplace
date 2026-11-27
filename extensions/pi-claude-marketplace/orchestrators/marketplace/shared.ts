@@ -287,17 +287,15 @@ export { runWithGitAbortSignal } from "../../platform/git.ts";
 
 /**
  * GAUTH-04: an auth failure that a stored credential could answer, so the
- * failure gains the `NO_STORED_CREDENTIAL_CAUSE` line. Only a
- * `stored-credential` bundle qualifies, as for git's `https-auth` failure with
- * the `no-credential` detail, where no helper gave git a credential. A
- * refused credential (`StoredCredentialRejectedError`) does not qualify,
- * because a helper produced it and the host was sent it. Each caller places
- * the line.
+ * failure gains the `NO_STORED_CREDENTIAL_CAUSE` line. git's `https-auth`
+ * failure with the `no-credential` detail qualifies: no helper gave git a
+ * credential. A refused credential (`StoredCredentialRejectedError`) does not
+ * qualify, because a helper produced it and the host was sent it. Each caller
+ * places the line.
  */
-export function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
+export function lacksStoredCredential(err: unknown): err is Error {
   return (
     err instanceof Error &&
-    auth.kind === "stored-credential" &&
     !(err instanceof StoredCredentialRejectedError) &&
     classifyGitFailure(err, { notFound: "network error" })?.reason === "authentication required"
   );

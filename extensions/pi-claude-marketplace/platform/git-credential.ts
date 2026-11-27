@@ -59,8 +59,7 @@ import type { GitCredentials } from "./git.ts";
  * (`orchestrators/auth-host.ts`) supplies it, and an alternate adapter
  * supplies its own.
  *
- * A `GitAuthBundle` carries this seam, and the Device Flow sign-in stores its
- * token through `approve`.
+ * A `GitAuthBundle` carries this seam until its builders stop taking one.
  *
  * Caller note for keychain hygiene: on macOS, repeated approve
  * without a prior reject can accumulate duplicate keychain entries. A caller
@@ -79,54 +78,19 @@ export interface CredentialOps {
 }
 
 /**
- * The result of a Device Flow sign-in: the new credential, or the reason the
- * sign-in failed. The reason holds fixed text and the provider's pre-token
- * error fields only, never a token (AUTH-09).
- *
- * Structurally identical to `domain/github-auth.ts::DeviceFlowResult`. It is
- * declared in the platform tier because the `platform` boundary zone in
- * `.fallowrc.json` may import from `shared` only; `orchestrators/auth-host.ts`
- * returns the domain's result here with no adapter.
+ * The auth bundle a git network operation carries, bound to one host
+ * (GAUTH-03). git asks the user's credential helpers itself, and the
+ * extension hands git no credential of its own (D-SG-27). The bundle names
+ * the host whose refusal of a helper's credential `platform/git.ts` maps to
+ * `StoredCredentialRejectedError`, and the credential stays stored (GAUTH-04,
+ * D-1-01). A helper miss fails as git failed. The orchestrator picks the
+ * host; this module holds no provider knowledge.
  */
-export type AuthAttemptResult = { ok: true; cred: GitCredentials } | { ok: false; reason: string };
-
-/**
- * The sign-in of a `device-flow` bundle. `platform/git.ts` calls it after a git
- * run failed because no credential helper answered, then runs the request once
- * more with the new credential (D-SG-14). It takes no parameters:
- * `orchestrators/auth-host.ts` binds the host, the credential surface, and the
- * prompt, and its command-scope memo runs the sign-in at most once per host
- * (D-79-02).
- */
-export type OnAuthRequiredFn = () => Promise<AuthAttemptResult>;
-
-/**
- * The auth bundle a git network operation carries, bound to one host. git asks
- * the user's credential helpers itself, so the bundle decides only what an
- * authentication failure of the run leads to (D-SG-14):
- *   - `device-flow`: a run that no helper answered signs in once through
- *     `onAuthRequired` and runs once more. A host the provider registry claims
- *     gets this kind (PROV-03).
- *   - `stored-credential`: the user's helper is the host's only credential
- *     source. A helper miss fails as git failed, and a credential the host
- *     refused throws `StoredCredentialRejectedError` and stays stored
- *     (GAUTH-04, D-1-01).
- *
- * `credentialOps` is the helper surface the sign-in stores its token through.
- * The orchestrator picks the kind; this module holds no provider knowledge.
- */
-export type GitAuthBundle =
-  | {
-      readonly kind: "device-flow";
-      readonly credentialOps: CredentialOps;
-      readonly host: string;
-      readonly onAuthRequired: OnAuthRequiredFn;
-    }
-  | {
-      readonly kind: "stored-credential";
-      readonly credentialOps: CredentialOps;
-      readonly host: string;
-    };
+export interface GitAuthBundle {
+  readonly kind: "stored-credential";
+  readonly credentialOps: CredentialOps;
+  readonly host: string;
+}
 
 /**
  * WR-05, D-SG-01: runs `git credential <action>` with `input` on stdin, and

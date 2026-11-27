@@ -512,15 +512,14 @@ function refreshAuthFor(source: GitHubSource | UrlSource, args: RefreshOneArgs):
  * auth path is a stored credential gains the line that names how to store one.
  * For github the line goes before the fetched-URL link, which stays the last
  * link; for url it is the chain's tail, and only when the failure carries no
- * cause of its own. The code-bearing error stays at depth 0. GAUTH-05: a
- * Device Flow bundle gains nothing.
+ * cause of its own. The code-bearing error stays at depth 0.
  */
 function attachStoredCredentialCause(
   err: unknown,
   source: GitHubSource | UrlSource,
   auth: GitAuthBundle,
 ): void {
-  if (!lacksStoredCredential(err, auth)) {
+  if (!lacksStoredCredential(err)) {
     return;
   }
 

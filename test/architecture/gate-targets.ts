@@ -145,13 +145,9 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/platform/git.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
-  // AUTH-09, D-SG-14: the one-shot helper writes the token a Device Flow
-  // sign-in returned to a file for one git retry. It took the slot of the
-  // in-process auth-callback module (SG-TRN-01), so no existing positional
-  // binding in no-credential-leak.test.ts is re-aimed.
-  "extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts",
   // D-PL5-07: the hosted catalog download, which must send no header,
-  // credential, or cookie. Appended last for the reason given above.
+  // credential, or cookie. Appended last, so no existing positional binding
+  // in no-credential-leak.test.ts is re-aimed.
   "extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts",
   // AUTH-09: the git process module writes a `git credential` request to
   // stdin and reads the `fill` answer, password included, from stdout.
