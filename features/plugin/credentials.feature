@@ -39,6 +39,33 @@ Feature: Plugin credentials
       | protocol | host       | user           | password              |
       | https    | github.com | x-access-token | stand-in-access-token |
 
+  Scenario: Installing a plugin from a private GitHub source with no stored credential fails as authentication required and shows no device code
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the plugin "ghp"
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                        |
+      | cascade | error    | false        | A plugin operation has failed. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                                                                                                                                                           | cause truncated | clone note         | clone url                       | clone retries               |
+      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  | git clone --depth failed: https-auth, exit code 128\nThe retry over SSH failed too: git clone --depth failed: ssh-auth, exit code 128\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again., git clone --depth failed: ssh-auth, exit code 128 | false           | ssh-not-configured | https://github.com/acme/ghp.git | git@github.com:acme/ghp.git |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 401    |
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+    Then the installation record of the project scope holds no plugins
+
   Scenario: Installing a pinned GitHub plugin whose clone is already cached makes no request
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
