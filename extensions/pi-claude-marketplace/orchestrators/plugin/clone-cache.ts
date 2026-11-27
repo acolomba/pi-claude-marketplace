@@ -247,13 +247,13 @@ function asPinnedCommitMissing(err: unknown, pin: string): unknown {
  *      staging and return cloneRoot as a warm-cache win. Any other rename
  *      errno append-leak-rethrows (MA-9).
  *
- * `resolveAuth` builds the bundle forwarded to `gitOps.clone`, and the bundle's
- * credentials thread into the clone so a private source on the bundle's own
- * host authenticates, whichever host that is (PROV-03/D-79-01, GAUTH-03).
- * Every install, reinstall, fetch, `info --fetch`, and update caller passes
- * one. It runs only on a cold key, so a caller that builds the bundle inside
- * it reads the GitHub base variable only when the clone reaches the network
- * (NFR-5).
+ * `resolveAuth` builds the bundle forwarded to `gitOps.clone`. The bundle names
+ * the host whose refused credential maps to `StoredCredentialRejectedError`;
+ * git asks the user's credential helpers for that host itself (GAUTH-03,
+ * GAUTH-04). Every install, reinstall, fetch, `info --fetch`, and update
+ * caller passes one. It runs only on a cold key, so a caller that builds the
+ * bundle inside it reads the GitHub base variable only when the clone reaches
+ * the network (NFR-5).
  *
  * D-SG-18, D-2-03: the clone step runs over the attempts of `transport`'s
  * plan (`runCloneStep`), each sent to its attempt's wire URL; the key still

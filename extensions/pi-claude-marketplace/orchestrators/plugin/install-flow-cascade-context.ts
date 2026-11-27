@@ -87,8 +87,9 @@ export type InstallLedgerCallerOptions = Pick<
 /**
  * Assemble the `InstallLedgerOptions` for ONE cascade member from the
  * entrypoint options, spreading each optional field only when defined
- * (exactOptionalPropertyTypes). `ctx` is always threaded so the git-source
- * clone probe can wire the auth notify seam (PROV-03).
+ * (exactOptionalPropertyTypes). `ctx` and `run` are always threaded: the
+ * member's ledger requires both, and reads the active MCP implementation from
+ * `run`.
  *
  * The entrypoint options divide in two, and the split is the contract.
  *

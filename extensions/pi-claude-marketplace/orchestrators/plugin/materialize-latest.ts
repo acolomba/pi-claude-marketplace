@@ -201,7 +201,11 @@ function revisionMoved(move: RevisionMove): boolean {
   return move.toCommit !== move.fromCommit || move.toVersion !== move.fromVersion;
 }
 
-/** The command's context for the preflight's prompts, when it has one. */
+/**
+ * The command's notification context for the preflight, when it has one. Its
+ * presence only decides whether the constraint gate lists a git source's tags
+ * (`listsSourceTags`).
+ */
 function preflightNotification(
   args: ThreePhaseArgs,
 ): Pick<PreparePluginUpdateOptions, "notification"> {

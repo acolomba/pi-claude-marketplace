@@ -72,7 +72,10 @@ export interface DependencyMoveContext {
   /** The command's `--partial` and `--map-model`, cascade-wide as on an install. */
   readonly partial?: boolean;
   readonly mapModel?: boolean;
-  /** The command's context, so a move authenticates as the command does. */
+  /**
+   * The command's notification context, so a move's constraint gate lists a
+   * git source's tags as the command's does (`listsSourceTags`).
+   */
   readonly notification?: PreparePluginUpdateOptions["notification"];
   /** D-SG-19: the operation's GitHub transport context, so a move clones as the command does. */
   readonly transportContext?: NonNullable<PreparePluginUpdateOptions["transportContext"]>;

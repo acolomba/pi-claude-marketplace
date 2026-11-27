@@ -1028,8 +1028,8 @@ async function updateSinglePluginWith(
 
 /**
  * D-26: the `PluginConvergeFn` impl `apply` drives for one catalog move. The
- * cascade mode gives git stored credentials only (D-3-04), and the converge policy lists no tag (D-23), so no tag memo is
- * allocated. The scope's locations come from the target's own `cwd`.
+ * converge policy lists no tag (D-23), so no tag memo is allocated. The
+ * scope's locations come from the target's own `cwd`.
  *
  * D-SG-19: the move clones over the target's transport context, the one of
  * the command that runs it; a target with none gets one of its own from
