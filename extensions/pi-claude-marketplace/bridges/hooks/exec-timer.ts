@@ -26,8 +26,8 @@
 // the `node:child_process` import whitelist, which
 // `test/architecture/no-shell-out.test.ts` pins at exactly five sanctioned
 // sites -- `./dispatch-exec.ts`, `./async-rewake/registry.ts`,
-// `platform/git-credential.ts`, `platform/package-manager.ts`, and
-// `platform/prompt-shell.ts`. Both
+// `platform/git-process.ts` (which starts every git process),
+// `platform/package-manager.ts`, and `platform/prompt-shell.ts`. Both
 // hook-exec sites call into this module.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";

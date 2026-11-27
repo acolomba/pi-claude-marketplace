@@ -106,8 +106,8 @@
 // spawn site. It may import Node's child-process module, for its own spawn
 // binding; the rule pack's child-process-chokepoint rule and
 // test/architecture/no-shell-out.test.ts name every module that may. Only
-// platform/git.ts and platform/git-credential.ts may import this module (the
-// GIT_PROCESS_IMPORTERS zone of BLOCK C in eslint.config.js).
+// platform/git.ts may import this module (the GIT_PROCESS_IMPORTERS zone of
+// BLOCK C in eslint.config.js).
 
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";

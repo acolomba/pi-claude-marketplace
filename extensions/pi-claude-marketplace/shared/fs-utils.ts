@@ -16,7 +16,7 @@
 //
 // RCOV-02 / D-08-12, the port's one deliberate asymmetry: RemovalOps is the
 // only *Ops collaborator in this tree that is a REQUIRED parameter. GitOps,
-// CredentialOps, and DeviceFlowHttp all travel as an optional member with a
+// GitHubSshOps, and RenameOps travel as an optional member with a
 // `?? DEFAULT_*` fallback at each site. A defaulted port lets the obligation
 // go quiet the moment a new call site forgets it -- the compiler stops asking
 // -- and the project's own rule is to wire real adapters in one composition

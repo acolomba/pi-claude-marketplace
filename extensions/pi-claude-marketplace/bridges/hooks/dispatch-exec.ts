@@ -61,9 +61,9 @@
 //
 // Whitelist note: this is one of exactly FIVE sanctioned
 // `node:child_process` import sites in the extension tree (the others are
-// `platform/git-credential.ts`, the async-rewake registry at
-// `bridges/hooks/async-rewake/registry.ts`, `platform/package-manager.ts`,
-// and `platform/prompt-shell.ts`).
+// `platform/git-process.ts`, which starts every git process, the async-rewake
+// registry at `bridges/hooks/async-rewake/registry.ts`,
+// `platform/package-manager.ts`, and `platform/prompt-shell.ts`).
 // The architecture-test gate at `test/architecture/no-shell-out.test.ts`
 // enforces the 5-element set; adding a sixth file requires an explicit edit
 // there + an update to the sibling "exactly five files" assertion, with

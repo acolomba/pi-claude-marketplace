@@ -17,9 +17,10 @@
 // test/architecture/no-shell-out.test.ts). Adding a SIXTH site requires
 // amending the whitelist set AND the sibling assertion in the SAME commit
 // (D-58-01 atomic-supersession). The other sites are
-// platform/git-credential.ts (AUTH-08), bridges/hooks/dispatch-exec.ts
-// (EXEC-01..04 sync path), platform/package-manager.ts (D-PL9-11), and
-// platform/prompt-shell.ts. This
+// platform/git-process.ts (D-SG-01, which starts every git process),
+// bridges/hooks/dispatch-exec.ts (EXEC-01..04 sync path),
+// platform/package-manager.ts (D-PL9-11), and platform/prompt-shell.ts
+// (D-CF1-02). This
 // site (HOOK-06 / EXEC-05 / D-62-01) diverges from the sync site:
 // the parent does NOT await child exit; a per-child
 // handler watches for code 2 and triggers the HOOK-06 injection contract via
