@@ -301,7 +301,7 @@ None.
 | WR-G-04, IN-G-01 (wrappers, duplicate predicate) | Refactored | Closed |
 | IN-G-02 (apply and import enable rows name no member clone) | Cannot happen: an orchestrated enable runs no dependency cascade (`enable-disable.ts`, `if (!enable \|\| orchestrated)`). A guard scenario pins the dependency's own failed row | Not a gap |
 
-Gate at 1837ce1: static, unpaired, integration, and direct coverage pass. Cucumber adapter: 2414 of 2419 pass; the 5 failures are the known `fd` Glob scenarios in `features/hook/tool-use.feature`. The builtin profile is run separately below.
+Gate at 1837ce1: static, unpaired, integration, and direct coverage pass. Cucumber adapter: 2414 of 2419 pass; the 5 failures are the known `fd` Glob scenarios in `features/hook/tool-use.feature`. Cucumber builtin: 261 of 261 pass.
 
 ### Human Verification Required
 
