@@ -210,6 +210,54 @@ These results are for the tree at 9049813 (all fix commits applied):
 - `npm run check` was not run, as instructed. Each commit's hook ran
   `npm run check:commit`.
 
+## Follow-up: aborted batch re-clone
+
+This closes the WR-G-01 residual above (04-VERIFICATION.md truth 5, D-SG-22).
+
+**Commit:** 2788f80
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`,
+`features/plugin/github-transport-update.feature`,
+`features/step_definitions/plugin/update.steps.ts`,
+`test/orchestrators/plugin/update-cascade.test.ts`
+**Applied fix:** `composeUpdateCascade` and the `UpdateCascadeComposer` type
+take `abortedBy?: UpdateCascadeTarget`, the failing target, in place of the
+`abortedByFailure` boolean. `groupCascadeOutcomes` drops a group with no rows
+only when its marketplace and scope are the failing target's. A rowless group
+of any other marketplace, or of the same marketplace in the other scope, keeps
+its sync note. `abortUpdateBatch` takes the target as `cascade.failedTarget`
+from all three callers (sync failure, phase-2 throw, phase-3a aggregate). The
+run that finishes passes `undefined`. Output does not change in any other
+case: a group with rows keeps its note, and the failing target's rowless group
+is still dropped.
+**Tests (red before the fix):**
+
+- Unit, `update-cascade.test.ts`: "an aborted bulk update keeps the block of
+  another marketplace's sync re-clone" (failing target in `mp`, unchanged
+  outcome in `other`; it sent nothing before the fix) and "an aborted bulk
+  update keeps the sync re-clone block of the failed target's marketplace in
+  the other scope" (it rejects a filter keyed on the name alone). The WR-G-01
+  case still passes.
+- Scenario, `github-transport-update.feature`: "Updating every plugin when a
+  later marketplace's update fails still names the re-clone of an earlier
+  github marketplace". `kit` moves and is re-cloned for the unchanged `app`,
+  then `zed@tools` fails in the physical replace. The command reports two
+  results: the failure, whose `tools` block names its own re-clone once, and
+  then a `kit` block that names its re-clone. Before the fix, the command
+  reported only the failure. The WR-G-01 scenario still fails when every
+  rowless group is kept.
+- Changed step: "the failed update names these repairs" reads every cascade
+  of the command in emission order, and gives a block with no plugin rows one
+  row with empty plugin cells. The three earlier users report one cascade
+  whose blocks all have rows, so their tables did not change.
+
+**Verification (fixer's worktree):** with the `GIT_CONFIG_*` variables unset,
+`update-cascade.test.ts` and `update-flow.test.ts` passed (331 tests), and so
+did `npm run typecheck` and `npm run check:features`. Cucumber
+`github-transport-update.feature` and `update.feature` passed: 45 scenarios
+under the adapter profile, and the `@mcp` scenario of each file under the
+builtin profile. The commit hook ran `npm run check:commit` and passed.
+
 ---
 
 _Fixed: 2026-11-27_
