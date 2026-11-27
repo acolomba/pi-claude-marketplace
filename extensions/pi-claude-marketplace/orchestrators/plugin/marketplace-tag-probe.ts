@@ -46,7 +46,7 @@ import { transportForce } from "../github-transport.ts";
 import type { ReleaseTagCandidate, SelectedReleaseTag } from "../../domain/release-tag.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CredentialOps } from "../auth-host.ts";
 
 /** The tag listings this probe reaches the marketplace repository through. */
 export interface MarketplaceTagListingSeam {
@@ -88,8 +88,6 @@ export interface MarketplaceTagProbeOptions {
     readonly ctx: NotificationContext;
     readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
   };
 }
 

@@ -15,19 +15,13 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { GitCommandError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { TransportAttempt } from "../../../extensions/pi-claude-marketplace/domain/github-transport.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type {
-  AuthAttemptResult,
-  CredentialOps,
-  DeviceFlowHttp,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   CloneTransport,
   PluginTransportContext,
@@ -36,91 +30,6 @@ import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const SHA = "1111111111111111111111111111111111111111";
-
-for (const mode of ["json", "rpc"]) {
-  for (const pin of [undefined, SHA]) {
-    test(`delivers clone authentication through the parent run in ${mode} with pin ${String(pin)}`, async (t) => {
-      // arrange
-      const { locations, root } = await freshLocations(t);
-      const capture = createJsonCapture();
-      const ctx = {
-        mode,
-        hasUI: mode === "tui" || mode === "rpc",
-        get ui() {
-          return capture.ui;
-        },
-      };
-      const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
-      const deviceFlow = createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: {
-          device_code: "clone-secret",
-          user_code: "CLONE-1234",
-          verification_uri: "https://github.com/login/device",
-          expires_in: 900,
-          interval: 0,
-        },
-        pollResponses: [
-          { kind: "success", accessToken: "token-secret", tokenType: "bearer", scope: "repo" },
-        ],
-      });
-      const seam: InstallCloneCacheSeam = {
-        resolvePluginPin: () =>
-          Promise.resolve({ cloneUrl: "https://github.com/owner/repo", pin: SHA }),
-        async materializePluginClone(options) {
-          const auth = options.resolveAuth();
-          assert.strictEqual(auth.kind, "device-flow");
-          assert.ok(auth.kind === "device-flow");
-          await auth.onAuthRequired();
-          return root;
-        },
-        async materializeOrRefreshPluginMirror(options) {
-          assert.ok(options.auth?.kind === "device-flow");
-          await options.auth.onAuthRequired();
-          return { pluginRoot: root, resolvedSha: SHA };
-        },
-        materializePluginCommitCopy: () => Promise.resolve(root),
-      };
-
-      // act
-      const outcome = await probeInstallClone({
-        subject: "plugin@market",
-        source: {
-          kind: "github",
-          raw: "owner/repo",
-          owner: "owner",
-          repo: "repo",
-          ...(pin !== undefined && { sha: pin }),
-        },
-        locations,
-        seam,
-        auth: { ...auth(), ctx, run, deviceFlowHttp: deviceFlow.http },
-      });
-
-      // assert
-      assert.deepStrictEqual(outcome, {
-        result: { kind: "materialized", pluginRoot: root, resolvedSha: SHA },
-        resolvedSha: SHA,
-      });
-      assert.deepStrictEqual(capture.entries, [
-        {
-          customType: "claude-plugin",
-          payload: {
-            schemaVersion: 1,
-            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-            kind: "device-flow-prompt",
-            severity: "info",
-            needsReload: false,
-            verificationUri: "https://github.com/login/device",
-            userCode: "CLONE-1234",
-          },
-        },
-      ]);
-      capture.assertValid();
-    });
-  }
-}
 
 async function freshLocations(
   testContext: TestContext,
@@ -480,15 +389,6 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
     repo: "repo",
     ref: "main",
   };
-  const authMemo = new Map<string, AuthAttemptResult>();
-  const deviceFlowHttp: DeviceFlowHttp = {
-    requestCode() {
-      return Promise.reject(new Error("device flow must stay lazy"));
-    },
-    pollToken() {
-      return Promise.reject(new Error("device flow must stay lazy"));
-    },
-  };
   const seam: InstallCloneCacheSeam = {
     resolvePluginPin() {
       return Promise.reject(new Error("unexpected pin resolution"));
@@ -511,7 +411,7 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
     source,
     seam,
     locations,
-    auth: { ...auth(), deviceFlowHttp, authMemo },
+    auth: auth(),
   });
 
   // assert

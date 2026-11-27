@@ -10,8 +10,6 @@ import {
   GitCommandError,
   InvalidGitHubBaseUrlError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { createJsonCapture } from "../../edge/json-capture.ts";
 import { setGitHubBaseUrl, setPreferHttps } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -42,76 +40,6 @@ const GHD_HTTPS_URL = "https://github.com/acme/ghd.git";
 function unforced(t: TestContext): void {
   setGitHubBaseUrl(t, undefined);
   setPreferHttps(t, undefined);
-}
-
-for (const mode of ["json", "rpc"]) {
-  test(`delivers constrained tag authentication through the parent run in ${mode}`, async (t) => {
-    // arrange
-    setGitHubBaseUrl(t, undefined);
-    setPreferHttps(t, "1");
-    const capture = createJsonCapture();
-    const ctx = {
-      mode,
-      hasUI: mode === "tui" || mode === "rpc",
-      get ui() {
-        return capture.ui;
-      },
-    };
-    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      network: "disabled",
-      deviceCode: {
-        device_code: "tag-secret",
-        user_code: "TAGS-1234",
-        verification_uri: "https://github.com/login/device",
-        expires_in: 900,
-        interval: 0,
-      },
-      pollResponses: [
-        { kind: "success", accessToken: "token-secret", tokenType: "bearer", scope: "repo" },
-      ],
-    });
-    const seam: DependencyTagListingSeam = {
-      async listRemoteTags(options) {
-        assert.ok(options.auth?.kind === "device-flow");
-        await options.auth.onAuthRequired();
-        return [{ name: "formatter--v1.4.0", oid: "tag-oid" }];
-      },
-    };
-
-    // act
-    const outcome = await probeDependencyTags({
-      pluginName: "formatter",
-      range: "^1.0.0",
-      source: { kind: "github", raw: "owner/repo", owner: "owner", repo: "repo" },
-      seam,
-      auth: { ...auth(), ctx, run, deviceFlowHttp: deviceFlow.http },
-    });
-
-    // assert
-    assert.deepStrictEqual(outcome, {
-      kind: "pinned",
-      tag: "formatter--v1.4.0",
-      oid: "tag-oid",
-      version: "1.4.0",
-    });
-    assert.deepStrictEqual(capture.entries, [
-      {
-        customType: "claude-plugin",
-        payload: {
-          schemaVersion: 1,
-          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-          kind: "device-flow-prompt",
-          severity: "info",
-          needsReload: false,
-          verificationUri: "https://github.com/login/device",
-          userCode: "TAGS-1234",
-        },
-      },
-    ]);
-    capture.assertValid();
-  });
 }
 
 function auth(): DependencyTagProbeOptions["auth"] {

@@ -829,9 +829,7 @@ async function preflightInstallResolve(
   const auth = {
     ctx: opts.ctx,
     run: opts.run,
-    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
   };
 
   // PI-4: resolveStrict + gate. Per D-04 the strict resolver consumes the

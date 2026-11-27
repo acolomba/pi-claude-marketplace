@@ -18,7 +18,7 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 
 /** Clone-cache operations used to materialize an install source. */
@@ -39,8 +39,6 @@ export interface InstallCloneProbeOptions {
     readonly ctx: NotificationContext;
     readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
   };
   /**
    * D-SG-18: the command's transport context, whose checks and notes every

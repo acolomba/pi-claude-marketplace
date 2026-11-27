@@ -971,16 +971,14 @@ async function probeMemberPin(
 
 /**
  * The auth context a member's tag query authenticates with, lifted from its
- * own ledger options so the query and the clone that follows it share one
- * host bundle and one per-host memo (AUTH-09).
+ * own ledger options so the query and the clone that follows it build the
+ * same host bundle over the production credential surface (AUTH-09).
  */
 function probeAuth(ledger: InstallLedgerOptions): DependencyTagProbeOptions["auth"] {
   return {
     ctx: ledger.ctx,
     run: ledger.run,
-    credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-    ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
-    ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
   };
 }
 

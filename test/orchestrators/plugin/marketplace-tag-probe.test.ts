@@ -317,20 +317,20 @@ describe("probeMarketplaceTags on a git marketplace", () => {
     );
   });
 
-  for (const { trigger, force, bundle } of [
+  for (const { trigger, force, host } of [
     {
       trigger: "CLAUDE_CODE_PLUGIN_PREFER_HTTPS",
       force: (t: TestContext) => {
         setPreferHttps(t, "1");
       },
-      bundle: ["device-flow", "github.com"],
+      host: "github.com",
     },
     {
       trigger: "the github base override",
       force: (t: TestContext) => {
         setGitHubBaseUrl(t, "https://mirror.example/base");
       },
-      bundle: ["stored-credential", "mirror.example"],
+      host: "mirror.example",
     },
   ]) {
     test(`D-SG-09, D-SG-21: a github marketplace lists its https wire URL once with its host's bundle under ${trigger}`, async (t) => {
@@ -348,11 +348,11 @@ describe("probeMarketplaceTags on a git marketplace", () => {
       // assert
       assert.deepStrictEqual(
         {
-          calls: fake.remoteCalls.map((call) => [call.url, call.auth?.kind, call.auth?.host]),
+          calls: fake.remoteCalls.map((call) => [call.url, call.auth?.host]),
           memo: [...tagMemo.keys()],
         },
         {
-          calls: [[GITHUB_HTTPS_URL, ...bundle]],
+          calls: [[GITHUB_HTTPS_URL, host]],
           memo: [GITHUB_HTTPS_URL],
         },
       );

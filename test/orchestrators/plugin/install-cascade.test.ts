@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import {
@@ -41,8 +42,6 @@ import type {
   ClosureLookupResult,
   ClosureMember,
 } from "../../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
-import type { DeviceFlowHttp } from "../../../extensions/pi-claude-marketplace/domain/github-auth.ts";
-import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   DependencyTagListingSeam,
   DependencyTagProbeOptions,
@@ -3957,23 +3956,11 @@ test("CMP-3 a constrained member whose marketplace the snapshot does not record 
   );
 });
 
-test("AUTH-09 the tag query rides the credential collaborators the member's install uses", async (t) => {
+test("AUTH-09 the tag query rides the member's notification context and the production credential surface", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-auth-");
   const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { gitSourced: ["bar"] });
   const locations = locationsFor("project", environment.cwd);
-  const credentialOps = {
-    approve: () => Promise.resolve(),
-    fill: () => Promise.resolve(null),
-    reject: () => Promise.resolve(),
-  };
-  // Never reached: the probe threads the seam through and this case faults the
-  // probe itself, so a device flow can neither start nor poll.
-  const deviceFlowHttp: DeviceFlowHttp = {
-    requestCode: () => Promise.reject(new Error("no device flow in this case")),
-    pollToken: () => Promise.reject(new Error("no device flow in this case")),
-  };
-  const authMemo = new Map<string, AuthAttemptResult>();
   const ctx = notificationContext();
   const run = runWithNothingLoaded();
   const seen: DependencyTagProbeOptions[] = [];
@@ -3991,9 +3978,6 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
       ...ledgerOptionsFor(environment.cwd)(member),
       ctx,
       run,
-      credentialOps,
-      deviceFlowHttp,
-      authMemo,
     }),
     rootAllowedMarketplaces: new Set<string>(),
     installedKeys: new Set(),
@@ -4009,7 +3993,7 @@ test("AUTH-09 the tag query rides the credential collaborators the member's inst
   assert.strictEqual(cascade.kind, "installed");
   assert.deepStrictEqual(
     seen.map((query) => query.auth),
-    [{ ctx, run, credentialOps, deviceFlowHttp, authMemo }],
+    [{ ctx, run, credentialOps: DEFAULT_CREDENTIAL_OPS }],
   );
 });
 
