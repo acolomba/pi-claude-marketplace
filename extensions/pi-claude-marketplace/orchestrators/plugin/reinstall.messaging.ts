@@ -142,7 +142,7 @@ export function renderReinstallPartitionAndNotify(
   // the policy map is a compile error here.
   const marketplaces: Plural<MarketplaceRows<ReinstallMsg>> = sortedBlocks.map((block) => {
     const plugins: ReinstallMsg[] = block.outcomes.map((o) =>
-      withReinstallCloneNote(
+      withCloneNote(
         outcomeToPluginMessage(o, run.softDeps),
         notesFor?.(o),
         `${o.name}@${o.marketplace}`,
@@ -157,21 +157,6 @@ export function renderReinstallPartitionAndNotify(
   // single-vs-plural signal is the invocation FORM, threaded from
   // `reinstallPlugins`.
   notifyWithContext(ctx, run, REINSTALL_CONTEXT, marketplaces, undefined, cardinality);
-}
-
-/**
- * D-SG-22: `row` with the clone note `notes` keeps for `subject`, so every
- * reinstall row names the transport of the GitHub clone its plugin ran,
- * whatever its status: a `skipped` row a dependent's range held and a
- * `manual recovery` row too. A row whose subject cloned nothing over GitHub
- * is returned unchanged.
- */
-function withReinstallCloneNote(
-  row: ReinstallMsg,
-  notes: GitHubCloneNotes | undefined,
-  subject: string,
-): ReinstallMsg {
-  return withCloneNote(row, notes, subject);
 }
 
 /**

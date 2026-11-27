@@ -14,7 +14,7 @@ import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts"
 
 import { withCloneNote } from "./install.messaging.ts";
 import { constraintCauseFor, revisionVersionSlot, updatedRowFromOutcome } from "./update-row.ts";
-import { UPDATE_CONTEXT, withUpdateCloneNote, type UpdateMsg } from "./update.messaging.ts";
+import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -199,7 +199,7 @@ function cascadeRows(
   }
 
   return [
-    withUpdateCloneNote(
+    withCloneNote(
       outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
       notes,
       subject,

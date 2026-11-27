@@ -189,9 +189,12 @@ function keepsRuntimeCause(err: unknown, gitReason: ContentReason | undefined): 
 
 /**
  * D-SG-22: `row` with the clone note `notes` keeps for `subject`, or `row`
- * unchanged when its subject cloned nothing over GitHub. Every install row
- * reads its note this way, keyed by `<plugin>@<marketplace>`, so a row never
- * shows another plugin's clone.
+ * unchanged when its subject cloned nothing over GitHub. Every install,
+ * update, and reinstall row reads its note this way, keyed by
+ * `<plugin>@<marketplace>`, so a row never shows another plugin's clone, and
+ * it names the clone whatever its status: an up-to-date, held, or
+ * dependent-held `skipped` row, a `partially-upgradable` row, and a
+ * `manual recovery` row too.
  */
 export function withCloneNote<R extends { readonly clone?: CloneTransportNote }>(
   row: R,

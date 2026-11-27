@@ -7,10 +7,7 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 
-import { withCloneNote } from "./install.messaging.ts";
-
 import type { CommandContext } from "../../shared/notify-context.ts";
-import type { GitHubCloneNotes } from "../github-transport.ts";
 
 /**
  * update's private status set. The update cascade emits `updated` rows
@@ -47,18 +44,3 @@ export const UPDATE_CONTEXT = {
     installed: { markers: true, contentReasons: true },
   },
 } as const satisfies CommandContext<UpdateStatus>;
-
-/**
- * D-SG-22: `row` with the clone note `notes` keeps for `subject`,
- * `<plugin>@<marketplace>`, so every update row names the transport of the
- * GitHub clone its plugin ran, whatever its status: an up-to-date or held
- * `skipped` row and a `partially-upgradable` row too. A row whose subject
- * cloned nothing over GitHub is returned unchanged.
- */
-export function withUpdateCloneNote(
-  row: UpdateMsg,
-  notes: GitHubCloneNotes | undefined,
-  subject: string,
-): UpdateMsg {
-  return withCloneNote(row, notes, subject);
-}
