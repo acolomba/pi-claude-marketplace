@@ -160,7 +160,6 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { ClaudeContentOptions } from "../../shared/vars.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type {
   PluginUpdateFailedOutcome,
   PluginUpdateOutcome,
@@ -245,9 +244,6 @@ export interface ThreePhaseArgsBase {
   readonly readRecordDegradeBaseline?: RecordDegradeBaselineReader;
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   readonly cloneCandidates?: Set<string>;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /** D-SG-19: the command's GitHub transport context (`PreparePluginUpdateOptions`). */
   readonly transportContext?: NonNullable<PreparePluginUpdateOptions["transportContext"]>;
   /**

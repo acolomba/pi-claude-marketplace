@@ -29,12 +29,9 @@ import {
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { withExistingScopeLock } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 
 import {
-  INSTALL_DEVICE_CODE,
   INSTALL_HOST_HEAD,
   createGitOps,
   installAppCountingResolves,
@@ -1193,12 +1190,6 @@ describe("createUpdateDependencyResolver", () => {
         widget: { version: "1.1.0", dependencies: ["zcore"] },
         zcore: { version: "1.0.0" },
       });
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const deviceFlow = createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: INSTALL_DEVICE_CODE,
-      });
       const { ctx, run } = makeCtx();
       const settle = createUpdateDependencyResolver(
         owner.transaction,
@@ -1212,9 +1203,6 @@ describe("createUpdateDependencyResolver", () => {
           ...updateArgs(owner, cwd, "widget"),
           mapModel: true,
           partial: true,
-          credentialOps: credentials.credentialOps,
-          deviceFlowHttp: deviceFlow.http,
-          authMemo: new Map(),
         },
         await preparedUpdate(cwd, "widget"),
         { ctx, run },
@@ -1225,8 +1213,6 @@ describe("createUpdateDependencyResolver", () => {
         settlement.rows.map((row) => [row.status, row.name]),
         [["installed", "zcore@mp"]],
       );
-      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-      assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
     });
   });
 });

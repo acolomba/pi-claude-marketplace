@@ -155,9 +155,6 @@ export function updateCaller(
     ...notification,
     ...(args.mapModel !== undefined && { mapModel: args.mapModel }),
     ...(!args.cascade && args.partial !== undefined && { partial: args.partial }),
-    ...(args.credentialOps !== undefined && { credentialOps: args.credentialOps }),
-    ...(args.deviceFlowHttp !== undefined && { deviceFlowHttp: args.deviceFlowHttp }),
-    ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
     // D-SG-19: the update's one transport context reaches its dependency
     // moves and installs, so the command probes once.
     ...(args.transportContext !== undefined && { transportContext: args.transportContext }),

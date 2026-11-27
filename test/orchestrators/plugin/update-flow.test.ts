@@ -33,6 +33,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -69,10 +70,8 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
@@ -84,7 +83,6 @@ import { whileStateLockHeld } from "../state-lock.ts";
 import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { PluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import type {
   GitAuthBundle,
@@ -138,14 +136,6 @@ const UPDATE_REMOTE_URLS = [
   "https://example.com/org/mono",
   "https://example.com/org/monorepo",
 ] as const;
-
-const DEVICE_CODE = {
-  device_code: "MOCK_DEVICE_CODE",
-  user_code: "ABCD-1234",
-  verification_uri: "https://github.com/login/device",
-  expires_in: 900,
-  interval: 0,
-} as const;
 
 function fixtureMarketplaceDir(
   name: "valid-marketplace" | "invalid-manifest" | "empty-marketplace",
@@ -406,18 +396,6 @@ function mutateAtFirstLockedLoad(mutate: (state: ExtensionState) => void): {
     fired: () => didFire,
     updateSinglePlugin: operations.beginPluginUpdateRun(commandNotification()),
   };
-}
-
-function makeCredentialOps(): ReturnType<typeof createCredentialOpsFake>["credentialOps"] {
-  return createCredentialOpsFake({ boundary: "memory" }).credentialOps;
-}
-
-function makeDeviceFlowHttp(): ReturnType<typeof createDeviceFlowFake>["http"] {
-  return createDeviceFlowFake({
-    boundary: "memory",
-    network: "disabled",
-    deviceCode: DEVICE_CODE,
-  }).http;
 }
 
 function capturingUpdateSeam(gitOps: GitOps): {
@@ -1182,12 +1160,6 @@ test("updatePlugins reports the skipped skill preload of the staged agent", asyn
       });
       await seedAgentSkillPreload(seeded.marketplaceRoot);
       const git = createGitOps();
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const deviceFlow = createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: DEVICE_CODE,
-      });
       const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
       // act
@@ -1198,8 +1170,6 @@ test("updatePlugins reports the skipped skill preload of the staged agent", asyn
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
         gitOps: git.gitOps,
-        credentialOps: credentials.credentialOps,
-        deviceFlowHttp: deviceFlow.http,
       });
 
       // assert
@@ -1223,8 +1193,6 @@ test("updatePlugins reports the skipped skill preload of the staged agent", asyn
       assert.deepEqual(git.state.cloneCalls, []);
       assert.deepEqual(git.state.resolveRefCalls, []);
       assert.deepEqual(git.state.resolveRemoteRefCalls, []);
-      assert.deepEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-      assert.deepEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1552,7 +1520,7 @@ test("PUP-2 / D-SG-10: two plugins in SAME github marketplace -> syncCloneOnce c
   });
 });
 
-test("PUP-2 / AUTH-02: the github marketplace sync check carries the github.com auth bundle and a supplied authMemo", async () => {
+test("PUP-2 / AUTH-02: the github marketplace sync check carries a github.com bundle over the production credential surface", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-auth-");
     try {
@@ -1561,9 +1529,6 @@ test("PUP-2 / AUTH-02: the github marketplace sync check carries the github.com 
       const { gitOps, state } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const credentialOps = makeCredentialOps();
-      const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
-      const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
       const { ctx, run } = makeCtx();
 
       // act
@@ -1574,18 +1539,13 @@ test("PUP-2 / AUTH-02: the github marketplace sync check carries the github.com 
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
         gitOps,
-        credentialOps,
-        deviceFlowHttp: makeDeviceFlowHttp(),
-        authMemo,
       });
 
       // assert
       assert.equal(state.resolveRemoteRefCalls.length, 1);
       const auth = state.resolveRemoteRefCalls[0]?.auth;
-      assert.ok(auth?.kind === "device-flow");
-      assert.equal(auth.host, "github.com");
-      assert.equal(auth.credentialOps, credentialOps);
-      assert.deepEqual(await auth.onAuthRequired(), memoized);
+      assert.equal(auth?.host, "github.com");
+      assert.strictEqual(auth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1618,7 +1578,6 @@ test("SG-SSH-02, CONTEXT [Identity]: the sync of an owner/repo marketplace whose
             return Promise.resolve("configured");
           },
         },
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -1664,7 +1623,6 @@ test("CONTEXT [Identity]: the sync of a github marketplace checks the declared s
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -1688,7 +1646,6 @@ test("GHB-02: the GitHub marketplace sync under the override binds the override 
       const { gitOps, state } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const credentialOps = makeCredentialOps();
       const { ctx, run } = makeCtx();
 
       // act
@@ -1699,15 +1656,12 @@ test("GHB-02: the GitHub marketplace sync under the override binds the override 
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
         gitOps,
-        credentialOps,
-        deviceFlowHttp: makeDeviceFlowHttp(),
-        authMemo: new Map<string, AuthAttemptResult>(),
       });
 
       // assert
       assert.deepStrictEqual(
-        state.resolveRemoteRefCalls.map(({ auth }) => auth),
-        [{ kind: "stored-credential", credentialOps, host: "mirror.example:8443" }],
+        state.resolveRemoteRefCalls.map(({ auth }) => ({ kind: auth?.kind, host: auth?.host })),
+        [{ kind: "stored-credential", host: "mirror.example:8443" }],
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -1735,7 +1689,6 @@ test("GHB-03: a GitHub marketplace sync on an invalid base fails the update comm
             cwd,
             target: { kind: "marketplace", marketplace: "official" },
             gitOps,
-            credentialOps: makeCredentialOps(),
           }),
         (error: unknown) => {
           assert.deepStrictEqual(
@@ -1747,73 +1700,6 @@ test("GHB-03: a GitHub marketplace sync on an invalid base fails the update comm
       );
       assert.deepStrictEqual(state.resolveRemoteRefCalls, []);
       verifyBoundary();
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a supplied authMemo request one device code", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-sync-memo-");
-    try {
-      // arrange
-      await seedGithubMarketplaceForSync(cwd);
-      const locations = locationsFor("project", cwd);
-      const secondCloneDir = await locations.sourceCloneDir("second");
-      await cp(fixtureMarketplaceDir("valid-marketplace"), secondCloneDir, { recursive: true });
-      const seeded = await loadState(locations.extensionRoot);
-      const official = seeded.marketplaces.official;
-      assert.ok(official !== undefined);
-      await saveState(locations.extensionRoot, {
-        ...seeded,
-        marketplaces: {
-          ...seeded.marketplaces,
-          second: {
-            ...official,
-            name: "second",
-            source: githubSource("https://github.com/test/other#main"),
-            manifestPath: path.join(secondCloneDir, ".claude-plugin", "marketplace.json"),
-            marketplaceRoot: secondCloneDir,
-          },
-        },
-      });
-      const { gitOps: recordingGitOps, state } = createGitOps({
-        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
-      });
-      const gitOps: typeof recordingGitOps = {
-        ...recordingGitOps,
-        async resolveRemoteRef(checkOptions) {
-          if (checkOptions.auth?.kind === "device-flow") {
-            await checkOptions.auth.onAuthRequired();
-          }
-
-          return recordingGitOps.resolveRemoteRef(checkOptions);
-        },
-      };
-      const deviceFlow = createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: DEVICE_CODE,
-        defaultPoll: { kind: "access_denied" },
-      });
-      const { ctx, run } = makeCtx();
-
-      // act
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "all" },
-        gitOps,
-        credentialOps: makeCredentialOps(),
-        deviceFlowHttp: deviceFlow.http,
-      });
-
-      // assert
-      assert.equal(state.resolveRemoteRefCalls.length, 2, "each marketplace syncs once");
-      assert.equal(deviceFlow.calls.requestCode.length, 1, "the Device Flow runs once per host");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1841,7 +1727,6 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -1878,7 +1763,6 @@ test("GLK-04: a held scope lock refuses the marketplace sync as lock held before
           cwd,
           target: { kind: "marketplace", marketplace: "official" },
           gitOps,
-          credentialOps: makeCredentialOps(),
         });
       });
 
@@ -1920,7 +1804,6 @@ test("GLK-04: a scope lock lost during the marketplace sync fails the sync as lo
         cwd,
         target: { kind: "marketplace", marketplace: "official" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -1983,7 +1866,6 @@ for (const { title, seed, marketplace, failure, message } of [
           cwd,
           target: { kind: "marketplace", marketplace },
           gitOps,
-          credentialOps: makeCredentialOps(),
         });
 
         // assert
@@ -2041,7 +1923,6 @@ test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier t
         cwd,
         target: { kind: "all" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -2192,7 +2073,6 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync check car
       const { gitOps, state } = createGitOps({
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
-      const credentialOps = makeCredentialOps();
       const { ctx, run } = makeCtx();
 
       // act
@@ -2203,65 +2083,29 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync check car
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps,
       });
 
       // assert
       assert.deepStrictEqual(
-        { checks: state.resolveRemoteRefCalls, clones: state.cloneCalls },
+        {
+          checks: state.resolveRemoteRefCalls.map(({ url, ref, auth }) => ({
+            url,
+            ref,
+            auth: { kind: auth?.kind, host: auth?.host },
+          })),
+          clones: state.cloneCalls,
+        },
         {
           checks: [
             {
               url: "https://example.com/org/repo",
               ref: "main",
-              auth: { credentialOps, host: "example.com", kind: "stored-credential" },
+              auth: { kind: "stored-credential", host: "example.com" },
             },
           ],
           clones: [],
         },
       );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("PUP-2 / D-79-02: a url marketplace on a Device Flow host shares a supplied authMemo", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-url-provider-");
-    try {
-      // arrange
-      await seedUrlMarketplaceForSync(
-        cwd,
-        { hello: "1.0.0" },
-        parsePluginSource("https://gitlab.com/org/repo#main"),
-      );
-      const { gitOps, state } = createGitOps({
-        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
-      });
-      const credentialOps = makeCredentialOps();
-      const memoized: AuthAttemptResult = { ok: false, reason: "memoized authentication decline" };
-      const { ctx, run } = makeCtx();
-
-      // act
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "marketplace", marketplace: "mp" },
-        gitOps,
-        credentialOps,
-        deviceFlowHttp: makeDeviceFlowHttp(),
-        authMemo: new Map([["gitlab.com", memoized]]),
-      });
-
-      // assert
-      const auth = state.resolveRemoteRefCalls[0]?.auth;
-      assert.ok(auth?.kind === "device-flow");
-      assert.equal(auth.host, "gitlab.com");
-      assert.equal(auth.credentialOps, credentialOps);
-      assert.deepEqual(await auth.onAuthRequired(), memoized);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2289,7 +2133,6 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -2333,7 +2176,6 @@ test("PUP-2 / D-SG-10: a url marketplace whose remote advanced -> update re-clon
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -2411,7 +2253,6 @@ test("PUP-2 / D-PL9-10: the sync carries the packages of every plugin the state 
         cwd,
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
         gitOps: fake.gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -2470,7 +2311,6 @@ test("PUP-2 / D-SG-10: two plugins of one github marketplace whose remote moved 
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -2521,7 +2361,6 @@ test("D-SG-15: with the keep variable, an unreachable marketplace remote keeps i
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
         environment: { CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: "1" },
       });
 
@@ -2575,7 +2414,6 @@ test("D-SG-15: without the keep variable, an unreachable marketplace remote is c
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
         environment: {},
       });
 
@@ -2635,7 +2473,6 @@ test("D-SG-10 / D-SG-15: a marketplace checkout that cannot be moved aside is ke
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
         renameOps: {
           rename: (from, to) => (from === liveDir ? Promise.reject(renameError) : rename(from, to)),
         },
@@ -2688,7 +2525,6 @@ test("D-SG-10: a marketplace sync whose new clone moves in carries no kept line"
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -9599,7 +9435,7 @@ for (const { direction, file, local, reason, cause } of [
       "The plugin gp@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
   },
 ] as const) {
-  test(`NFR-5: a refused named git-source update ${direction} builds no credentials and clones, fetches, and lists nothing`, async () => {
+  test(`NFR-5: a refused named git-source update ${direction} clones, fetches, and lists nothing`, async () => {
     await withHermeticHome(async () => {
       const cwd = await createCaseDir("update-layer-refusal-git-");
       try {
@@ -9618,7 +9454,6 @@ for (const { direction, file, local, reason, cause } of [
         await writeFile(locations[file], GP_DECLARED, "utf8");
         const stateBytes = await readFile(locations.stateJsonPath, "utf8");
         const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-        const credentials = createCredentialOpsFake({ boundary: "memory" });
         const { ctx, run, notifications } = makeCtx();
 
         // act
@@ -9630,7 +9465,6 @@ for (const { direction, file, local, reason, cause } of [
           target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
           local,
           gitOps,
-          credentialOps: credentials.credentialOps,
           cloneCacheSeam: seamWith(gitOps),
         });
 
@@ -9642,16 +9476,8 @@ for (const { direction, file, local, reason, cause } of [
           false,
         );
         assert.deepEqual(
-          {
-            clone: gitState.cloneCalls,
-            resolveRemoteRef: gitState.resolveRemoteRefCalls,
-            credentials: credentials.calls,
-          },
-          {
-            clone: [],
-            resolveRemoteRef: [],
-            credentials: { fill: [], approve: [], reject: [] },
-          },
+          { clone: gitState.cloneCalls, resolveRemoteRef: gitState.resolveRemoteRefCalls },
+          { clone: [], resolveRemoteRef: [] },
         );
       } finally {
         await rm(cwd, { recursive: true, force: true });
@@ -10973,7 +10799,7 @@ test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the re
   });
 });
 
-test("plugin update authentication: a pinned provider update threads auth to the clone", async () => {
+test("plugin update authentication: a pinned provider update gives the clone a github.com bundle over the production credential surface", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-auth-provider-");
     try {
@@ -10987,13 +10813,6 @@ test("plugin update authentication: a pinned provider update threads auth to the
       });
       const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
       const { seam, captured } = capturingUpdateSeam(gitOps);
-      const credentialOps = makeCredentialOps();
-      const deviceFlowHttp = makeDeviceFlowHttp();
-      const memoized: AuthAttemptResult = {
-        ok: false,
-        reason: "memoized authentication decline",
-      };
-      const authMemo = new Map<string, AuthAttemptResult>([["github.com", memoized]]);
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -11004,17 +10823,11 @@ test("plugin update authentication: a pinned provider update threads auth to the
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
         cloneCacheSeam: seam,
-        credentialOps,
-        deviceFlowHttp,
-        authMemo,
       });
 
       // assert
-      assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
+      assert.strictEqual(captured.cloneAuth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
       assert.equal(captured.cloneAuth?.host, "github.com");
-      assert.ok(captured.cloneAuth?.kind === "device-flow");
-      assert.deepEqual(await captured.cloneAuth.onAuthRequired(), memoized);
-      assert.equal(authMemo.size, 1);
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -11022,98 +10835,7 @@ test("plugin update authentication: a pinned provider update threads auth to the
   });
 });
 
-test("plugin update authentication: a run without a supplied authMemo shares one Device Flow between the marketplace sync and the plugin clone", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-auth-run-memo-");
-    try {
-      // arrange
-      await seedGitUpdateMarketplace({
-        cwd,
-        cloneUrl: "https://github.com/org/repo",
-        entrySource: { source: "github", repo: "org/repo", sha: SHA_NEW },
-        recordedSha: SHA_OLD,
-        versionTag: "9.9.9",
-      });
-      const locations = locationsFor("project", cwd);
-      const seeded = await loadState(locations.extensionRoot);
-      const marketplace = seeded.marketplaces.mp;
-      assert.ok(marketplace !== undefined);
-      await saveState(locations.extensionRoot, {
-        ...seeded,
-        marketplaces: {
-          ...seeded.marketplaces,
-          mp: { ...marketplace, source: githubSource("https://github.com/test/mp#main") },
-        },
-      });
-      // D-SG-10: the github marketplace's checkout, so the sync checks it.
-      await cp(path.join(cwd, "mp-src"), await locations.sourceCloneDir("mp"), { recursive: true });
-      const { gitOps: recordingGitOps, state } = createGitOps({
-        fixtureSourceDir: path.join(cwd, "repo-fixture"),
-        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
-      });
-      const gitOps: typeof recordingGitOps = {
-        ...recordingGitOps,
-        async resolveRemoteRef(checkOptions) {
-          if (checkOptions.auth?.kind === "device-flow") {
-            await checkOptions.auth.onAuthRequired();
-          }
-
-          return recordingGitOps.resolveRemoteRef(checkOptions);
-        },
-      };
-      const { seam, captured } = capturingUpdateSeam(gitOps);
-      const clonePullSeam: UpdateCloneCacheSeam = {
-        ...seam,
-        materializePluginClone: async (args) => {
-          const auth = args.resolveAuth();
-          if (auth.kind === "device-flow") {
-            await auth.onAuthRequired();
-          }
-
-          return seam.materializePluginClone(args);
-        },
-      };
-      const deviceFlow = createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: DEVICE_CODE,
-        defaultPoll: { kind: "access_denied" },
-      });
-      const { ctx, run } = makeCtx();
-
-      // act
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
-        gitOps,
-        cloneCacheSeam: clonePullSeam,
-        credentialOps: makeCredentialOps(),
-        deviceFlowHttp: deviceFlow.http,
-      });
-
-      // assert
-      assert.equal(
-        state.resolveRemoteRefCalls.filter(({ url }) => url === "https://github.com/test/mp.git")
-          .length,
-        1,
-        "the marketplace syncs once",
-      );
-      assert.ok(captured.cloneAuth?.kind === "device-flow", "the clone carries the auth bundle");
-      assert.equal(
-        deviceFlow.calls.requestCode.length,
-        1,
-        "the sync and the clone share one Device Flow",
-      );
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("plugin update authentication: an unpinned provider update threads auth to the mirror", async () => {
+test("plugin update authentication: an unpinned provider update gives the mirror a github.com bundle over the production credential surface", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-auth-mirror-");
     try {
@@ -11132,8 +10854,6 @@ test("plugin update authentication: an unpinned provider update threads auth to 
         remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
       });
       const { seam, captured } = capturingUpdateSeam(gitOps);
-      const credentialOps = makeCredentialOps();
-      const deviceFlowHttp = makeDeviceFlowHttp();
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -11144,14 +10864,11 @@ test("plugin update authentication: an unpinned provider update threads auth to 
         cwd,
         target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
         cloneCacheSeam: seam,
-        credentialOps,
-        deviceFlowHttp,
       });
 
       // assert
-      assert.equal(captured.cloneAuth?.credentialOps, credentialOps);
+      assert.strictEqual(captured.cloneAuth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
       assert.equal(captured.cloneAuth?.host, "github.com");
-      assert.equal(captured.cloneAuth?.kind, "device-flow");
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -11221,8 +10938,6 @@ test("GHB-03: a GitHub-source plugin update on an invalid base fails the update 
             cwd,
             target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
             cloneCacheSeam: seam,
-            credentialOps: makeCredentialOps(),
-            deviceFlowHttp: makeDeviceFlowHttp(),
           }),
         (error: unknown) => {
           assert.deepStrictEqual(
@@ -11274,7 +10989,7 @@ test("GHB-03: the cascade's single-plugin update rethrows an invalid base", asyn
   });
 });
 
-test("NFR-3 device-flow auth failure: a clone whose sign-in failed classifies as {authentication required}, not {no longer installable}", async () => {
+test("NFR-3: a clone the host refused classifies as {authentication required}, not {no longer installable}", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-usercanceled-");
     try {
@@ -11290,8 +11005,8 @@ test("NFR-3 device-flow auth failure: a clone whose sign-in failed classifies as
         recordedSha: SHA_OLD,
       });
 
-      // D-SG-14: an unsuccessful device-flow auth (denied / expired / poll
-      // network error) leaves the clone's own https-auth failure.
+      // D-SG-14: the clone's own https-auth failure, as git reports it when
+      // the host refuses the request.
       const authError = new GitCommandError(
         { kind: "https-auth", detail: "no-credential" },
         { operation: "clone", exitCode: 128 },
@@ -16168,7 +15883,6 @@ test("D-SG-22: a PUP-2 sync that re-clones a github marketplace names the transp
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -16266,7 +15980,6 @@ test("D-SG-22, OQ-3: a PUP-2 sync that finds its github marketplace current name
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert
@@ -16311,7 +16024,6 @@ test("D-SG-22: a PUP-2 sync whose re-clone fails names the clone it tried under 
         cwd,
         target: { kind: "marketplace", marketplace: "mp" },
         gitOps,
-        credentialOps: makeCredentialOps(),
       });
 
       // assert

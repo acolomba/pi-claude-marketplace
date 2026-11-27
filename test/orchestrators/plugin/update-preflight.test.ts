@@ -8,6 +8,7 @@ import test from "node:test";
 import lockfile from "proper-lockfile";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   isUpdatePreflightOutcome,
@@ -30,11 +31,6 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type {
-  AuthAttemptResult,
-  CredentialOps,
-  DeviceFlowHttp,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   CloneTransport,
   PluginTransportContext,
@@ -193,9 +189,6 @@ async function prepare(
     readonly constraintMarketplaceTagMemo?: PreparePluginUpdateOptions["constraintMarketplaceTagMemo"];
     readonly cleanupClones?: () => Promise<void>;
     readonly notification?: PreparePluginUpdateOptions["notification"];
-    readonly credentialOps?: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
     readonly transport?: Pick<PreparePluginUpdateOptions, "transportContext">;
     readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
     readonly move?: Pick<PreparePluginUpdateOptions, "expectVersion" | "requesters">;
@@ -224,9 +217,6 @@ async function prepare(
       constraintMarketplaceTagMemo: options.constraintMarketplaceTagMemo,
     }),
     ...(options.notification !== undefined && { notification: options.notification }),
-    ...(options.credentialOps !== undefined && { credentialOps: options.credentialOps }),
-    ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
-    ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
     ...options.transport,
     ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
     ...options.move,
@@ -2679,17 +2669,7 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   t.after(() =>
     Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
   );
-  const credentialOps: CredentialOps = {
-    approve: () => Promise.resolve(),
-    fill: () => Promise.resolve(null),
-    reject: () => Promise.resolve(),
-  };
   const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
-  const deviceFlowHttp: DeviceFlowHttp = {
-    requestCode: () => Promise.reject(new Error("unexpected device flow")),
-    pollToken: () => Promise.reject(new Error("unexpected device flow")),
-  };
-  const authMemo = new Map<string, AuthAttemptResult>();
   const pinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () =>
       Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
@@ -2717,14 +2697,9 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   };
 
   // act
-  const auth = {
-    notification: { ctx, run: runWithNothingLoaded() },
-    credentialOps,
-    deviceFlowHttp,
-    authMemo,
-  };
-  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, ...auth });
-  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, ...auth });
+  const notification = { ctx, run: runWithNothingLoaded() };
+  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, notification });
+  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, notification });
 
   // assert
   assert.ok(!("partition" in pinnedPrepared));
@@ -2749,18 +2724,13 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
   t.after(() =>
     Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
   );
-  const credentialOps: CredentialOps = {
-    approve: () => Promise.resolve(),
-    fill: () => Promise.resolve(null),
-    reject: () => Promise.resolve(),
-  };
   const pinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () =>
       Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
     materializePluginClone: (options) => {
       assert.deepStrictEqual(options.resolveAuth(), {
         kind: "stored-credential",
-        credentialOps,
+        credentialOps: DEFAULT_CREDENTIAL_OPS,
         host: "github.com",
       });
       return Promise.resolve(pinned.pluginRoot);
@@ -2774,7 +2744,7 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
     materializeOrRefreshPluginMirror: (options) => {
       assert.deepStrictEqual(options.auth, {
         kind: "stored-credential",
-        credentialOps,
+        credentialOps: DEFAULT_CREDENTIAL_OPS,
         host: "github.com",
       });
       return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
@@ -2783,8 +2753,8 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
   };
 
   // act
-  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, credentialOps });
-  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, credentialOps });
+  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam });
+  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam });
 
   // assert
   assert.ok(!("partition" in pinnedPrepared));

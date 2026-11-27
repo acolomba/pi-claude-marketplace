@@ -81,7 +81,7 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { RenameOps } from "../marketplace/clone-swap.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
@@ -128,9 +128,6 @@ export interface UpdatePluginsOptions {
   readonly mapModel?: boolean;
   readonly local?: boolean;
   readonly partial?: boolean;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * D-SG-19: the command's GitHub transport context, which every plugin clone
    * and `ls-remote` of the command shares. The update root creates one when
@@ -259,9 +256,6 @@ export interface PreparePluginUpdateOptions {
    * pin materialization is testable without a real clone.
    */
   readonly pathPinProbe?: typeof materializeMarketplaceTagClone;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * D-SG-19, OQ-4: the command's GitHub transport context, whose plan the
    * candidate's clones run over. Every command root passes one; a direct
@@ -377,8 +371,6 @@ function makeUpdateCloneProbe(
   auth: {
     readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
   },
   refreshSource: boolean,
   cloneCandidates: Set<string> | undefined,
@@ -1173,14 +1165,10 @@ function unchangedDirectoryPin(
 function buildUpdateAuth(options: PreparePluginUpdateOptions): {
   readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
   readonly credentialOps: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
 } {
   return {
     ...(options.notification !== undefined && { notification: options.notification }),
-    credentialOps: options.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-    ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
-    ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
   };
 }
 

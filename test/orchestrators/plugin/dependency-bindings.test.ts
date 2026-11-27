@@ -286,8 +286,6 @@ describe("updateCaller", () => {
   test("carries the notification and every caller field the update sets", () => {
     // arrange
     const run = runWithNothingLoaded();
-    const authMemo = new Map<string, AuthAttemptResult>();
-    const commandAuth = auth();
     const commandTransport = transportContext();
 
     // act
@@ -305,9 +303,7 @@ describe("updateCaller", () => {
         mcpImplementation: "none",
         mapModel: true,
         partial: true,
-        authMemo,
         transportContext: commandTransport,
-        ...commandAuth,
         cascade: false,
         ctx: CTX,
         run,
@@ -323,9 +319,7 @@ describe("updateCaller", () => {
       run,
       mapModel: true,
       partial: true,
-      authMemo,
       transportContext: commandTransport,
-      ...commandAuth,
     });
   });
 

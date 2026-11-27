@@ -161,7 +161,7 @@ import type { CloneTransportNote } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult, CredentialOps } from "../auth-host.ts";
+import type { CredentialOps } from "../auth-host.ts";
 import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { GitAuthBundle, GitHubSshOps, GitOps } from "../marketplace/shared.ts";
 import type {
@@ -269,8 +269,8 @@ function logKeptSync(mpName: string, swapped: CloneSwapResult): void {
 /**
  * AUTH-02 / GAUTH-03: the auth bundle a PUP-2 sync asks and clones with, the
  * one `marketplace update` builds: github.com or the GitHub override host for
- * a github source (GHB-02), the clone URL's host for a url source, with the
- * run's `authMemo` (D-79-02).
+ * a github source (GHB-02), the clone URL's host for a url source, over the
+ * production credential surface (D-SG-27).
  */
 function syncAuthFor(
   source: GitHubSource | UrlSource,
@@ -281,8 +281,6 @@ function syncAuthFor(
     credentialOps,
     ctx: opts.ctx,
     run: opts.run,
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
   };
   return source.kind === "github"
     ? buildGitHubAuth(authArgs)
@@ -357,13 +355,10 @@ async function syncMarketplaceBySwap(args: {
  * answer is framed as `marketplace update` frames it (`refreshFramed`).
  *
  * AUTH-02: the check and the clone carry the same host-keyed auth bundle as
- * `marketplace update`, plus the run's `authMemo`, so a private marketplace
- * reaches the credential helper and, on a miss, the Device Flow. The bundle
- * is built inside the git arms, so a path-only run never reads
- * PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL (GHB-02). `updatePluginsWith`
- * allocates the `authMemo` when the caller supplies none and passes it here
- * (D-79-02), so that flow runs at most once per host across the marketplace
- * syncs and the plugin clones.
+ * `marketplace update`, so a private marketplace reaches the credential
+ * helper and, on a miss, the Device Flow. The bundle is built inside the git
+ * arms, so a path-only run never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL
+ * (GHB-02).
  *
  * D-SG-22: each sync records its re-clone's note into a collector of its own,
  * under the marketplace's name, as `marketplace update` does, so a same-name
@@ -373,7 +368,6 @@ async function syncMarketplaceBySwap(args: {
 function makeSyncCloneOnce(opts: UpdatePluginsOptions): MarketplaceSyncs {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const gitHubSsh = opts.gitHubSsh ?? DEFAULT_GITHUB_SSH_OPS;
-  const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const keepOnUnreachable = keepMarketplaceOnFailure(opts.environment);
   const renameOps = opts.renameOps ?? DEFAULT_RENAME_OPS;
   const synced = new Map<string, GitHubCloneNotes>();
@@ -394,7 +388,7 @@ function makeSyncCloneOnce(opts: UpdatePluginsOptions): MarketplaceSyncs {
 
     const source = mp.source as ParsedSource;
     if (source.kind === "github" || source.kind === "url") {
-      const auth = syncAuthFor(source, opts, credentialOps);
+      const auth = syncAuthFor(source, opts, DEFAULT_CREDENTIAL_OPS);
       await refreshFramed(locations, source, () =>
         syncMarketplaceBySwap({
           source,
@@ -477,11 +471,6 @@ function buildDirectThreePhaseArgs(
     // PURL-06: the test-only clone-cache seam for the git-source candidate
     // probe. Undefined in production, which selects the real imports.
     ...(opts.cloneCacheSeam !== undefined && { cloneCacheSeam: opts.cloneCacheSeam }),
-    // PROV-03 / D-79-02: auth seams so a git-source update on a provider host
-    // authenticates host-keyed at pin-resolution and re-clone.
-    ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
     // D-10-18: one memo pair for the WHOLE bulk run, allocated once by
     // `updatePluginsWith` and threaded into every target here -- never a
     // per-target allocation, or a repository common to several targets
@@ -558,17 +547,11 @@ async function updatePluginsWith(
     return;
   }
 
-  // D-79-02: ONE authMemo for the whole run, shared by the marketplace syncs
-  // and every target's clone and probe auth, so a Device Flow host prompts at
-  // most once. A caller-supplied memo wins. D-SG-19: beside it, ONE transport
-  // context, so every plugin clone of the run follows one probe. The
-  // marketplace syncs plan their own transports (SG-SSH-02).
+  // D-SG-19: ONE transport context for the whole run, so every plugin clone
+  // of the run follows one probe. The marketplace syncs plan their own
+  // transports (SG-SSH-02).
   const transportContext = opts.transportContext ?? newTransportContext();
-  const runOpts: UpdatePluginsOptions = {
-    ...opts,
-    authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
-    transportContext,
-  };
+  const runOpts: UpdatePluginsOptions = { ...opts, transportContext };
   const syncs = makeSyncCloneOnce(runOpts);
   // D-10-18: one memo pair for this WHOLE bulk run, never exposed on
   // `UpdatePluginsOptions` -- it is a run-internal bound, not a caller knob,
