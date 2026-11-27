@@ -38,11 +38,6 @@ last_mapped_at: 2026-10-05
 - Impact: NFR-1 atomicity is enforced by convention in these two; any new exclusion widens the hole silently.
 - Fix approach: keep the list at two; route new writes through `atomicWriteJson` or `atomicWriteText`.
 
-**`domain/github-auth.ts` calls `fetch` though domain/ is described as network-free:**
-- Issue: `extensions/pi-claude-marketplace/domain/github-auth.ts` performs Device Flow HTTP calls (`fetch(deviceCodeUrl, ...)`, default adapter over `globalThis.fetch`). ARCHITECTURE.md calls domain/ pure and network-free. It is the sole `fetch` exemption in `fetch-chokepoint` and is on the NFR-5 exemption list in `eslint.config.js`.
-- Impact: layering description and reality disagree; the file is a network surface living in the "pure" layer.
-- Fix approach: keep the injectable HTTP seam; consider moving the module to `platform/` or documenting the exception in ARCHITECTURE.md.
-
 **D-v1.0-01-11 ledger path lists in `eslint.config.js` are literal and fail open on rename:**
 - Issue: `PLUGIN_LEDGERS` and `MARKETPLACE_LEDGERS` (`eslint.config.js`, BLOCK C) are hand-written file paths feeding `import-x/no-restricted-paths` zones. Renaming or splitting a ledger leaves a stale entry and the zone stops covering it, with no error.
 - Files: `eslint.config.js`

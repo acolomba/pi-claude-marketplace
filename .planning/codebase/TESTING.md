@@ -111,45 +111,47 @@ Alongside it, each side-effecting port owns a reusable `*-fake.ts` module co-loc
 
 | port | fake | shared contract | run against production by |
 |---|---|---|---|
-| `CredentialOps` | `test/platform/credential-ops-fake.ts` | `test/platform/credential-ops-contract.ts` | `test/platform/git-credential.test.ts` |
 | `GitOps` | `test/platform/git-ops-fake.ts` | `test/platform/git-ops-contract.ts` | `test/platform/git.test.ts` |
 | `RemovalOps` | `test/platform/removal-ops-fake.ts` | `test/platform/removal-ops-contract.ts` | `test/shared/fs-utils.test.ts` |
-| `DeviceFlowHttp` | `test/domain/device-flow-fake.ts` | `test/domain/device-flow-contract.ts` | `test/domain/github-auth.test.ts` |
 
-`test/platform/credential-process-fake.ts` is a lower-level double for the credential subprocess and carries no contract suite. The contract modules export a `register*Contract(factory)` function called twice — once with the production implementation, once with the fake — so a fake that drifts from the real port fails the same cases the real one passes.
+The contract modules export a `register*Contract(factory)` function called twice — once with the production implementation, once with the fake — so a fake that drifts from the real port fails the same cases the real one passes.
 
-**Patterns** (`test/platform/credential-ops-fake.ts`, mirroring `test/platform/git-ops-fake.ts`):
+**Patterns** (`test/platform/git-ops-fake.ts`, abridged):
 
 ```typescript
-export interface CredentialOpsFakeOptions {
+export interface GitOpsFakeOptions {
   readonly boundary: "memory";
-  readonly credentials?: ReadonlyArray<readonly [host: string, credential: GitCredentials]>;
-  readonly fillError?: Error;
-  readonly approveError?: Error;
-  readonly rejectError?: Error;
+  readonly remoteRefs?: Readonly<Record<string, string>>;
+  readonly cloneFixture?: {
+    readonly boundary: "local";
+    readonly sourceDir: string;
+  };
+  readonly cloneError?: Error;
+  readonly checkoutError?: Error;
+  readonly absentCommits?: readonly string[];
 }
 
-export interface CredentialOpsFake {
-  readonly credentialOps: CredentialOps;
-  readonly calls: CredentialOpsFakeCalls;
-  storedCredential(host: string): GitCredentials | null;
+export interface GitOpsFake {
+  readonly gitOps: GitOps;
+  readonly state: GitOpsFakeState;
+  readFile(dir: string, filepath: string): Promise<string | null>;
 }
 ```
 
-- `create*Fake(options)` factory naming (`createCredentialOpsFake`, `createGitOpsFake`, `createRemovalOpsFake`, `createDeviceFlowFake`, `createCredentialProcessFake`), each returning the production-shaped port plus a readonly `calls` bag the test asserts against
-- Every options bag declares its boundary explicitly, and the factory **throws** when the declaration is missing or wrong (`createCredentialOpsFake requires the explicit memory boundary`) — the boundary is enforced at runtime, not merely documented. `boundary: "memory"` is the default discipline: no filesystem ops, no environment mutation, no subprocess spawn
-- Reaching past that boundary requires a separately-named opt-in, so it cannot happen implicitly: `git-ops-fake.ts`'s `cloneFixture: { boundary: "local" }` copies a real directory with `cp`, and `removal-ops-fake.ts`'s `DelegatingRemovalOpsOptions` takes `boundary: "delegate"` plus the collaborator every unfaulted call forwards to. `device-flow-fake.ts` additionally requires `network: "disabled"`
+- `create*Fake(options)` factory naming (`createGitOpsFake`, `createRemovalOpsFake`), each returning the production-shaped port plus the calls the test asserts against (`state.calls` for `GitOps`, `calls` for `RemovalOps`)
+- Every options bag declares its boundary explicitly, and the factory **throws** when the declaration is missing or wrong (`createGitOpsFake requires the explicit memory boundary`) — the boundary is enforced at runtime, not merely documented. `boundary: "memory"` is the default discipline: no filesystem ops, no environment mutation, no subprocess spawn
+- Reaching past that boundary requires a separately-named opt-in, so it cannot happen implicitly: `git-ops-fake.ts`'s `cloneFixture: { boundary: "local" }` copies a real directory with `cp`, and `removal-ops-fake.ts`'s `DelegatingRemovalOpsOptions` takes `boundary: "delegate"` plus the collaborator every unfaulted call forwards to
 - Fakes import production contracts with `import type` where they can, so a support module pulls little runtime production code into the test tree. `git-ops-fake.ts` has one production value import, `GitCommandError` from `shared/errors.ts`, because its failures are the typed errors system git gives (`checkoutFailure(ref)` is `commit-missing` or `local-ref-missing`)
-- Failure injection is opt-in per operation via `*Error?: Error` option fields (`fillError`, `approveError`, `rejectError`, `cloneError`, `checkoutError`, `resolveRemoteRefError`), so a test can exercise its own try/catch around one specific seam. The `GitOps` fake also takes `absentCommits`, the commits its clones lack, and `recordedCalls(calls)` returns only the members a command called, so a test that asserts "no git call" does not list every member
+- Failure injection is opt-in per operation via `*Error?: Error` option fields (`cloneError`, `checkoutError`, `resolveRemoteRefError`), so a test can exercise its own try/catch around one specific seam. The `GitOps` fake also takes `absentCommits`, the commits its clones lack, and `recordedCalls(calls)` returns only the members a command called, so a test that asserts "no git call" does not list every member
 
 **What to Mock:**
-- External subprocess/network/credential-store boundaries: `git` operations (`GitOps`), OS credential helper subprocess calls (`CredentialOps`), device-flow HTTP calls (`DeviceFlowHttp`), and destructive filesystem removal (`RemovalOps`, injected as a port)
+- External subprocess/network/credential-store boundaries: `git` operations (`GitOps`), the hosted catalog download (`HostedManifestFetch`), and destructive filesystem removal (`RemovalOps`, injected as a port)
 
 **What NOT to Mock:**
 - The filesystem for state/config I/O — tests use real `mkdtemp` temp directories throughout, never an in-memory fs layer. `withHermeticHome` wrappers do exist and are **not** a counter-example: they delegate to `test/platform/hermetic-environment.ts`, which `mkdtemp`s a real root and repoints `HOME` and `PI_CODING_AGENT_DIR` at real directories inside it, then restores both and removes the tree. It relocates the filesystem rather than interposing a fake one. The name is per-suite rather than shared — 15 local definitions, of which only `test/orchestrators/plugin/update-flow.test.ts` exports one and only `test/orchestrators/plugin/update-swap.test.ts` imports it; `createHermeticEnvironment(t, prefix)` is the variant that registers cleanup via `t.after`
 - Production modules under test — dependency injection is used instead of module-mocking/monkey-patching; see CONVENTIONS.md's "Dependency injection over test-only seams" for the underlying principle (`bridges/hooks/routing-state.ts` is the non-test worked example of the same discipline)
 
-**Public-interface testing philosophy:** tests are written against a module's exported public interface, not against internals reached by exporting them solely "for test." When testing a unit is hard through its public surface, that difficulty is treated as signal that an inner concern wants to be extracted into its own module (with its own public interface) — not a reason to widen the original module's exports to satisfy a test. Passing a dependency (e.g. `spawn`, `gitOps`, `credentialOps`) into a function as a parameter is the sanctioned way to make that dependency testable, because it becomes part of the function's real public interface rather than a back door; a module-global `_setSpawnForTest`-style seam is the anti-pattern this guards against.
+**Public-interface testing philosophy:** tests are written against a module's exported public interface, not against internals reached by exporting them solely "for test." When testing a unit is hard through its public surface, that difficulty is treated as signal that an inner concern wants to be extracted into its own module (with its own public interface) — not a reason to widen the original module's exports to satisfy a test. Passing a dependency (e.g. `spawn`, `gitOps`, `removalOps`) into a function as a parameter is the sanctioned way to make that dependency testable, because it becomes part of the function's real public interface rather than a back door; a module-global `_setSpawnForTest`-style seam is the anti-pattern this guards against.
 
 ## Fixtures and Factories
 
