@@ -1172,21 +1172,22 @@ function constraintFromVerdict(
 
 /**
  * Builds the constraint gate's own options, threading the run-scoped tag
- * memos in only when the caller supplied them (D-10-18), and the caller's
- * notification context only when it has one, which keeps the gate's tag
- * queries (NFR-5) -- kept out of `preparePluginUpdate`'s own body for the
- * same cognitive-complexity reason as `resolvePinnedUpdateCandidate` above.
+ * memos in only when the caller supplied them (D-10-18). A caller with a
+ * notification context keeps the git arm's source tag query
+ * (`listsSourceTags`, D-03-03) -- kept out of `preparePluginUpdate`'s own
+ * body for the same cognitive-complexity reason as
+ * `resolvePinnedUpdateCandidate` above.
  */
 function constraintGateOptions(
   options: PreparePluginUpdateOptions,
   base: Omit<
     UpdateConstraintOptions,
-    "marketplaceTagMemo" | "notification" | "requesters" | "seam" | "tagMemo"
+    "listsSourceTags" | "marketplaceTagMemo" | "requesters" | "seam" | "tagMemo"
   >,
 ): UpdateConstraintOptions {
   return {
     ...base,
-    ...(options.notification !== undefined && { notification: options.notification }),
+    ...(options.notification !== undefined && { listsSourceTags: true }),
     ...(options.requesters !== undefined && { requesters: options.requesters }),
     excludedVersions: options.excludedVersions,
     ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),

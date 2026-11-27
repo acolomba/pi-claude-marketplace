@@ -13,7 +13,6 @@ import {
   DependencyDeclarationsUnreadableError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -30,7 +29,6 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 type PluginStateRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
@@ -70,11 +68,6 @@ function dependency(
   overrides: Partial<AddressedDependency> & { readonly name: string },
 ): AddressedDependency {
   return { marketplace: "mp", ...overrides };
-}
-
-/** A no-op ui context, for the cases whose tag query needs a notification context. */
-function silentCtx(): NotificationContext {
-  return { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
 }
 
 /** The target's own git source repository, for the git-arm cases below. */
@@ -364,7 +357,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+        listsSourceTags: true,
       }),
     );
 
@@ -418,7 +411,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source: gitSource() },
         seam,
-        notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+        listsSourceTags: true,
       }),
     );
 
@@ -470,7 +463,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+        listsSourceTags: true,
       }),
     );
 
@@ -488,8 +481,8 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(calls[0]?.source, source);
   });
 
-  test("UPDT-01 / NFR-5: the git arm skips the tag query when no notification context was threaded", async () => {
-    // arrange -- `options()` threads no notification context.
+  test("UPDT-01: the git arm skips the tag query in a run that lists no source tags", async () => {
+    // arrange -- `options()` leaves `listsSourceTags` unset.
     const declarations = new Map<string, readonly AddressedDependency[]>([
       ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
     ]);
@@ -498,7 +491,7 @@ describe("evaluateUpdateConstraint", () => {
     const seam: UpdateConstraintSeam = {
       buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
       probeDependencyTags: () => {
-        throw new Error("not expected: no notification context was threaded");
+        throw new Error("not expected: the run lists no source tags");
       },
       probeMarketplaceTags: () => {
         throw new Error("not expected on a git-backed entry source");
@@ -560,13 +553,10 @@ describe("evaluateUpdateConstraint", () => {
     assert.strictEqual(calls[0]?.pluginName, "target");
     assert.strictEqual(calls[0]?.marketplaceRoot, "/cwd/mp");
     assert.strictEqual(calls[0]?.range, ">=1.0.0 <2.0.0-0");
-    assert.deepStrictEqual(
-      [calls[0]?.marketplaceSource, calls[0]?.withHostBundle],
-      [pathSource("/cwd/mp"), undefined],
-    );
+    assert.deepStrictEqual(calls[0]?.marketplaceSource, pathSource("/cwd/mp"));
   });
 
-  test("D-SG-09: a path entry source hands the probe the marketplace source and asks for the host bundle under a notification context", async () => {
+  test("D-SG-09: a path entry source hands the probe a git marketplace's source in a run that lists no source tags", async () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>([
       ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
@@ -586,19 +576,12 @@ describe("evaluateUpdateConstraint", () => {
     const marketplaceSource = "https://example.com/acme/marketplace.git";
 
     // act
-    await evaluateUpdateConstraint(
-      options({
-        state,
-        seam,
-        marketplaceSource,
-        notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
-      }),
-    );
+    await evaluateUpdateConstraint(options({ state, seam, marketplaceSource }));
 
     // assert
     assert.deepStrictEqual(
-      calls.map((call) => [call.marketplaceSource, call.withHostBundle]),
-      [[marketplaceSource, true]],
+      calls.map((call) => call.marketplaceSource),
+      [marketplaceSource],
     );
   });
 
@@ -618,7 +601,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source: gitSource() },
         seam: seamReturning(declarations),
-        notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+        listsSourceTags: true,
       }),
     );
 
@@ -690,7 +673,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+        listsSourceTags: true,
       }),
     );
 
@@ -757,7 +740,7 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+        listsSourceTags: true,
       }),
     );
 
@@ -824,14 +807,13 @@ describe("evaluateUpdateConstraint", () => {
       },
     };
     const tagMemo = new Map<string, readonly RemoteTag[]>();
-    const notification = { ctx: silentCtx(), run: runWithNothingLoaded() };
 
     // act
     await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, notification }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
     );
     await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, notification }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
     );
 
     // assert
@@ -899,14 +881,13 @@ describe("evaluateUpdateConstraint", () => {
       },
     };
     const tagMemo = new Map<string, readonly RemoteTag[]>();
-    const notification = { ctx: silentCtx(), run: runWithNothingLoaded() };
 
     // act
     const first = await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, notification }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
     );
     const second = await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, notification }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
     );
 
     // assert -- the failed attempt wrote no memo entry, so the second

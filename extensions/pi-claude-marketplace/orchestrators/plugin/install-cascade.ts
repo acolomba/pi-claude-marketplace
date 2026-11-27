@@ -932,7 +932,6 @@ async function probeMemberPin(
       marketplaceSource: tagSource.marketplaceSource,
       range,
       tagMemo: options.marketplaceTagMemo,
-      withHostBundle: true,
     });
 
     // TAGS-02 / D-07-07: no tag satisfies the constraint, or the

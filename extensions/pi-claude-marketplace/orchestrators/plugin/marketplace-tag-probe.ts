@@ -77,11 +77,6 @@ export interface MarketplaceTagProbeOptions {
    * bounds that to one listing per repository.
    */
   readonly tagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
-  /**
-   * Set when a git marketplace's listing carries the auth bundle of its
-   * address (`authBundleFor`); absent, the listing runs without a bundle.
-   */
-  readonly withHostBundle?: true;
 }
 
 /**
@@ -108,10 +103,12 @@ interface TagListing {
 /**
  * The listing a marketplace source reads its tags with: the remote listing of
  * a `github` or `url` marketplace at `tagReadUrl`'s address, which also keys
- * the memo, with the auth bundle of its
- * host, or the local listing of a directory marketplace's root. Any other
- * source (a hosted catalog, or a source that no longer parses) has no
- * repository to list.
+ * the memo, with the auth bundle of its host, or the local listing of a
+ * directory marketplace's root. Every remote listing carries the bundle, so a
+ * credential the host refuses fails as `StoredCredentialRejectedError` in a
+ * command and in a background run alike (GAUTH-04). Any other source (a
+ * hosted catalog, or a source that no longer parses) has no repository to
+ * list.
  */
 function tagListingOf(
   options: MarketplaceTagProbeOptions,
@@ -120,16 +117,10 @@ function tagListingOf(
   const source = parsePluginSource(options.marketplaceSource);
   if (source.kind === "github" || source.kind === "url") {
     const url = tagReadUrl(source, transportForce(process.env));
-    const { withHostBundle } = options;
     return {
       key: url,
       list: () =>
-        seam.listRemoteTags({
-          url,
-          ...(withHostBundle === true && {
-            auth: authBundleFor(canonicalCloneUrl(source), source.kind),
-          }),
-        }),
+        seam.listRemoteTags({ url, auth: authBundleFor(canonicalCloneUrl(source), source.kind) }),
     };
   }
 

@@ -258,7 +258,7 @@ describe("probeMarketplaceTags on a git marketplace", () => {
 
     // act
     const result = await probeMarketplaceTags(
-      options({ seam: fake.seam, marketplaceSource: URL_SOURCE, withHostBundle: true }),
+      options({ seam: fake.seam, marketplaceSource: URL_SOURCE }),
     );
 
     // assert
@@ -286,7 +286,7 @@ describe("probeMarketplaceTags on a git marketplace", () => {
 
     // act
     const result = await probeMarketplaceTags(
-      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, withHostBundle: true, tagMemo }),
+      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, tagMemo }),
     );
 
     // assert
@@ -328,7 +328,6 @@ describe("probeMarketplaceTags on a git marketplace", () => {
         options({
           seam: fake.seam,
           marketplaceSource: GITHUB_SOURCE,
-          withHostBundle: true,
           tagMemo,
         }),
       );
@@ -355,7 +354,7 @@ describe("probeMarketplaceTags on a git marketplace", () => {
 
     // act
     const result = await probeMarketplaceTags(
-      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, withHostBundle: true }),
+      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE }),
     );
 
     // assert
@@ -363,17 +362,6 @@ describe("probeMarketplaceTags on a git marketplace", () => {
       { result, urls: fake.remoteCalls.map((call) => call.url) },
       { result: { kind: "tag-listing-failed", cause: err }, urls: [GITHUB_SSH_URL] },
     );
-  });
-
-  test("D-SG-09: without withHostBundle, the remote listing runs without a bundle", async () => {
-    // arrange
-    const fake = createFakeSeam({ tags: [] });
-
-    // act
-    await probeMarketplaceTags(options({ seam: fake.seam, marketplaceSource: URL_SOURCE }));
-
-    // assert
-    assert.deepStrictEqual(fake.remoteCalls, [{ url: URL_SOURCE }]);
   });
 
   test("D-SG-09, D-10-18: two probes of one marketplace URL list once, keyed by the URL", async () => {

@@ -1874,10 +1874,10 @@ test("D-09-05: a root range on a path-source root reaches the marketplace tag pr
     "the marketplace tag probe is queried once for the root",
   );
   // D-SG-09: the probe gets the marketplace record's source, which decides
-  // where the tags are read, and asks for the bundle of its address.
+  // where the tags are read.
   assert.deepStrictEqual(
-    seen.map((query) => [query.marketplaceSource, query.withHostBundle]),
-    [[state.marketplaces[MARKETPLACE]?.source, true]],
+    seen.map((query) => query.marketplaceSource),
+    [state.marketplaces[MARKETPLACE]?.source],
   );
   assert.deepStrictEqual(
     cascade.kind === "installed" &&

@@ -35,8 +35,6 @@ import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
 import type {
   CatalogConstraintSeam,
   ConstraintHolder,
@@ -80,11 +78,11 @@ export interface UpdateConstraintOptions {
   /** WR-1: the versions a dependency plan ruled out for the move. */
   readonly excludedVersions?: readonly string[] | undefined;
   /**
-   * The command's notification context. Its presence keeps stage one's tag
-   * query of a git-backed entry source, and gives a git marketplace's tag
-   * listing the auth bundle of its address.
+   * Set when stage one lists a git-backed entry source's own tags. The
+   * caller sets it when it runs with a notification context; a path entry
+   * source lists its marketplace's tags either way (see `probeGitStageOne`).
    */
-  readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
+  readonly listsSourceTags?: true;
 }
 
 // D-PL2-06: the holders are read from their installed copies, so an update is
@@ -178,15 +176,18 @@ function decodeTagProbe(
  * Stage one on a git-backed entry source: probes the source repository's own
  * release tags through the auth bundle of the source's address, the one the
  * clone probe binds (`authBundleFor`) -- no second credential acquisition
- * path (AUTH-09).
+ * path (AUTH-09). D-03-03 lets an update read those tags, and D-PL8-01 lets
+ * the background pass use the network as that command does.
  *
- * Every REAL caller threads a `ctx` (`UpdatePluginsOptions.ctx` is required
- * the entire way down this call chain); `UpdateConstraintOptions.notification`
- * stays optional only so a caller that never reaches this arm -- unconstrained,
- * or held before stage one -- needs none. Reaching here with no `ctx` at all
- * skips the query, and the fold admits the range unpinned, leaving the outcome
- * to a later stage -- the same "cannot decide, defer" shape D-10-16 gives an
- * unreadable local listing (NFR-5).
+ * A run without `listsSourceTags` skips the query, and the fold admits the
+ * range unpinned, leaving the outcome to a later stage -- the same "cannot
+ * decide, defer" shape D-10-16 gives an unreadable local listing. The
+ * caller leaves it unset when it has no notification context: a cascade run
+ * that its caller gives no context, such as the autoupdate cascade through
+ * `materialize-latest.ts`. The skip dates from the sign-in that needed that
+ * context and no recorded decision keeps it today (D-SG-27 removed the
+ * sign-in); the path arm below lists its marketplace's tags in the same run
+ * (D-SG-09).
  */
 async function probeGitStageOne(
   options: UpdateConstraintOptions,
@@ -195,7 +196,7 @@ async function probeGitStageOne(
   range: string,
   holders: readonly ConstraintHolder[],
 ): Promise<UpdateConstraintVerdict> {
-  if (options.notification === undefined) {
+  if (options.listsSourceTags !== true) {
     return admitsRange(range, holders);
   }
 
@@ -211,9 +212,8 @@ async function probeGitStageOne(
 /**
  * Stage one on a `path` entry source: probes the marketplace repository's
  * release tags, from the marketplace remote for a git marketplace and from
- * the checkout for a directory marketplace (TAGS-01, D-SG-09). A git
- * marketplace's listing runs without a bundle when the caller threads no
- * `ctx`.
+ * the checkout for a directory marketplace (TAGS-01, D-SG-09), whether or not
+ * the run sets `listsSourceTags`.
  */
 async function probePathStageOne(
   options: UpdateConstraintOptions,
@@ -227,7 +227,6 @@ async function probePathStageOne(
     marketplaceSource: options.marketplaceSource,
     range,
     ...(options.marketplaceTagMemo !== undefined && { tagMemo: options.marketplaceTagMemo }),
-    ...(options.notification !== undefined && { withHostBundle: true }),
   });
 
   // D-10-14 / D-10-16: an unreadable listing and an empty one are the
