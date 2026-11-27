@@ -1,7 +1,7 @@
 ---
 phase: 04-ssh-sources-and-transport-selection
 verified: 2026-11-27T06:53:40Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .planning/phases/04-ssh-sources-and-transport-selection/04-01-PLAN.md
@@ -316,6 +316,10 @@ These items are in the frontmatter. Automated checks pass; these remain.
 
 1. **Windows SSH-first plugin install (SG-SSH-05, WINDOWS #128).** Test: the manual Windows check on the pull request. Expected: SSH first, then the `-G` check through Git for Windows' sh, then HTTPS, then SSH. Why human: CI and this sandbox run Linux only.
 2. **Real ssh against github.com (04-VALIDATION Manual-Only).** Test: run the probe and SSH clones on a machine with a GitHub key and on one without. Expected: the probe reads configured or not-configured as upstream does, and the clones follow. Why human: no test may reach github.com or run a real ssh.
+
+### Human Validation (2026-11-27)
+
+The maintainer chose to run both human items as manual checks on the pull request: the Windows SSH-first plugin install (SG-SSH-05, WINDOWS #128) and real ssh against github.com, with and without a GitHub key. Every automated check passes, so the phase status is `passed`, and the two checks stay open on the pull request.
 
 ### Gaps Summary
 

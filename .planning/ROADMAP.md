@@ -104,7 +104,7 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
 - [x] **Phase 1: Harness on System Git** - The test suites build fixtures and run git with the system binary under a hermetic environment, and the cucumber stand-ins serve system git over HTTPS and SSH (completed 2026-11-23)
 - [x] **Phase 2: Git Process Seam and Typed Failures** - Every git process starts from one hardened module that cannot prompt, hang, or run repository code, a git failure arrives as a typed error with a kind, and a missing git gets a clear message (completed 2026-11-23)
 - [x] **Phase 3: System Git Transport and Clone Shape** - Marketplaces and git-source plugins clone, fetch, and update with system git in Claude Code's shape, and clones made before the upgrade keep working (completed 2026-11-24)
-- [ ] **Phase 4: SSH Sources and Transport Selection** - A user adds a marketplace or installs a plugin from an SSH URL, and `owner/repo` sources choose SSH or HTTPS as Claude Code does
+- [x] **Phase 4: SSH Sources and Transport Selection** - A user adds a marketplace or installs a plugin from an SSH URL, and `owner/repo` sources choose SSH or HTTPS as Claude Code does (completed 2026-11-27)
 - [ ] **Phase 5: Credential Surface** - Git authenticates only through what the machine holds, Device Flow is removed or kept as discuss decides, and tokens stored through it keep working
 - [ ] **Phase 6: Failure-Message Parity** - Clone and fetch failures report Claude Code's message for each failure class, and no output shows a credential
 - [ ] **Phase 7: Submodules and Marketplace Pins** - Plugin clones fetch their submodules, marketplace clones fetch only the submodules that hold plugin files, and a SHA-pinned marketplace follows upstream's path
@@ -331,7 +331,7 @@ Plans:
   2. For an `owner/repo` marketplace source the user sees upstream's progress lines: SSH first only when the probe reports SSH configured, HTTPS first otherwise, a retry with the other transport on failure, and upstream's error when both fail; with `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` no probe runs and every GitHub clone uses HTTPS, and `CLAUDE_CODE_REMOTE` changes nothing; cucumber scenarios pin each path (SG-SSH-02, SG-SSH-03).
   3. A `github` plugin source on install, update, and dependency install follows the probe, fallback, and skip rules of the upstream surface discuss chose (Q7), with cucumber scenarios for each, and on Windows a plugin install retries an SSH failure over HTTPS as upstream does (SG-SSH-04, SG-SSH-05).
   4. A marketplace or plugin cloned over SSH is the same source as its HTTPS form: a later update, reinstall, or install never refuses it as a stale clone, and its `plugin-clones/<key>/` directory does not move (SG-SSH-06).
-**Plans**: 26/26 plans executed in 11 waves; 8 gap-closure plans (04-19 to 04-26) planned in 4 waves
+**Plans**: 26/26 plans complete in 11 waves; 8 gap-closure plans (04-19 to 04-26) planned in 4 waves
 
 Plans:
 **Wave 1**
@@ -458,7 +458,7 @@ Plans:
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
-| 4. SSH Sources and Transport Selection | 26/26 | In Progress | - |
+| 4. SSH Sources and Transport Selection | 26/26 | Complete    | 2026-11-27 |
 | 5. Credential Surface | 0/TBD | Not started | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |

@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: system-git
 milestone_name: System Git
-current_phase: 04
-current_phase_name: SSH Sources and Transport Selection
-status: executing
-stopped_at: Phase 3 complete, ready to plan Phase 4
-last_updated: "2026-11-25T14:35:33.842Z"
-last_activity: 2026-11-25
-last_activity_desc: Phase 04 execution started
-state_head: ffc7dfe21ec0bed67090d7d0baabc04c60edc563
+current_phase: 5
+current_phase_name: Credential Surface
+status: ready_to_discuss
+stopped_at: Phase 4 complete, ready to discuss Phase 5
+last_updated: "2026-11-27T11:30:34.470Z"
+last_activity: 2026-11-27
+last_activity_desc: Phase 4 complete, transitioned to Phase 5
+state_head: 29c1a031f7ccac2e9feebf2c136aa44ab8d710d7
 progress:
   total_phases: 8
-  completed_phases: 3
-  total_plans: 51
-  completed_plans: 33
-  percent: 38
+  completed_phases: 4
+  total_plans: 59
+  completed_plans: 59
+  percent: 50
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 04 (SSH Sources and Transport Selection) — EXECUTING
-Plan: 1 of 18
-Status: Executing Phase 04
-Last activity: 2026-11-25 — Phase 04 execution started
+Phase: 5 — Credential Surface
+Plan: Not started
+Status: Ready to discuss Phase 5
+Last activity: 2026-11-27 — Phase 4 complete, transitioned to Phase 5
 
-Progress: [████░░░░░░] 38%
+Progress: [█████░░░░░] 50%
 
 
 ### system-git Phase 1 (Harness on System Git): records for Phase 3
@@ -1408,8 +1408,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-23
-Stopped at: Phase 3 complete, ready to verify Phase 4
+Last session: 2026-11-27
+Stopped at: Phase 4 complete, ready to discuss Phase 5
 Resume file: None
 
 ### Phase 2 completion-helper notes

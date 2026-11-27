@@ -39,12 +39,12 @@
 
 ### SSH and transport selection (SG-SSH)
 
-- [ ] **SG-SSH-01**: A user can add a marketplace or install a plugin from `git@host:path`, `ssh://`, `git+ssh://`, and `ssh+git://` URLs, with upstream's validator; `git://` stays refused. This amends D-76-01 under its own decision ID; whether `http://` and the git-subdir object `url` change follows discuss (Q6).
-- [ ] **SG-SSH-02**: For an `owner/repo` marketplace source, the extension runs upstream's SSH probe, clones over SSH first only when the probe reports SSH configured and over HTTPS otherwise, retries with the other transport on failure, and prints upstream's progress lines and its both-failed error.
-- [ ] **SG-SSH-03**: `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` makes every GitHub clone use HTTPS with no probe, as upstream does; `CLAUDE_CODE_REMOTE` is not read (Q16).
-- [ ] **SG-SSH-04**: A `github` plugin source on install, update, and dependency install uses the probe, fallback, and skip rules of the upstream surface chosen per discuss (Q7: shell `claude plugin install`, or in-session `/plugin`).
-- [ ] **SG-SSH-05**: On Windows, a plugin install follows upstream's Windows-only SSH-to-HTTPS retry.
-- [ ] **SG-SSH-06**: A clone made over SSH is recognized as the same source as its HTTPS form (scp-aware origin identity), so it is never refused as a stale clone, and its `plugin-clones/<key>/` directory does not move.
+- [x] **SG-SSH-01**: A user can add a marketplace or install a plugin from `git@host:path`, `ssh://`, `git+ssh://`, and `ssh+git://` URLs, with upstream's validator; `git://` stays refused. This amends D-76-01 under its own decision ID; whether `http://` and the git-subdir object `url` change follows discuss (Q6).
+- [x] **SG-SSH-02**: For an `owner/repo` marketplace source, the extension runs upstream's SSH probe, clones over SSH first only when the probe reports SSH configured and over HTTPS otherwise, retries with the other transport on failure, and prints upstream's progress lines and its both-failed error.
+- [x] **SG-SSH-03**: `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` makes every GitHub clone use HTTPS with no probe, as upstream does; `CLAUDE_CODE_REMOTE` is not read (Q16).
+- [x] **SG-SSH-04**: A `github` plugin source on install, update, and dependency install uses the probe, fallback, and skip rules of the upstream surface chosen per discuss (Q7: shell `claude plugin install`, or in-session `/plugin`).
+- [x] **SG-SSH-05**: On Windows, a plugin install follows upstream's Windows-only SSH-to-HTTPS retry.
+- [x] **SG-SSH-06**: A clone made over SSH is recognized as the same source as its HTTPS form (scp-aware origin identity), so it is never refused as a stale clone, and its `plugin-clones/<key>/` directory does not move.
 
 ### Credentials (SG-AUTH)
 
@@ -116,12 +116,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SG-TRN-06 | Phase 3 | Complete |
 | SG-TRN-07 | Phase 3 | Complete |
 | SG-MIG-01 | Phase 3 | Complete |
-| SG-SSH-01 | Phase 4 | Pending |
-| SG-SSH-02 | Phase 4 | Pending |
-| SG-SSH-03 | Phase 4 | Pending |
-| SG-SSH-04 | Phase 4 | Pending |
-| SG-SSH-05 | Phase 4 | Pending |
-| SG-SSH-06 | Phase 4 | Pending |
+| SG-SSH-01 | Phase 4 | Complete |
+| SG-SSH-02 | Phase 4 | Complete |
+| SG-SSH-03 | Phase 4 | Complete |
+| SG-SSH-04 | Phase 4 | Complete |
+| SG-SSH-05 | Phase 4 | Complete |
+| SG-SSH-06 | Phase 4 | Complete |
 | SG-AUTH-01 | Phase 5 | Pending |
 | SG-AUTH-02 | Phase 5 | Pending |
 | SG-AUTH-03 | Phase 5 | Pending |
