@@ -230,14 +230,6 @@ export function seamWith(gitOps: GitOps): InstallCloneCacheSeam {
   };
 }
 
-export const INSTALL_DEVICE_CODE = {
-  device_code: "MOCK_DEVICE_CODE",
-  expires_in: 900,
-  interval: 0,
-  user_code: "ABCD-1234",
-  verification_uri: "https://github.com/login/device",
-} as const;
-
 export interface CatalogPlugin {
   readonly version: string;
   readonly dependencies?: readonly string[];

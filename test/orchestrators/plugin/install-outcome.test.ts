@@ -41,8 +41,6 @@ import {
   SymlinkRefusedError,
 } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
@@ -53,7 +51,6 @@ import {
 } from "../../shared/notification-run-seeds.ts";
 
 import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
-import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   InstallFailureCapture,
   InstallLedgerOptions,
@@ -1417,26 +1414,10 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
   const recordCalls: Array<Parameters<RecordMarketplace>[0]> = [];
   const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
   const options = projectInstallOptions(environment.cwd);
-  const credentials = createCredentialOpsFake({ boundary: "memory" });
-  const authMemo = new Map<string, AuthAttemptResult>();
-  const deviceFlow = createDeviceFlowFake({
-    boundary: "memory",
-    network: "disabled",
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      expires_in: 900,
-      interval: 0,
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-    },
-  });
 
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
     ...options,
-    credentialOps: credentials.credentialOps,
-    deviceFlowHttp: deviceFlow.http,
-    authMemo,
     addedMarketplaces,
     marketplaceAdd: marketplaceAddSeam((args) => {
       recordCalls.push(args);
@@ -1449,8 +1430,8 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.version, "0.0.2");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, projectTree.pluginRoot);
-  // D-SG-27: the add gets none of the ledger's credential, sign-in, or memo
-  // options, so its bundle carries the production credential surface.
+  // D-SG-27: the add takes no credential, sign-in, or memo option, so its
+  // bundle carries the production credential surface.
   assert.deepStrictEqual(recordCalls, [
     {
       state: seeded.state,
@@ -3757,7 +3738,7 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
   ]);
 });
 
-test("the callback reaches the real clone probe through the ledger's own cache, credential, and memo seams", async (t) => {
+test("the callback reaches the real clone probe through the ledger's own cache seam", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-git-seam-");
   const seeded = await seedPlugin(environment.cwd, {
@@ -3767,21 +3748,8 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
   const locations = locationsFor("project", environment.cwd);
   const cloned: Array<{ readonly cloneUrl: string; readonly pin: string }> = [];
   // No `cloneProbe` override here: the callback falls through to the REAL
-  // probe, which is kept network-free by the cache seam below. That seam, the
-  // credential collaborator, and the per-host memo are the three optional
-  // members the callback forwards only when the caller supplied them.
-  const authMemo = new Map<string, AuthAttemptResult>();
-  const deviceFlow = createDeviceFlowFake({
-    boundary: "memory",
-    network: "disabled",
-    deviceCode: {
-      device_code: "MOCK_DEVICE_CODE",
-      expires_in: 900,
-      interval: 0,
-      user_code: "ABCD-1234",
-      verification_uri: "https://github.com/login/device",
-    },
-  });
+  // probe, which is kept network-free by the cache seam below, an optional
+  // member the callback forwards only when the caller supplied it.
 
   // act
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
@@ -3794,8 +3762,6 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
     consentView: "none",
     removalOps: createRemovalOps(),
     env: {},
-    authMemo,
-    deviceFlowHttp: deviceFlow.http,
     cloneCacheSeam: {
       resolvePluginPin: (args) =>
         Promise.resolve({ cloneUrl: canonicalCloneUrl(args.source), pin: RESOLVED_SHA }),
@@ -3817,9 +3783,6 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
   assert.equal(ledgerOutcome.summary.version, "0.0.1");
-  // A path source needs no credential, so the device flow is threaded but
-  // never consulted.
-  assert.deepStrictEqual(deviceFlow.calls.requestCode, []);
 });
 
 test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the tag's commit, its semver and its oid", async (t) => {

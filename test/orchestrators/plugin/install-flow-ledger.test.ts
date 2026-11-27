@@ -32,6 +32,7 @@ import {
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { defaultPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -62,16 +63,13 @@ import {
   type Phase,
 } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import {
-  INSTALL_DEVICE_CODE,
   createGitOps,
   createInstallMissingDependency,
   createInstallPlugin,
@@ -85,7 +83,6 @@ import { seedMarketplaceRecord } from "./marketplace-seed.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { GitAuthBundle } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
@@ -12008,19 +12005,6 @@ test("FORCE-05: force cannot bypass a missing marketplace", async () => {
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
 
-function installDeviceFlow(
-  options: {
-    readonly pollResponses?: Parameters<typeof createDeviceFlowFake>[0]["pollResponses"];
-  } = {},
-): ReturnType<typeof createDeviceFlowFake> {
-  return createDeviceFlowFake({
-    boundary: "memory",
-    deviceCode: INSTALL_DEVICE_CODE,
-    network: "disabled",
-    ...(options.pollResponses === undefined ? {} : { pollResponses: options.pollResponses }),
-  });
-}
-
 function captureInstallAuth(inner: InstallCloneCacheSeam): {
   readonly calls: Array<{ readonly auth: GitAuthBundle | undefined; readonly cloneUrl: string }>;
   readonly seam: InstallCloneCacheSeam;
@@ -13345,7 +13329,7 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
   });
 });
 
-test("plugin install authentication: threads a GitHub provider bundle to the pinned clone", async () => {
+test("plugin install authentication: threads a github.com bundle over the production credential surface to the pinned clone", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-github-"));
     try {
@@ -13361,18 +13345,13 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
       });
       const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const deviceFlow = installDeviceFlow();
       const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
-        authMemo: new Map(),
         cloneCacheSeam: authCapture.seam,
-        credentialOps: credentials.credentialOps,
         ctx,
         cwd,
-        deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
         run,
@@ -13394,21 +13373,17 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl }) => ({
           authHost: auth?.host,
-          authKind: auth?.kind,
           cloneUrl,
           credentialOps: auth?.credentialOps,
         })),
         [
           {
             authHost: "github.com",
-            authKind: "device-flow",
             cloneUrl: "https://github.com/org/repo",
-            credentialOps: credentials.credentialOps,
+            credentialOps: DEFAULT_CREDENTIAL_OPS,
           },
         ],
       );
-      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
-      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
@@ -13775,13 +13750,11 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
       });
       const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         cloneCacheSeam: authCapture.seam,
-        credentialOps: credentials.credentialOps,
         ctx,
         cwd,
         marketplace: "mp",
@@ -13806,14 +13779,12 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
           authHost: auth?.host,
           authKind: auth?.kind,
           cloneUrl: capturedUrl,
-          credentialOps: auth?.credentialOps,
         })),
         [
           {
             authHost: "gitlab.example.com",
             authKind: "stored-credential",
             cloneUrl,
-            credentialOps: credentials.credentialOps,
           },
         ],
       );
@@ -13836,17 +13807,13 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
           },
         ],
       );
-      // Attaching a bundle consults nothing on its own: the credential helper
-      // is queried only when the server issues a challenge, and this clone
-      // succeeds without one.
-      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("plugin install authentication: threads the GitLab provider bundle onto the canonical clone", async () => {
+test("plugin install authentication: threads a gitlab.com bundle over the production credential surface onto the canonical clone", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-gitlab-"));
     try {
@@ -13863,17 +13830,13 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
       });
       const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const authCapture = captureInstallAuth(seamWith(git.gitOps));
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const deviceFlow = installDeviceFlow();
       const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         cloneCacheSeam: authCapture.seam,
-        credentialOps: credentials.credentialOps,
         ctx,
         cwd,
-        deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
         notifications: { mode: "orchestrated" },
         run,
@@ -13898,149 +13861,12 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
           cloneUrl: recordedCloneUrl,
           credentialOps: auth?.credentialOps,
         })),
-        [{ authHost: "gitlab.com", cloneUrl, credentialOps: credentials.credentialOps }],
+        [{ authHost: "gitlab.com", cloneUrl, credentialOps: DEFAULT_CREDENTIAL_OPS }],
       );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ url }) => url),
         [cloneUrl],
       );
-      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
-    } finally {
-      await rm(cwd, { force: true, recursive: true });
-    }
-  });
-});
-
-test("plugin install authentication: memoizes one Device Flow result across same-host installs", async () => {
-  await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-memo-"));
-    try {
-      // arrange
-      const fixtureRepoDir = path.join(cwd, "repo-fixture");
-      const marketplaceRoot = path.join(cwd, "mp-src");
-      await seedGitSourceMarketplace({
-        cwd,
-        fixtureRepoDir,
-        marketplaceName: "mp",
-        marketplaceRoot,
-        pluginName: "first",
-        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
-      });
-      const secondSha = "b2c3d4e5f60718293a4b5c6d7e8f901234567890";
-      await writeFile(
-        path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
-        JSON.stringify({
-          name: "mp",
-          plugins: [
-            { name: "first", source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA } },
-            {
-              name: "second",
-              source: { source: "github", repo: "org/private", sha: secondSha },
-            },
-          ],
-        }),
-      );
-      const git = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const authCapture = captureInstallAuth(seamWith(git.gitOps));
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const deviceFlow = installDeviceFlow({
-        pollResponses: [
-          { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
-        ],
-      });
-      const authMemo = new Map<string, AuthAttemptResult>();
-      const { ctx, notifications, run } = makeCtx();
-
-      // act
-      const firstOutcome = await installPlugin({
-        authMemo,
-        cloneCacheSeam: authCapture.seam,
-        credentialOps: credentials.credentialOps,
-        ctx,
-        cwd,
-        deviceFlowHttp: deviceFlow.http,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        run,
-        plugin: "first",
-        scope: "project",
-      });
-      const secondOutcome = await installPlugin({
-        authMemo,
-        cloneCacheSeam: authCapture.seam,
-        credentialOps: credentials.credentialOps,
-        ctx,
-        cwd,
-        deviceFlowHttp: deviceFlow.http,
-        marketplace: "mp",
-        notifications: { mode: "orchestrated" },
-        run,
-        plugin: "second",
-        scope: "project",
-      });
-      const firstAuth = authCapture.calls[0]?.auth;
-      const secondAuth = authCapture.calls[1]?.auth;
-      assert.ok(firstAuth?.kind === "device-flow" && secondAuth?.kind === "device-flow");
-      const firstAuthResult = await firstAuth.onAuthRequired();
-      const secondAuthResult = await secondAuth.onAuthRequired();
-
-      // assert
-      assert.deepStrictEqual(
-        [firstOutcome, secondOutcome],
-        [
-          {
-            declaresAgents: false,
-            declaresMcp: false,
-            declaresWorkflows: false,
-            resourcesChanged: true,
-            status: "installed",
-            version: "9.9.9",
-          },
-          {
-            declaresAgents: false,
-            declaresMcp: false,
-            declaresWorkflows: false,
-            resourcesChanged: true,
-            status: "installed",
-            version: "9.9.9",
-          },
-        ],
-      );
-      assert.deepStrictEqual(notifications, [
-        {
-          message: "Open https://github.com/login/device and enter: ABCD-1234",
-          severity: "info",
-        },
-      ]);
-      assert.deepStrictEqual(
-        [firstAuthResult, secondAuthResult],
-        [
-          {
-            cred: { password: "token", username: "x-access-token" },
-            ok: true,
-          },
-          {
-            cred: { password: "token", username: "x-access-token" },
-            ok: true,
-          },
-        ],
-      );
-      assert.deepStrictEqual(deviceFlow.calls, {
-        pollToken: [
-          { clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "MOCK_DEVICE_CODE", intervalSec: 0 },
-        ],
-        requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
-      });
-      assert.deepStrictEqual(credentials.calls, {
-        approve: [
-          {
-            credential: { password: "token", username: "x-access-token" },
-            host: "github.com",
-          },
-        ],
-        fill: [],
-        reject: [],
-      });
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
@@ -14070,13 +13896,11 @@ test("plugin install authentication: classifies a providerless 401 without a cau
         { operation: "clone", exitCode: 128 },
       );
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         cloneCacheSeam: seamWith(git.gitOps),
-        credentialOps: credentials.credentialOps,
         ctx,
         cwd,
         marketplace: "mp",
@@ -14099,7 +13923,6 @@ test("plugin install authentication: classifies a providerless 401 without a cau
           severity: "error",
         },
       ]);
-      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
@@ -14125,13 +13948,11 @@ test("plugin install authentication: names a network failure network unreachable
         { operation: "clone", exitCode: 128 },
       );
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         cloneCacheSeam: seamWith(git.gitOps),
-        credentialOps: credentials.credentialOps,
         ctx,
         cwd,
         marketplace: "mp",
@@ -14154,7 +13975,6 @@ test("plugin install authentication: names a network failure network unreachable
           severity: "error",
         },
       ]);
-      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
@@ -14187,13 +14007,11 @@ test("plugin install authentication: contains a non-Error clone failure without 
         },
         resolvePluginPin: cloneCache.resolvePluginPin,
       };
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, run } = makeCtx();
 
       // act
       const outcome = await installPlugin({
         cloneCacheSeam: seam,
-        credentialOps: credentials.credentialOps,
         ctx,
         cwd,
         marketplace: "mp",
@@ -14215,14 +14033,13 @@ test("plugin install authentication: contains a non-Error clone failure without 
           severity: "error",
         },
       ]);
-      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
   });
 });
 
-test("plugin install authentication: classifies a cancelled Device Flow clone without a cause line", async () => {
+test("plugin install authentication: classifies a GitHub clone the host refused as {authentication required} with its https clone note", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-cancelled-"));
     try {
@@ -14241,18 +14058,14 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
         { operation: "clone", exitCode: 128 },
       );
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const deviceFlow = installDeviceFlow();
       const { ctx, notifications, run } = makeCtx();
 
       // act: D-SG-24 keeps the clone on its one https attempt, so no ssh
-      // retry follows the sign-in this case is about.
+      // retry follows the refusal this case is about.
       const outcome = await installPlugin({
         cloneCacheSeam: seamWith(git.gitOps),
-        credentialOps: credentials.credentialOps,
         ctx,
         cwd,
-        deviceFlowHttp: deviceFlow.http,
         marketplace: "mp",
         run,
         plugin: "private",
@@ -14274,8 +14087,6 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
           severity: "error",
         },
       ]);
-      assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
-      assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }

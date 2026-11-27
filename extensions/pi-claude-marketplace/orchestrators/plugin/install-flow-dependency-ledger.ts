@@ -68,7 +68,6 @@ import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
@@ -138,9 +137,6 @@ export interface InstallMissingDependencyOptions {
   readonly tagProbe?: CascadeTagProbe;
   readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * D-SG-18: the command's GitHub transport context, shared by the dependency
    * and its closure, as on `InstallPluginOptions`.

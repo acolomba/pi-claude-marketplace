@@ -48,11 +48,6 @@ import { makeCtx } from "./install-flow-fixture.ts";
 import { seedMarketplaceRecord } from "./marketplace-seed.ts";
 
 import type {
-  AuthAttemptResult,
-  CredentialOps,
-  DeviceFlowHttp,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import type {
   AddedMarketplaces,
   MarketplaceAddSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/carried-marketplace-adds.ts";
@@ -106,23 +101,6 @@ function emptyCapture(): InstallFailureCapture {
 test("D-P3-11, D-SG-18: builds member ledger options from shared and member inputs, gating consent on the run's MCP implementation", () => {
   // arrange
   const { ctx, run } = makeCtx({ mcpImplementation: "builtin" });
-  const credentialOps: CredentialOps = {
-    fill: () => Promise.resolve(null),
-    approve: () => Promise.resolve(),
-    reject: () => Promise.resolve(),
-  };
-  const deviceFlowHttp: DeviceFlowHttp = {
-    requestCode: () =>
-      Promise.resolve({
-        device_code: "device",
-        user_code: "code",
-        verification_uri: "https://example.test",
-        expires_in: 900,
-        interval: 5,
-      }),
-    pollToken: () => Promise.resolve({ kind: "expired_token" }),
-  };
-  const authMemo = new Map<string, AuthAttemptResult>();
   const transportContext = defaultPluginTransportContext({});
   const cloneCacheSeam = {
     resolvePluginPin,
@@ -141,9 +119,6 @@ test("D-P3-11, D-SG-18: builds member ledger options from shared and member inpu
       run,
       mapModel: true,
       partial: true,
-      credentialOps,
-      deviceFlowHttp,
-      authMemo,
       transportContext,
       cloneCacheSeam,
     },
@@ -187,9 +162,6 @@ test("D-P3-11, D-SG-18: builds member ledger options from shared and member inpu
     cloneProbe: probeInstallClone,
     removalOps: REMOVAL_OPS,
     env: {},
-    credentialOps,
-    deviceFlowHttp,
-    authMemo,
     transportContext,
     marketplaceAdd: DEFAULT_MARKETPLACE_ADD,
     addedMarketplaces,

@@ -152,13 +152,7 @@ import {
   type RunPhasesResult,
 } from "../../transaction/phase-ledger.ts";
 import { formatRollbackError } from "../../transaction/rollback.ts";
-import {
-  buildCloneAuth,
-  DEFAULT_CREDENTIAL_OPS,
-  type AuthAttemptResult,
-  type CredentialOps,
-  type DeviceFlowHttp,
-} from "../auth-host.ts";
+import { buildCloneAuth, DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
 import {
   addMarketplaceToState,
   classifyAddError,
@@ -302,9 +296,6 @@ export interface InstallLedgerOptions {
    * mcp phase stages servers. The operation's entry point binds it.
    */
   readonly env: ClaudeEnv;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * D-SG-18: the command's GitHub transport context, which every git clone of
    * the ledger runs through, so one command probes once. Every command root,

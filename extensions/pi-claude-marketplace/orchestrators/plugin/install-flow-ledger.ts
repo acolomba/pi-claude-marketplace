@@ -83,7 +83,6 @@ import type {
 import type { Scope } from "../../shared/types.ts";
 import type { runPhases } from "../../transaction/phase-ledger.ts";
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { PluginTransportContext } from "../github-transport.ts";
 import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
@@ -246,23 +245,6 @@ export interface InstallPluginOptions {
    * path-source cascade resolves without touching the real filesystem.
    */
   readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
-  /**
-   * PROV-03 / D-79-05 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS at use.
-   * The git-source clone probe passes it to `buildCloneAuth` so a provider
-   * host authenticates host-keyed; callers can inject a CredentialOps collaborator.
-   */
-  readonly credentialOps?: CredentialOps;
-  /**
-   * PROV-03 Device Flow HTTP seam. Undefined = the real device-flow endpoints;
-   * callers can inject a DeviceFlowHttp collaborator so the flow runs network-free.
-   */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  /**
-   * D-79-02 once-per-host memo. A command-scope Map shared across a bulk
-   * install so the provider flow runs AT MOST ONCE per host; the caller
-   * (edge/cascade) owns its lifetime. Undefined = no memo (single install).
-   */
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * D-SG-18: the command's GitHub transport context, which the plugin, its
    * cascade members, and a retry of the same install share, so the command
