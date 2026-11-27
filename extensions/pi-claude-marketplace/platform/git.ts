@@ -15,7 +15,6 @@ import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 import { configValues, NODE_GIT_PROCESS, SSH_CONFIG_READ } from "./git-process.ts";
 import { gitTimeoutMs } from "./git-timeout.ts";
 
-import type { GitAuthBundle } from "./git-credential.ts";
 import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from "./git-process.ts";
 
 /**
@@ -45,8 +44,8 @@ import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred)
  *   - submodules (a clone passes `--no-recurse-submodules`, C5)
- *   - an auth surface beyond the optional `opts.auth` bundle
- *     (`platform/git-credential.ts::GitAuthBundle`). git asks the user's
+ *   - an auth surface beyond the optional `opts.auth` bundle, the
+ *     `GitAuthBundle` declared in this module. git asks the user's
  *     credential helpers itself; the bundle decides what an auth failure
  *     leads to, and an omitted bundle is the public-only path.
  *
@@ -54,6 +53,18 @@ import type { GitProcess, GitRequest, GitResult, SshRun, SystemGitProcess } from
  * network request the call sends carries the scope's signal, so an abort
  * stops the git command in flight.
  */
+
+/**
+ * The auth bundle a git network request carries (GAUTH-03, D-1-03): the host
+ * whose stored credential a request to it uses. git asks the user's own
+ * credential helpers for it, and the extension hands git no credential
+ * (D-SG-27). A refused credential maps to `StoredCredentialRejectedError` only
+ * for a request to this host (GAUTH-04). An omitted bundle is the public-only
+ * path.
+ */
+export interface GitAuthBundle {
+  readonly host: string;
+}
 
 export interface CloneOptions {
   /**
@@ -1064,14 +1075,4 @@ export async function sshShowsDirectGitHubThroughGit(
   }
 
   return showsDirectGitHub(stderr);
-}
-
-/**
- * A credential as git's credential helpers store it: the `username` and
- * `password` attributes of `git credential` (D-31). The keychain protocol of
- * `platform/git-credential.ts` reads and writes this shape.
- */
-export interface GitCredentials {
-  username?: string;
-  password?: string;
 }

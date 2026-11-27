@@ -61,7 +61,6 @@ for (const { importer, violations } of [
 
 for (const { importer, violations } of [
   { importer: "platform/git.ts", violations: [] },
-  { importer: "platform/git-credential.ts", violations: [] },
   { importer: "platform/other.ts", violations: ["import-x/no-restricted-paths"] },
   { importer: "orchestrators/auth-host.ts", violations: ["import-x/no-restricted-paths"] },
   {
@@ -107,11 +106,10 @@ for (const { importer, violations } of [
  *
  * D-SG-01 / SG-PRC-01 first sanctioned site:
  * extensions/pi-claude-marketplace/platform/git-process.ts starts every git
- * process, the `git credential` launch of platform/git-credential.ts included,
- * and, once the SSH probe lands, the ssh one. It spawns an absolute git with
- * `shell: false`, an argv, and the D-SG-05 hardening, through the shared
- * launcher. Only platform/git.ts and platform/git-credential.ts may import it
- * (the GIT_PROCESS_IMPORTERS zone in eslint.config.js).
+ * process and the two fixed ssh launches (SG-SSH-02). It spawns an absolute
+ * git with `shell: false`, an argv, and the D-SG-05 hardening, through the
+ * shared launcher. Only platform/git.ts may import it (the
+ * GIT_PROCESS_IMPORTERS zone in eslint.config.js).
  *
  * EXEC-01..04 / D-60-01 second sanctioned site:
  * The hook execution layer at

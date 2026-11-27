@@ -1519,7 +1519,7 @@ test("PUP-2 / D-SG-10: two plugins in SAME github marketplace -> syncCloneOnce c
   });
 });
 
-test("PUP-2 / AUTH-02: the github marketplace sync check carries a github.com bundle over the production credential surface", async () => {
+test("PUP-2 / AUTH-02: the github marketplace sync check carries the github.com bundle", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-auth-");
     try {
@@ -1542,11 +1542,7 @@ test("PUP-2 / AUTH-02: the github marketplace sync check carries a github.com bu
 
       // assert
       assert.equal(state.resolveRemoteRefCalls.length, 1);
-      const auth = state.resolveRemoteRefCalls[0]?.auth;
-      assert.deepStrictEqual(
-        { kind: auth?.kind, host: auth?.host },
-        { kind: "stored-credential", host: "github.com" },
-      );
+      assert.deepStrictEqual(state.resolveRemoteRefCalls[0]?.auth, { host: "github.com" });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1661,8 +1657,8 @@ test("GHB-02: the GitHub marketplace sync under the override binds the override 
 
       // assert
       assert.deepStrictEqual(
-        state.resolveRemoteRefCalls.map(({ auth }) => ({ kind: auth?.kind, host: auth?.host })),
-        [{ kind: "stored-credential", host: "mirror.example:8443" }],
+        state.resolveRemoteRefCalls.map(({ auth }) => auth),
+        [{ host: "mirror.example:8443" }],
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2089,11 +2085,7 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync check car
       // assert
       assert.deepStrictEqual(
         {
-          checks: state.resolveRemoteRefCalls.map(({ url, ref, auth }) => ({
-            url,
-            ref,
-            auth: { kind: auth?.kind, host: auth?.host },
-          })),
+          checks: state.resolveRemoteRefCalls.map(({ url, ref, auth }) => ({ url, ref, auth })),
           clones: state.cloneCalls,
         },
         {
@@ -2101,7 +2093,7 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync check car
             {
               url: "https://example.com/org/repo",
               ref: "main",
-              auth: { kind: "stored-credential", host: "example.com" },
+              auth: { host: "example.com" },
             },
           ],
           clones: [],
@@ -10800,7 +10792,7 @@ test("MIRR-01 unpinned git-subdir update whose declared path is ABSENT in the re
   });
 });
 
-test("plugin update authentication: a pinned provider update gives the clone a github.com bundle over the production credential surface", async () => {
+test("plugin update authentication: a pinned provider update gives the clone the github.com bundle", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-auth-provider-");
     try {
@@ -10827,10 +10819,7 @@ test("plugin update authentication: a pinned provider update gives the clone a g
       });
 
       // assert
-      assert.deepStrictEqual(
-        { kind: captured.cloneAuth?.kind, host: captured.cloneAuth?.host },
-        { kind: "stored-credential", host: "github.com" },
-      );
+      assert.deepStrictEqual(captured.cloneAuth, { host: "github.com" });
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -10838,7 +10827,7 @@ test("plugin update authentication: a pinned provider update gives the clone a g
   });
 });
 
-test("plugin update authentication: an unpinned provider update gives the mirror a github.com bundle over the production credential surface", async () => {
+test("plugin update authentication: an unpinned provider update gives the mirror the github.com bundle", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-auth-mirror-");
     try {
@@ -10870,10 +10859,7 @@ test("plugin update authentication: an unpinned provider update gives the mirror
       });
 
       // assert
-      assert.deepStrictEqual(
-        { kind: captured.cloneAuth?.kind, host: captured.cloneAuth?.host },
-        { kind: "stored-credential", host: "github.com" },
-      );
+      assert.deepStrictEqual(captured.cloneAuth, { host: "github.com" });
       assert.equal(notifications.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });

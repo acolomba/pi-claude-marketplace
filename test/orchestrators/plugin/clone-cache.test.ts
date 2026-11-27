@@ -230,17 +230,9 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
   };
 }
 
-/** A stored-credential bundle for a clone the remote never challenges. */
+/** The bundle of a clone the remote never challenges. */
 function publicCloneAuth(): GitAuthBundle {
-  return {
-    kind: "stored-credential",
-    credentialOps: {
-      fill: () => Promise.reject(new Error("a public clone never consults the helper")),
-      approve: () => Promise.reject(new Error("a public clone never stores a credential")),
-      reject: () => Promise.reject(new Error("a public clone never evicts a credential")),
-    },
-    host: "example.com",
-  };
+  return { host: "example.com" };
 }
 
 async function freshLocations(t: TestContext): Promise<ScopedLocations> {
@@ -666,15 +658,7 @@ void test("SG-TRN-02: a checkout that fails another way rethrows unchanged", asy
 void test("PROV-03: the commit fetch threads the auth bundle so a private pin authenticates", async (t) => {
   // arrange
   const locations = await freshLocations(t);
-  const auth: GitAuthBundle = {
-    credentialOps: {
-      fill: async (): Promise<null> => Promise.resolve(null),
-      approve: async (): Promise<void> => Promise.resolve(),
-      reject: async (): Promise<void> => Promise.resolve(),
-    },
-    host: "gitlab.example.com",
-    kind: "stored-credential",
-  };
+  const auth: GitAuthBundle = { host: "gitlab.example.com" };
   const { gitOps, state } = createGitOps();
 
   // act
@@ -839,15 +823,7 @@ void test("PROV-03: materializePluginClone with an auth bundle threads it to git
   const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
-  const auth: GitAuthBundle = {
-    credentialOps: {
-      fill: async (): Promise<null> => Promise.resolve(null),
-      approve: async (): Promise<void> => Promise.resolve(),
-      reject: async (): Promise<void> => Promise.resolve(),
-    },
-    host: "gitlab.example.com",
-    kind: "stored-credential",
-  };
+  const auth: GitAuthBundle = { host: "gitlab.example.com" };
 
   await materializePluginClone({
     locations,
@@ -1639,14 +1615,14 @@ void test("OQ-4: a warm mirror refresh with no transport lists and re-clones its
     {
       checks: mirror.git.state.calls.resolveRemoteRef.map(({ url }) => url),
       clones: mirror.git.state.calls.clone.map(({ url }) => url),
-      authKinds: [...mirror.git.state.calls.resolveRemoteRef, ...mirror.git.state.calls.clone].map(
-        (call) => call.auth?.kind,
+      auths: [...mirror.git.state.calls.resolveRemoteRef, ...mirror.git.state.calls.clone].map(
+        (call) => call.auth,
       ),
     },
     {
       checks: ["https://example.com/repo"],
       clones: ["https://example.com/repo"],
-      authKinds: [auth.kind, auth.kind],
+      auths: [auth, auth],
     },
   );
 });
@@ -2329,15 +2305,7 @@ void test("PROV-03: a private mirror forwards auth through its clone and its fre
   // arrange
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
-  const auth: GitAuthBundle = {
-    credentialOps: {
-      approve: async (): Promise<void> => Promise.resolve(),
-      fill: async (): Promise<null> => Promise.resolve(null),
-      reject: async (): Promise<void> => Promise.resolve(),
-    },
-    host: "gitlab.example.com",
-    kind: "stored-credential",
-  };
+  const auth: GitAuthBundle = { host: "gitlab.example.com" };
 
   const mirrorArgs = {
     locations,

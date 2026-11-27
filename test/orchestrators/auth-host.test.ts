@@ -9,16 +9,6 @@ import { InvalidGitHubBaseUrlError } from "../../extensions/pi-claude-marketplac
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 describe("authBundleFor", () => {
-  test("gives every address the same production credential surface", () => {
-    // act
-    const gitHubBundle = authBundleFor("https://github.com/acme/tools.git", "github");
-    const gitLabBundle = authBundleFor("https://gitlab.com/team/plugin.git", "url");
-
-    // assert
-    assert.deepStrictEqual(Object.keys(gitHubBundle.credentialOps), ["fill", "approve", "reject"]);
-    assert.strictEqual(gitLabBundle.credentialOps, gitHubBundle.credentialOps);
-  });
-
   for (const { cloneUrl, kind, host } of [
     { cloneUrl: "not a valid URL", kind: "github", host: "github.com" },
     { cloneUrl: "https://github.com/acme/tools.git", kind: "github", host: "github.com" },
@@ -48,10 +38,10 @@ describe("authBundleFor", () => {
       setGitHubBaseUrl(t, undefined);
 
       // act
-      const { credentialOps: _credentialOps, ...binding } = authBundleFor(cloneUrl, kind);
+      const bundle = authBundleFor(cloneUrl, kind);
 
       // assert
-      assert.deepStrictEqual(binding, { kind: "stored-credential", host });
+      assert.deepStrictEqual(bundle, { host });
     });
   }
 
@@ -83,10 +73,10 @@ describe("authBundleFor", () => {
       setGitHubBaseUrl(t, "https://mirror.example:8443/git");
 
       // act
-      const { credentialOps: _credentialOps, ...binding } = authBundleFor(cloneUrl, kind);
+      const bundle = authBundleFor(cloneUrl, kind);
 
       // assert
-      assert.deepStrictEqual(binding, { kind: "stored-credential", host });
+      assert.deepStrictEqual(bundle, { host });
     });
   }
 
@@ -123,13 +113,10 @@ describe("authBundleFor", () => {
       setGitHubBaseUrl(t, base);
 
       // act
-      const { credentialOps: _credentialOps, ...binding } = authBundleFor(
-        "https://github.com/acme/tools.git",
-        "github",
-      );
+      const bundle = authBundleFor("https://github.com/acme/tools.git", "github");
 
       // assert
-      assert.deepStrictEqual(binding, { kind: "stored-credential", host });
+      assert.deepStrictEqual(bundle, { host });
     });
   }
 
@@ -138,13 +125,10 @@ describe("authBundleFor", () => {
     setGitHubBaseUrl(t, "http://mirror.example");
 
     // act
-    const { credentialOps: _credentialOps, ...binding } = authBundleFor(
-      "https://gitlab.example.com:8443/acme/tools",
-      "url",
-    );
+    const bundle = authBundleFor("https://gitlab.example.com:8443/acme/tools", "url");
 
     // assert
-    assert.deepStrictEqual(binding, { kind: "stored-credential", host: "gitlab.example.com:8443" });
+    assert.deepStrictEqual(bundle, { host: "gitlab.example.com:8443" });
   });
 });
 

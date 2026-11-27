@@ -141,7 +141,6 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/persistence/state-io.ts",
   "extensions/pi-claude-marketplace/persistence/migrate.ts",
   "extensions/pi-claude-marketplace/transaction/with-state-guard.ts",
-  "extensions/pi-claude-marketplace/platform/git-credential.ts",
   "extensions/pi-claude-marketplace/platform/git.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",

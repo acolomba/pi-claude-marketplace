@@ -45,10 +45,9 @@ import type {
  *      a credential field name (`password`, `access_token`, `githubToken`,
  *      `gitToken`). Tokens must remain in-memory only; no path may serialize
  *      them to state.json.
- *   2. The platform/git-credential.ts module (which legitimately handles
- *      credentials) MUST NOT interpolate a credential field into an Error
- *      constructor. Error messages reference operation name + exit code or
- *      timeout-ms only.
+ *   2. The git modules, platform/git.ts and platform/git-process.ts, MUST
+ *      NOT put a credential field into a message or a debug line. Error
+ *      messages reference operation name + exit code or timeout-ms only.
  *
  * Every file each scan addresses is declared in `CREDENTIAL_LEAK_TARGETS`
  * (`test/architecture/gate-targets.ts`), and each scan asserts it opened what
@@ -75,7 +74,6 @@ const [
   STATE_IO_FILE,
   MIGRATE_FILE,
   WITH_STATE_GUARD_FILE,
-  GIT_CREDENTIAL_FILE,
   GIT_PLATFORM_FILE,
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
@@ -91,7 +89,6 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "persistence/state-io.ts",
   "persistence/migrate.ts",
   "transaction/with-state-guard.ts",
-  "platform/git-credential.ts",
   "platform/git.ts",
   "orchestrators/marketplace/add.ts",
   "orchestrators/marketplace/update.ts",
@@ -169,9 +166,6 @@ function assertNoCredentialInLiterals(rel: string, stripped: string, callSite: R
   );
 }
 
-/** The `new Error(\`...\`)` call form, capturing the whole literal. */
-const ERROR_LITERAL_CALL_SITE = /new\s+Error\s*\(\s*(`(?:[^`\\]|\\.)*`)/g;
-
 /** The `new Error(\`...\`)` / `ctx.ui.notify(\`...\`)` call forms. */
 const ERROR_OR_UI_NOTIFY_LITERAL_CALL_SITE =
   /(?:new\s+Error\s*\(|ctx\.ui\.notify\s*\()\s*(`(?:[^`\\]|\\.)*`)/g;
@@ -208,32 +202,6 @@ test("AUTH-09: no credential field name appears in any state-write code path", a
     [],
     `AUTH-09 violation: state-write code path leaks a credential field name:\n  ${offenders.join("\n  ")}`,
   );
-});
-
-test("AUTH-09: platform/git-credential.ts never interpolates a password in an Error message", async () => {
-  const absPath = path.join(REPO_ROOT, GIT_CREDENTIAL_FILE);
-  const exists = await access(absPath).then(
-    () => true,
-    () => false,
-  );
-  assert.ok(
-    exists,
-    `D-07-03: ${GIT_CREDENTIAL_FILE} is declared in CREDENTIAL_LEAK_TARGETS but does not resolve, so the scan below would report success having opened nothing.`,
-  );
-
-  const src = await readFile(absPath, "utf8");
-  const stripped = stripComments(src);
-  // Forbidden: template literal OR string concatenation that puts `password`,
-  // `access_token`, or `cred.<field>` inside an Error(...) constructor.
-  const errorWithCred =
-    /new\s+Error\s*\((?:[^)]*\$\{[^}]*(password|access_token|cred\.[a-z]+)|[^)]*\+\s*(password|access_token|cred\.[a-z]+))/i;
-  assert.doesNotMatch(
-    stripped,
-    errorWithCred,
-    "Error constructor in git-credential.ts interpolates a credential field (AUTH-09 violation)",
-  );
-
-  assertNoCredentialInLiterals(GIT_CREDENTIAL_FILE, stripped, ERROR_LITERAL_CALL_SITE);
 });
 
 test("AUTH-09: platform/git-process.ts never puts a credential, a run's input, or its stdout in a message or a debug line", async () => {
@@ -300,11 +268,10 @@ test("AUTH-09 / D-PL5-07: platform/hosted-manifest-fetch.ts sends no header, cre
 });
 
 test("AUTH-09: the git hookDebugLog calls never interpolate a credential field", async () => {
-  // The git modules log with hookDebugLog: git.ts around the ssh probe and
-  // settings reads, and git-credential.ts on the keychain approve and reject
-  // failures, near the credential it was handed. That call form is not `new
-  // Error(...)`, so it falls outside every other gate in this file; this test
-  // closes that gap.
+  // platform/git.ts logs with hookDebugLog around the ssh probe and settings
+  // reads, and this scan keeps a credential field out of those calls. That
+  // call form is not `new Error(...)`, so it falls outside every other gate in
+  // this file; this test closes that gap.
   //
   // Two checks combine here. The
   // first is the original bounded-prefix scan, kept unchanged so it still
@@ -316,11 +283,10 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   // following each `hookDebugLog(` as one token and scans it in full, so a
   // leak appended after a nested function call's closing paren (e.g. after
   // `${errorMessage(err)}`) is caught too.
-  // The two git modules are scanned as one subject, and both carry calls.
   const hookDebugLogWithToken =
     /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
   const hookDebugLogCall = /hookDebugLog\s*\(/g;
-  const SCANNED = [GIT_PLATFORM_FILE, GIT_CREDENTIAL_FILE];
+  const SCANNED = [GIT_PLATFORM_FILE];
 
   const sources = new Map<string, string>();
   let scannedCallSites = 0;
@@ -334,8 +300,7 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   // D-07-03: the subject is counted BEFORE either check runs, because both
   // checks are satisfied by a file that holds no `hookDebugLog(` at all --
   // which is how an AUTH-09 scan aimed at a module the calls no longer live in
-  // reports success over nothing. Any one file may be empty of them on its own;
-  // the SET may not.
+  // reports success over nothing.
   assert.ok(
     scannedCallSites > 0,
     `AUTH-09 / D-07-03: no hookDebugLog call site exists in ${SCANNED.join(" or ")}, so both checks below pass over nothing. Re-aim the gate at the module that now carries the calls.`,
@@ -353,9 +318,9 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
 });
 
 test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
-  // Closes review WR-02. The two marketplace verbs build the host-bound
-  // credential bundles and place the GAUTH-04 stored-credential hint; no
-  // closure there captures a credential surface (D-SG-27). A future
+  // Closes review WR-02. The two marketplace verbs bind each request to its
+  // host and place the GAUTH-04 stored-credential hint; a bundle holds only
+  // the host (D-SG-27). A future
   // regression that interpolated a credential field into an Error or a
   // notify message would still be an AUTH-09 violation, so this gate scans
   // for that class of bug in the orchestrator files.

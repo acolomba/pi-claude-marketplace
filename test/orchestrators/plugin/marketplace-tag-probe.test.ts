@@ -266,13 +266,13 @@ describe("probeMarketplaceTags on a git marketplace", () => {
       {
         result,
         urls: fake.remoteCalls.map((call) => call.url),
-        bundles: fake.remoteCalls.map((call) => [call.auth?.kind, call.auth?.host]),
+        bundles: fake.remoteCalls.map((call) => call.auth),
         localCalls: fake.localCalls,
       },
       {
         result: { kind: "pinned", tag: "formatter--v2.0.0", oid: "oid-2", version: "2.0.0" },
         urls: [URL_SOURCE],
-        bundles: [["stored-credential", "example.com"]],
+        bundles: [{ host: "example.com" }],
         localCalls: [],
       },
     );

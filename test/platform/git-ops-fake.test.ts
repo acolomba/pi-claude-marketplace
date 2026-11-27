@@ -3,7 +3,6 @@ import { describe, test, type TestContext } from "node:test";
 
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import {
   GIT_OPS_CASE_NAMES,
   MISSING_OID,
@@ -149,12 +148,7 @@ describe("createGitOpsFake", () => {
 
   test("records the auth bundle of every remote operation", async () => {
     // arrange
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const auth = {
-      credentialOps: credentials.credentialOps,
-      host: "git.example.invalid",
-      kind: "stored-credential",
-    } satisfies GitAuthBundle;
+    const auth = { host: "git.example.invalid" } satisfies GitAuthBundle;
     const git = createGitOpsFake({
       boundary: "memory",
       allowedRemoteUrls: [REMOTE_URL],

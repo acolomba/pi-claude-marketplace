@@ -193,10 +193,9 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
       transport,
       ...cloneOptions
     }) {
-      const bundle = resolveAuth();
       calls.push({
         ...cloneOptions,
-        auth: { kind: bundle.kind, host: bundle.host },
+        auth: resolveAuth(),
         transport: await plannedTransport(transport),
       });
       return cloneRoot;
@@ -224,7 +223,7 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
   });
   assert.deepStrictEqual(calls, [
     {
-      auth: { kind: "stored-credential", host: "example.com" },
+      auth: { host: "example.com" },
       cloneUrl,
       locations,
       pin: SHA,
@@ -304,7 +303,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
     }) {
       calls.push({
         ...mirrorOptions,
-        auth: { kind: bundle?.kind, host: bundle?.host },
+        auth: bundle,
         transport: await plannedTransport(transport),
       });
       return { pluginRoot: mirrorRoot, resolvedSha: SHA };
@@ -315,10 +314,9 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
       transport,
       ...copyOptions
     }) {
-      const bundle = resolveAuth();
       calls.push({
         ...copyOptions,
-        auth: { kind: bundle.kind, host: bundle.host },
+        auth: resolveAuth(),
         transport: await plannedTransport(transport),
       });
       return copyRoot;
@@ -341,14 +339,14 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
   });
   assert.deepStrictEqual(calls, [
     {
-      auth: { kind: "stored-credential", host: "example.com" },
+      auth: { host: "example.com" },
       cloneUrl,
       locations,
       ref: "main",
       transport: { ...planned, note: undefined },
     },
     {
-      auth: { kind: "stored-credential", host: "example.com" },
+      auth: { host: "example.com" },
       cloneUrl,
       locations,
       sha: SHA,
@@ -380,10 +378,7 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
     materializeOrRefreshPluginMirror(options) {
       assert.strictEqual(options.cloneUrl, "https://github.com/owner/repo");
       assert.strictEqual(options.ref, "main");
-      assert.deepStrictEqual(
-        { kind: options.auth?.kind, host: options.auth?.host },
-        { kind: "stored-credential", host: "github.com" },
-      );
+      assert.deepStrictEqual(options.auth, { host: "github.com" });
       return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
     materializePluginCommitCopy: () => Promise.resolve(mirrorRoot),
@@ -422,10 +417,7 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     },
     materializePluginClone(options) {
       assert.strictEqual(options.ref, "main");
-      assert.deepStrictEqual(
-        { kind: options.resolveAuth().kind, host: options.resolveAuth().host },
-        { kind: "stored-credential", host: "example.com" },
-      );
+      assert.deepStrictEqual(options.resolveAuth(), { host: "example.com" });
       return Promise.resolve(cloneRoot);
     },
     materializeOrRefreshPluginMirror() {

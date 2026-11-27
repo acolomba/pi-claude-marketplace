@@ -3816,7 +3816,7 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
       // D-SG-09: the tag copy's fetch gets the bundle a clone of the
       // marketplace host builds.
       const bundle = resolveAuth?.("https://example.com/acme/marketplace", "url");
-      bundles.push([bundle?.kind, bundle?.host]);
+      bundles.push(bundle);
       probed.push(options);
       return Promise.resolve({
         kind: "materialized",
@@ -3847,7 +3847,7 @@ test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the 
       tagOid: RESOLVED_SHA,
     },
   ]);
-  assert.deepStrictEqual(bundles, [["stored-credential", "example.com"]]);
+  assert.deepStrictEqual(bundles, [{ host: "example.com" }]);
   assert.deepStrictEqual(cloneCandidates, new Set(["path-clone"]));
 });
 

@@ -4972,10 +4972,7 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1);
-      assert.deepStrictEqual(
-        { kind: captured.auth?.kind, host: captured.auth?.host },
-        { kind: "stored-credential", host: "github.com" },
-      );
+      assert.deepStrictEqual(captured.auth, { host: "github.com" });
       assert.equal(gitState.cloneCalls.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5022,10 +5019,7 @@ test("plugin reinstall authentication: a host the registry does not claim thread
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1);
-      assert.deepStrictEqual(
-        { kind: captured.auth?.kind, host: captured.auth?.host },
-        { kind: "stored-credential", host: "gitlab.example.com" },
-      );
+      assert.deepStrictEqual(captured.auth, { host: "gitlab.example.com" });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

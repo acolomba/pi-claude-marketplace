@@ -72,8 +72,7 @@ import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { GitAuthBundle } from "../../platform/git-credential.ts";
-import type { ListRemotesResult, SshProbeResult } from "../../platform/git.ts";
+import type { GitAuthBundle, ListRemotesResult, SshProbeResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type {
@@ -128,11 +127,12 @@ export class WorkflowsUnstageFailureError extends Error {
 
 /**
  * The optional auth bundle of GitOps.clone, GitOps.fetchCommit, and
- * GitOps.resolveRemoteRef, owned by `platform/git-credential.ts`. It decides
- * what an authentication failure of the git run leads to (D-SG-14); when it is
- * undefined, every call site behaves identically to the public-only path.
- * The marketplace and plugin orchestrators import it from here, beside the
- * git surface that takes it.
+ * GitOps.resolveRemoteRef, declared in `platform/git.ts`: the host whose
+ * stored credential a request uses. git asks the user's own credential helpers
+ * for it, and the bundle decides only what a refused credential leads to
+ * (GAUTH-04); when it is undefined, every call site behaves identically to the
+ * public-only path. The marketplace and plugin orchestrators import it from
+ * here, beside the git surface that takes it.
  */
 export type { GitAuthBundle };
 

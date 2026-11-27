@@ -3719,7 +3719,7 @@ test("CMP-1: same marketplace name in user scope and project scope are independe
 // AUTH-01 auth-wiring tests
 // -----------------------------------------------------------------------
 
-test("AUTH-01 add: the clone carries the stored-credential bundle of github.com", async () => {
+test("AUTH-01 add: the clone carries the bundle of github.com", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -3740,10 +3740,7 @@ test("AUTH-01 add: the clone carries the stored-credential bundle of github.com"
 
     // assert
     assert.equal(state.cloneCalls.length, 1);
-    assert.deepStrictEqual(
-      { kind: state.cloneCalls[0]?.auth?.kind, host: state.cloneCalls[0]?.auth?.host },
-      { kind: "stored-credential", host: "github.com" },
-    );
+    assert.deepStrictEqual(state.cloneCalls[0]?.auth, { host: "github.com" });
   });
 });
 
@@ -5733,10 +5730,7 @@ test("MURL-08: url source clones the URL as typed, with a bundle bound to its ho
     assert.ok(cloneCall);
     assert.equal(cloneCall.url, "https://gitlab.example.com/team/mp");
     // GAUTH-03: the clone carries a bundle keyed on the source's own host.
-    assert.deepStrictEqual(
-      { kind: cloneCall.auth?.kind, host: cloneCall.auth?.host },
-      { kind: "stored-credential", host: "gitlab.example.com" },
-    );
+    assert.deepStrictEqual(cloneCall.auth, { host: "gitlab.example.com" });
   });
 });
 
@@ -5775,10 +5769,7 @@ test("MURL-01: url source with a #ref clones at that ref with singleBranch and t
       },
     );
     // GAUTH-03: the bundle rides the pinned-ref arm too.
-    assert.deepStrictEqual(
-      { kind: cloneCall.auth?.kind, host: cloneCall.auth?.host },
-      { kind: "stored-credential", host: "gitlab.example.com" },
-    );
+    assert.deepStrictEqual(cloneCall.auth, { host: "gitlab.example.com" });
   });
 });
 
@@ -6443,12 +6434,11 @@ test("GHB-02: a GitHub add under the override clones the canonical URL with the 
       { message: `● valid-marketplace [project] (added)\n${OFFICIAL_OVERRIDE_NOTE}` },
     ]);
     assert.deepStrictEqual(
-      state.cloneCalls.map(({ url, auth }) => ({ url, kind: auth?.kind, host: auth?.host })),
+      state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
       [
         {
           url: "https://github.com/anthropics/claude-plugins-official.git",
-          kind: "stored-credential",
-          host: "mirror.example:8443",
+          auth: { host: "mirror.example:8443" },
         },
       ],
     );

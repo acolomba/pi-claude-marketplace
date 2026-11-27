@@ -2,31 +2,29 @@
  * Host-keyed auth bundle factory (GAUTH-03, D-1-03, GHB-02).
  *
  * This module binds a git request to the host whose stored credential it
- * uses, and it holds no sign-in (D-SG-27). EVERY clone address gets a
- * `stored-credential` bundle from `authBundleFor`: git asks the user's
- * credential helpers itself, a helper miss fails as git failed, and a
- * credential the host refuses fails as `StoredCredentialRejectedError` and
- * stays stored as far as this extension is concerned (GAUTH-04, D-SG-28). No
+ * uses, and it holds no sign-in and no credential code (D-SG-27, D-SG-28).
+ * `authBundleFor` gives EVERY clone address the bundle of its host: git asks
+ * the user's credential helpers itself, a helper miss fails as git failed,
+ * and a credential the host refuses fails as `StoredCredentialRejectedError`
+ * and stays stored as far as this extension is concerned (GAUTH-04). No
  * command, load, or background pass shows a device code or waits for input.
  *
  * The bundle depends only on the address, so no verb passes a notification
- * context or a credential surface to get one. A GitHub address binds the
- * override host while `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set and
- * github.com otherwise (GHB-02).
+ * context to get one. A GitHub address binds the override host while
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set and github.com otherwise
+ * (GHB-02). `NO_STORED_CREDENTIAL_CAUSE` is the GAUTH-04 hint line for a host
+ * that gave git no credential.
  *
- * Gate discipline: this module lives in the orchestrator tier but MUST NOT
- * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
- * only `import type` from platform/git.ts is permitted -- so consumers
- * (install-outcome.ts) that import it stay clean under BLOCK F in
- * `eslint.config.js`. It imports the credential surface with the bundle type
- * (platform/git-credential.ts) and the GitHub base seam
- * (shared/github-base-url.ts).
+ * Gate discipline: this module imports no `platform/git*` module and names no
+ * git surface, so BLOCK F in `eslint.config.js` lints it like any other
+ * orchestrator module. It takes the bundle type from the
+ * `orchestrators/marketplace/shared.ts` re-export and the GitHub base seam
+ * from shared/github-base-url.ts.
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
  * enforced by test/architecture/no-credential-leak.test.ts.
  */
 
-import { NODE_CREDENTIAL_GIT, createCredentialOps } from "../platform/git-credential.ts";
 import {
   GITHUB_HOST,
   gitHubAddressOf,
@@ -35,31 +33,7 @@ import {
 } from "../shared/github-base-url.ts";
 
 import type { GitBackedSource } from "../domain/source.ts";
-import type { CredentialOps, GitAuthBundle } from "../platform/git-credential.ts";
-
-/** How long a `git credential` subprocess may run before its process tree is stopped. */
-const CREDENTIAL_TIMEOUT_MS = 5_000;
-
-/**
- * The production credential surface every bundle carries: the platform
- * credential protocol bound to its production git process and the timeout
- * above.
- *
- * It is composed HERE rather than inside `platform/git-credential.ts` so that
- * module publishes only the protocol, its collaborators, and their production
- * bindings, and the one concrete composition lives with the other host-keyed
- * auth composition. This module reaches git only through
- * `NODE_CREDENTIAL_GIT`, which runs `git credential fill/approve/reject` and
- * nothing else, because only `platform/git.ts` and
- * `platform/git-credential.ts` may import `platform/git-process.ts` (D-SG-01,
- * WR-05).
- * The call builds three closures and launches nothing; the first subprocess
- * starts when a verb actually calls fill/approve/reject.
- */
-const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
-  git: NODE_CREDENTIAL_GIT,
-  timeoutMs: CREDENTIAL_TIMEOUT_MS,
-});
+import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 /**
  * Extract the host a clone URL's credential is bound to, per source kind.
@@ -99,31 +73,27 @@ function scpHost(address: string): string {
 
 /**
  * The cause line for a host whose only auth path is the user's git credential
- * helper (D-1-01, GAUTH-04). The helper was consulted and produced no usable
+ * helper (D-1-01, GAUTH-04). git consulted the helpers and got no usable
  * credential, so the line names the host and the command that stores one.
  * AUTH-09: it interpolates the host and nothing else.
  *
  * The remedy is the whole pipeline because `git credential approve` reads the
  * git-credential wire format from stdin: run bare it waits for input and stores
- * nothing. It must also be fed the attribute set `buildAttributeBlock` uses --
- * `protocol=https` + `host=` + `username=` + `password=`, and NO `path=` line
- * (`platform/git-credential.ts`) -- or a later `fill` looks under a different
- * keychain key and misses the entry the user just stored.
+ * nothing. It feeds `protocol=https` + `host=` + `username=` + `password=` and
+ * NO `path=` line, the attributes git's own lookup for an https request to the
+ * host uses, so the entry the user stores is the one git finds next time.
  *
- * It says "obtained" rather than "stored" because `credentialFill` collapses
- * five outcomes to `null` (`platform/git-credential.ts`): a genuine helper
- * miss, `git` absent from PATH, the credential-subprocess timeout, a non-zero
- * helper exit, and an exit-0 helper that emitted no username/password pair. A
- * user whose credential IS stored behind a slow helper must not be told it is
- * not there. Which of the five occurred is diagnosable only through
- * `hookDebugLog`.
+ * It says "obtained" rather than "stored" because git reports a helper miss,
+ * a helper that failed or timed out, and a helper that printed no
+ * username/password pair the same way. A user whose credential IS stored
+ * behind a slow helper must not be told it is not there.
  */
 export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
   String.raw`no credential was obtained for ${host}; store one with: printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
 
 /**
- * The auth bundle of a clone address: the `stored-credential` bundle bound to
- * the host `hostFromCloneUrl` reads from `cloneUrl` and `kind` (GAUTH-03,
+ * The auth bundle of a clone address: the bundle bound to the host
+ * `hostFromCloneUrl` reads from `cloneUrl` and `kind` (GAUTH-03,
  * D-1-03, GHB-02). The bundle depends only on the address, so every command,
  * load, and background pass gets the same bundle for the same address. It
  * does no I/O. Like `hostFromCloneUrl`, it throws `InvalidGitHubBaseUrlError`
@@ -135,9 +105,5 @@ export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
  * (GAUTH-04, D-1-03).
  */
 export function authBundleFor(cloneUrl: string, kind: GitBackedSource["kind"]): GitAuthBundle {
-  return {
-    kind: "stored-credential",
-    credentialOps: DEFAULT_CREDENTIAL_OPS,
-    host: hostFromCloneUrl(cloneUrl, kind),
-  };
+  return { host: hostFromCloneUrl(cloneUrl, kind) };
 }

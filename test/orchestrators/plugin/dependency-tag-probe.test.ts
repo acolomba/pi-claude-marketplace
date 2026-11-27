@@ -385,7 +385,7 @@ test("threads the bundle of the source's address into the listing for a private 
   const seam: DependencyTagListingSeam = {
     listRemoteTags(options) {
       queried.push(options.url);
-      bindings.push({ kind: options.auth?.kind, host: options.auth?.host });
+      bindings.push(options.auth);
       return Promise.resolve([{ name: "formatter--v2.0.0", oid: "aaa1" }]);
     },
   };
@@ -406,7 +406,7 @@ test("threads the bundle of the source's address into the listing for a private 
     version: "2.0.0",
   });
   assert.deepStrictEqual(queried, ["https://github.com/acme/formatter.git"]);
-  assert.deepStrictEqual(bindings, [{ kind: "stored-credential", host: "github.com" }]);
+  assert.deepStrictEqual(bindings, [{ host: "github.com" }]);
 });
 
 test("serves a second query for the same repository from one listing call", async () => {

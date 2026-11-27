@@ -686,7 +686,7 @@ test("materializes a cold unpinned URL mirror at the typed wire url", async () =
   });
 });
 
-test("a pinned GitHub clone's bundle carries the production credential surface by reference", async () => {
+test("a pinned GitHub clone's bundle is bound to github.com", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://github.com/acme/plugin";
@@ -698,7 +698,7 @@ test("a pinned GitHub clone's bundle carries the production credential surface b
       scope: "project",
     });
     await saveMarketplaces(cwd, "project", [marketplace]);
-    const boundary = notificationBoundary("production credential surface");
+    const boundary = notificationBoundary("github.com bundle");
     const bundles: GitAuthBundle[] = [];
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
@@ -727,10 +727,7 @@ test("a pinned GitHub clone's bundle carries the production credential surface b
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ◌ stored (remote)" },
     ]);
-    assert.deepStrictEqual(
-      bundles.map((bundle) => ({ kind: bundle.kind, host: bundle.host })),
-      [{ kind: "stored-credential", host: "github.com" }],
-    );
+    assert.deepStrictEqual(bundles, [{ host: "github.com" }]);
     verifyNotifications(boundary);
   });
 });

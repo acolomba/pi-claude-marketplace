@@ -1932,7 +1932,7 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
   // D-SG-09: a git marketplace's tag copy fetches with the bundle the clone
   // probe builds for the marketplace host.
   const bundle = calls[0]?.resolveAuth?.("https://example.com/acme/marketplace", "url");
-  assert.deepStrictEqual([bundle?.kind, bundle?.host], ["stored-credential", "example.com"]);
+  assert.deepStrictEqual(bundle, { host: "example.com" });
   assert.deepStrictEqual(cloneCandidates, new Set(["path-clone"]));
 });
 
@@ -2707,7 +2707,7 @@ test("passes authenticated clone context and refs through both clone arms", asyn
   assert.strictEqual(unpinnedPrepared.resolvedSha, sha);
 });
 
-test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle when it has no notification context", async (t) => {
+test("D-3-04: gives the autoupdate cascade the github.com bundle when it has no notification context", async (t) => {
   // arrange
   // The cascade shape: prepare() with `ctx` omitted, mirroring
   // update-flow.ts's PluginUpdateFn, which never threads one through.
@@ -2727,8 +2727,7 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
     resolvePluginPin: () =>
       Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
     materializePluginClone: (options) => {
-      const { credentialOps: _credentialOps, ...binding } = options.resolveAuth();
-      assert.deepStrictEqual(binding, { kind: "stored-credential", host: "github.com" });
+      assert.deepStrictEqual(options.resolveAuth(), { host: "github.com" });
       return Promise.resolve(pinned.pluginRoot);
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
@@ -2738,10 +2737,7 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
     materializeOrRefreshPluginMirror: (options) => {
-      assert.deepStrictEqual(
-        { kind: options.auth?.kind, host: options.auth?.host },
-        { kind: "stored-credential", host: "github.com" },
-      );
+      assert.deepStrictEqual(options.auth, { host: "github.com" });
       return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
     },
     materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),

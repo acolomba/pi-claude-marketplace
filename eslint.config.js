@@ -36,15 +36,11 @@ const PACKAGE_INSTALL_SEAM =
   "./extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 
 /**
- * D-SG-01: the only modules that may import platform/git-process.ts, the module
- * every git process starts from. Every other module reaches git through them:
- * platform/git.ts behind GitOps, and platform/git-credential.ts behind
- * CredentialOps and its production binding.
+ * D-SG-01: the only module that may import platform/git-process.ts, the module
+ * every git process starts from. Every other module reaches git through
+ * platform/git.ts behind GitOps.
  */
-const GIT_PROCESS_IMPORTERS = [
-  "./extensions/pi-claude-marketplace/platform/git.ts",
-  "./extensions/pi-claude-marketplace/platform/git-credential.ts",
-];
+const GIT_PROCESS_IMPORTERS = ["./extensions/pi-claude-marketplace/platform/git.ts"];
 
 /**
  * NFR-5 / PI-2 / PL-3 / PRL-07: the orchestrators/ and domain/ modules that
@@ -62,8 +58,6 @@ const GIT_PROCESS_IMPORTERS = [
  * are directory-scoped.
  */
 const NETWORK_SEAMS = [
-  // D-79-05: builds the host-keyed credential bundle from platform/git-credential.ts.
-  "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   // Passes the injected gitOps seam to the marketplace adds an import performs.
   "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
   // NFR-5: adding a git-source marketplace clones it.
@@ -307,7 +301,7 @@ const PACKAGE_MANAGER_ZONE = {
 const GIT_PROCESS_ZONE = {
   target: "./extensions/pi-claude-marketplace",
   from: ["./extensions/pi-claude-marketplace/platform/git-process.ts"],
-  message: `D-SG-01: only ${GIT_PROCESS_IMPORTERS.join(" and ")} import platform/git-process.ts, the module every git process starts from.`,
+  message: `D-SG-01: only ${GIT_PROCESS_IMPORTERS.join(" and ")} may import platform/git-process.ts, the module every git process starts from.`,
 };
 
 export default tseslint.config(
@@ -564,7 +558,7 @@ export default tseslint.config(
     },
   },
   {
-    // Only the two git process importers may reach the git process module.
+    // Only the git process importers may reach the git process module.
     // Flat config keeps only the last matching block's options, so this block
     // repeats the direction and package-runner zones for every other file.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],

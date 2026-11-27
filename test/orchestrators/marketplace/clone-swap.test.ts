@@ -38,7 +38,6 @@ import {
   type GitFailure,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
@@ -58,11 +57,7 @@ const MANIFEST_B = '{"name":"tools","revision":"b"}\n';
 const MANIFEST_C = '{"name":"tools","revision":"c"}\n';
 const OWNERSHIP_MARKER = '{\n  "generatedBy": "pi-claude-marketplace"\n}\n';
 
-const AUTH: GitAuthBundle = {
-  kind: "stored-credential",
-  credentialOps: createCredentialOpsFake({ boundary: "memory", credentials: [] }).credentialOps,
-  host: "git.example",
-};
+const AUTH: GitAuthBundle = { host: "git.example" };
 
 interface Swap {
   readonly locations: ScopedLocations;

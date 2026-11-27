@@ -68,7 +68,6 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
 import type {
-  GitAuthBundle,
   GitHubSshOps,
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -191,20 +190,6 @@ function createGitOps(options: MarketplaceGitOpsSeed = {}) {
       resolveRefCalls: git.state.calls.resolveRef,
     }),
   };
-}
-
-/**
- * The recorded git calls with each bundle cut to the fields a request reads:
- * its kind and its host. Every bundle carries the production credential
- * surface (D-SG-27).
- */
-function withBundleFields<T extends { readonly auth?: GitAuthBundle | undefined }>(
-  calls: readonly T[],
-): Array<Omit<T, "auth"> & { auth: Pick<GitAuthBundle, "kind" | "host"> | undefined }> {
-  return calls.map(({ auth, ...call }) => ({
-    ...call,
-    auth: auth === undefined ? undefined : { kind: auth.kind, host: auth.host },
-  }));
 }
 
 /**
@@ -556,11 +541,11 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
       },
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
-    assert.deepStrictEqual(withBundleFields(state.lsRemoteCalls), [
+    assert.deepStrictEqual(state.lsRemoteCalls, [
       {
         url: "https://gitlab.example.com/team/urlmp-403",
         ref: "main",
-        auth: { kind: "stored-credential", host: "gitlab.example.com" },
+        auth: { host: "gitlab.example.com" },
       },
     ]);
     assert.deepStrictEqual(
@@ -598,11 +583,11 @@ test("marketplace update transport: names the status and URL of a providerless H
       },
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
-    assert.deepStrictEqual(withBundleFields(state.lsRemoteCalls), [
+    assert.deepStrictEqual(state.lsRemoteCalls, [
       {
         url: "https://gitlab.example.com/team/urlmp-500",
         ref: "main",
-        auth: { kind: "stored-credential", host: "gitlab.example.com" },
+        auth: { host: "gitlab.example.com" },
       },
     ]);
     assert.deepStrictEqual(
@@ -1814,11 +1799,11 @@ test("MURL-03 + D-SG-10: a stale url source is re-cloned with its host-keyed aut
       { message: "● urlmp [project] (skipped) {up-to-date}" },
     ]);
     assert.deepStrictEqual(state.resolveRefCalls, [{ dir: cloneDir, ref: "HEAD" }]);
-    assert.deepStrictEqual(withBundleFields(state.lsRemoteCalls), [
+    assert.deepStrictEqual(state.lsRemoteCalls, [
       {
         url: "https://gitlab.example.com/team/urlmp",
         ref: "main",
-        auth: { kind: "stored-credential", host: "gitlab.example.com" },
+        auth: { host: "gitlab.example.com" },
       },
     ]);
     assert.deepStrictEqual(
@@ -1856,14 +1841,8 @@ test("GHB-04: updating a url marketplace ignores an invalid override", async (t)
       { message: "● urlmp [project] (skipped) {up-to-date}" },
     ]);
     assert.deepStrictEqual(
-      state.cloneCalls.map(({ url, auth }) => ({ url, kind: auth?.kind, host: auth?.host })),
-      [
-        {
-          url: "https://gitlab.example.com/team/urlmp",
-          kind: "stored-credential",
-          host: "gitlab.example.com",
-        },
-      ],
+      state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
+      [{ url: "https://gitlab.example.com/team/urlmp", auth: { host: "gitlab.example.com" } }],
     );
   });
 });
@@ -1928,11 +1907,7 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     });
 
     // assert
-    const fetchedAuth = state.lsRemoteCalls[0]?.auth;
-    assert.deepStrictEqual(
-      { kind: fetchedAuth?.kind, host: fetchedAuth?.host },
-      { kind: "stored-credential", host: "gitlab.example.com" },
-    );
+    assert.deepStrictEqual(state.lsRemoteCalls[0]?.auth, { host: "gitlab.example.com" });
     assert.deepStrictEqual(notifications, [
       {
         message:
@@ -6043,11 +6018,11 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
 // ───────────────────────────────────────────────────────────────────────────
 // AUTH-02: auth bundle forwarding
 //
-// The GitAuthBundle is forwarded by reference into the D-SG-10 re-clone
-// (recorded on gitOps.clone's auth), proving no re-bundling occurs.
+// The D-SG-10 re-clone carries the bundle of the marketplace's host
+// (recorded on gitOps.clone's auth).
 // ───────────────────────────────────────────────────────────────────────────
 
-test("AUTH-02 update: the re-clone carries the stored-credential bundle of github.com", async () => {
+test("AUTH-02 update: the re-clone carries the bundle of github.com", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
@@ -6070,10 +6045,7 @@ test("AUTH-02 update: the re-clone carries the stored-credential bundle of githu
     // assert
 
     assert.equal(state.cloneCalls.length, 1);
-    assert.deepStrictEqual(
-      { kind: state.cloneCalls[0]?.auth?.kind, host: state.cloneCalls[0]?.auth?.host },
-      { kind: "stored-credential", host: "github.com" },
-    );
+    assert.deepStrictEqual(state.cloneCalls[0]?.auth, { host: "github.com" });
   });
 });
 
@@ -6101,8 +6073,8 @@ test("GHB-02: updating a GitHub marketplace under the override clones with the o
       { message: `● ref-mp [project] (skipped) {up-to-date}\n${HTTPS_CLONE_LINE}` },
     ]);
     assert.deepStrictEqual(
-      state.cloneCalls.map(({ auth }) => ({ kind: auth?.kind, host: auth?.host })),
-      [{ kind: "stored-credential", host: "mirror.example:8443" }],
+      state.cloneCalls.map(({ auth }) => auth),
+      [{ host: "mirror.example:8443" }],
     );
   });
 });

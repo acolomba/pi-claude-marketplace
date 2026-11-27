@@ -13328,7 +13328,7 @@ test("D-141-03: an orchestrated install carries the same warning on postCommitWa
   });
 });
 
-test("plugin install authentication: threads a github.com bundle over the production credential surface to the pinned clone", async () => {
+test("plugin install authentication: threads the github.com bundle to the pinned clone", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-github-"));
     try {
@@ -13370,18 +13370,8 @@ test("plugin install authentication: threads a github.com bundle over the produc
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(authCapture.calls.length, 1);
       assert.deepStrictEqual(
-        authCapture.calls.map(({ auth, cloneUrl }) => ({
-          authHost: auth?.host,
-          authKind: auth?.kind,
-          cloneUrl,
-        })),
-        [
-          {
-            authHost: "github.com",
-            authKind: "stored-credential",
-            cloneUrl: "https://github.com/org/repo",
-          },
-        ],
+        authCapture.calls.map(({ auth, cloneUrl }) => ({ auth, cloneUrl })),
+        [{ auth: { host: "github.com" }, cloneUrl: "https://github.com/org/repo" }],
       );
     } finally {
       await rm(cwd, { force: true, recursive: true });
@@ -13775,17 +13765,10 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
       assert.deepStrictEqual(notifications, []);
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl: capturedUrl }) => ({
-          authHost: auth?.host,
-          authKind: auth?.kind,
+          auth,
           cloneUrl: capturedUrl,
         })),
-        [
-          {
-            authHost: "gitlab.example.com",
-            authKind: "stored-credential",
-            cloneUrl,
-          },
-        ],
+        [{ auth: { host: "gitlab.example.com" }, cloneUrl }],
       );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ auth, noCheckout, ref, singleBranch, url }) => ({
@@ -13812,7 +13795,7 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
   });
 });
 
-test("plugin install authentication: threads a gitlab.com bundle over the production credential surface onto the canonical clone", async () => {
+test("plugin install authentication: threads the gitlab.com bundle onto the canonical clone", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-gitlab-"));
     try {
@@ -13856,11 +13839,10 @@ test("plugin install authentication: threads a gitlab.com bundle over the produc
       assert.strictEqual(authCapture.calls.length, 1);
       assert.deepStrictEqual(
         authCapture.calls.map(({ auth, cloneUrl: recordedCloneUrl }) => ({
-          authHost: auth?.host,
-          authKind: auth?.kind,
+          auth,
           cloneUrl: recordedCloneUrl,
         })),
-        [{ authHost: "gitlab.com", authKind: "stored-credential", cloneUrl }],
+        [{ auth: { host: "gitlab.com" }, cloneUrl }],
       );
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ url }) => url),

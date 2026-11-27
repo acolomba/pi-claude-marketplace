@@ -39,7 +39,6 @@ import {
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
-import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { captureDebugLog } from "./debug-log-capture.ts";
 import { registerGitOpsContract } from "./git-ops-contract.ts";
 import {
@@ -58,11 +57,9 @@ import type {
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type {
-  GitCredentials,
   RemoteTag,
   SshProbeResult,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
-import type { CredentialOpsFake } from "./credential-ops-fake.ts";
 import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
 
 // SG-TRN-01: the in-process authentication callbacks left with the second git
@@ -237,21 +234,9 @@ function isGitMissingWithoutCause(error: unknown): boolean {
   return true;
 }
 
-/** A credential fake whose helper holds `user:secret` for the bound host. */
-function storedCredentials(): CredentialOpsFake {
-  return createCredentialOpsFake({
-    boundary: "memory",
-    credentials: [[HOST, { username: "user", password: "secret" }]],
-  });
-}
-
-/** The auth bundle bound to `HOST`: no eviction, and no interactive fallback. */
-function boundAuth(credentials: CredentialOpsFake): NonNullable<GitPlatform.CloneOptions["auth"]> {
-  return {
-    credentialOps: credentials.credentialOps,
-    host: HOST,
-    kind: "stored-credential",
-  };
+/** The auth bundle bound to `HOST`. */
+function boundAuth(): NonNullable<GitPlatform.CloneOptions["auth"]> {
+  return { host: HOST };
 }
 
 /** The branch HEAD names in `dir`, or undefined when HEAD is detached. */
@@ -1332,21 +1317,16 @@ function fetchRequests(requests: readonly GitRequest[]): GitRequest[] {
 }
 
 describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
-  test("GAUTH-04: a missing credential under a stored-credential bundle is thrown as it failed, and git runs once", async (t) => {
+  test("GAUTH-04: a missing credential under a bundle is thrown as it failed, and git runs once", async (t) => {
     // arrange
     const standIn = await credentialStandIn(t);
     const recorded = recordingGitProcess(standIn.gitProcess);
-    const credentials = storedCredentials();
 
     // act
     const resolution = resolveRemoteRef(
       {
         url: standIn.url,
-        auth: {
-          kind: "stored-credential",
-          credentialOps: credentials.credentialOps,
-          host: standIn.host.address,
-        },
+        auth: { host: standIn.host.address },
       },
       recorded.gitProcess,
     );
@@ -1367,17 +1347,12 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
     // arrange
     const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
     const recorded = recordingGitProcess(standIn.gitProcess);
-    const credentials = storedCredentials();
 
     // act
     const resolution = resolveRemoteRef(
       {
         url: standIn.url,
-        auth: {
-          kind: "stored-credential",
-          credentialOps: credentials.credentialOps,
-          host: standIn.host.address,
-        },
+        auth: { host: standIn.host.address },
       },
       recorded.gitProcess,
     );
@@ -1398,11 +1373,10 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
   test("GAUTH-04: a refused credential of a fetchCommit rung in a clone of the bundle's host throws StoredCredentialRejectedError", async () => {
     // arrange
     const failing = failingAuthGitProcess("rejected");
-    const credentials = storedCredentials();
 
     // act
     const fetching = fetchCommit(
-      { dir: "/clone", sha: OID_MAIN, auth: boundAuth(credentials) },
+      { dir: "/clone", sha: OID_MAIN, auth: boundAuth() },
       failing.gitProcess,
     );
 
@@ -1418,20 +1392,15 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
     assert.strictEqual(fetchRequests(failing.requests).length, 1);
   });
 
-  test("D-1-03: a stored-credential bundle for another host throws a refused credential's failure unchanged", async (t) => {
+  test("D-1-03: a bundle for another host throws a refused credential's failure unchanged", async (t) => {
     // arrange
     const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
-    const credentials = storedCredentials();
 
     // act
     const resolution = resolveRemoteRef(
       {
         url: standIn.url,
-        auth: {
-          kind: "stored-credential",
-          credentialOps: credentials.credentialOps,
-          host: "github.com",
-        },
+        auth: { host: "github.com" },
       },
       standIn.gitProcess,
     );
@@ -1447,11 +1416,10 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
   test("D-1-03: a fetchCommit rung in a clone whose origin is another host throws its refused credential's failure unchanged", async () => {
     // arrange
     const failing = failingAuthGitProcess("rejected", OTHER_REMOTE_URL);
-    const credentials = storedCredentials();
 
     // act
     const fetching = fetchCommit(
-      { dir: "/clone", sha: OID_MAIN, auth: boundAuth(credentials) },
+      { dir: "/clone", sha: OID_MAIN, auth: boundAuth() },
       failing.gitProcess,
     );
 
@@ -1464,13 +1432,9 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
     test(`D-1-03: a request to ${url} is no https request to the bundle's host, so its refused credential's failure is thrown unchanged`, async () => {
       // arrange
       const failing = failingAuthGitProcess("rejected");
-      const credentials = storedCredentials();
 
       // act
-      const resolution = resolveRemoteRef(
-        { url, auth: boundAuth(credentials) },
-        failing.gitProcess,
-      );
+      const resolution = resolveRemoteRef({ url, auth: boundAuth() }, failing.gitProcess);
 
       // assert
       await assert.rejects(resolution, (error: unknown) => error === failing.failures[0]);
@@ -1800,13 +1764,9 @@ describe("listRemoteTags", () => {
   test("RESV-03, GAUTH-04: the supplied bundle maps an auth failure of the listing", async () => {
     // arrange
     const failing = failingAuthGitProcess("rejected");
-    const credentials = storedCredentials();
 
     // act
-    const listing = listRemoteTags(
-      { url: REMOTE_URL, auth: boundAuth(credentials) },
-      failing.gitProcess,
-    );
+    const listing = listRemoteTags({ url: REMOTE_URL, auth: boundAuth() }, failing.gitProcess);
 
     // assert
     await assert.rejects(listing, (error: unknown) => {
@@ -2424,5 +2384,4 @@ describe("GitOps contract", () => {
   registerGitOpsContract(createProductionGitOps);
 });
 
-void ({ username: "user", password: "secret" } satisfies GitCredentials);
 void ({ name: "v1.0.0", oid: OID_MAIN } satisfies RemoteTag);
