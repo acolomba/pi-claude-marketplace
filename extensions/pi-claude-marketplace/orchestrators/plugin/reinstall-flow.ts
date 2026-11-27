@@ -93,7 +93,6 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { GitHubCloneNotes, PluginTransportContext } from "../github-transport.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
@@ -138,9 +137,6 @@ export interface ReinstallPluginOptions {
    * other caller that omits it, is never refused.
    */
   readonly named?: boolean;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * D-SG-19: the command's GitHub transport context, which the shared runner
    * gives every clone of this reinstall. The bulk reinstall makes one for the
@@ -176,8 +172,6 @@ export interface ReinstallPluginsOptions {
   readonly cwd: string;
   readonly target: ReinstallPluginsTarget;
   readonly local?: boolean;
-  readonly credentialOps?: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
   /**
    * D-SG-19: the command's GitHub transport context, forwarded to every
    * per-plugin reinstall; the bulk reinstall makes one when it is absent.
@@ -570,13 +564,10 @@ async function reinstallPluginsWith(
   // OUT-04 / D-04: the structural single-vs-plural cardinality is the invocation
   // FORM -- a `<plugin>@<mp>` target is single-target (omits the tally), while
   // the `@<marketplace>` and bare forms are bulk (emit the tally).
-  // D-79-02: ONE once-per-host memo spans the whole bulk loop so a cold-cache
-  // sweep over several private plugins on the same host runs the device flow
-  // at most once (the same bulk-storm guard install/update use). D-SG-19:
-  // beside it, ONE transport context, so the command probes once. D-SG-22:
-  // each target clones through a view of its own, so a plugin installed in
-  // both scopes shows each scope's clone on that scope's row only.
-  const authMemo = new Map<string, AuthAttemptResult>();
+  // D-SG-19: ONE transport context spans the whole bulk loop, so the command
+  // probes once. D-SG-22: each target clones through a view of its own, so a
+  // plugin installed in both scopes shows each scope's clone on that scope's
+  // row only.
   const transportContext = opts.transportContext ?? defaultPluginTransportContext();
   const notesByOutcome = new Map<ReinstallPluginOutcome, GitHubCloneNotes>();
   for (const target of targets) {
@@ -592,9 +583,6 @@ async function reinstallPluginsWith(
       render: "none",
       ...(opts.local === true && { local: true }),
       ...(opts.target.kind === "plugin" && { named: true }),
-      ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
-      ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-      authMemo,
       transportContext: targetContext,
       ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
       ...(opts.removeDataDir !== undefined && { removeDataDir: opts.removeDataDir }),

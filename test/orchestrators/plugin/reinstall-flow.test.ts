@@ -24,6 +24,7 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -55,10 +56,8 @@ import {
   createRemovalOps,
   pathExists,
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
@@ -4613,13 +4612,6 @@ test("BFILL-01 / D-18-06 full: reinstall of an installable plugin records instal
 // a cache miss clones.
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
-const DEVICE_CODE = {
-  device_code: "MOCK_DEVICE_CODE",
-  user_code: "ABCD-1234",
-  verification_uri: "https://github.com/login/device",
-  expires_in: 900,
-  interval: 0,
-} as const;
 const REINSTALL_REMOTE_URLS = [
   "https://example.com/org/mono",
   "https://example.com/org/repo",
@@ -4964,14 +4956,6 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
         fixtureSourceDir: path.join(cwd, "repo-fixture"),
       });
       const { seam, captured } = capturingReinstallSeam(gitOps);
-      const { credentialOps, calls: credentialCalls } = createCredentialOpsFake({
-        boundary: "memory",
-      });
-      const deviceFlow = createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: DEVICE_CODE,
-      });
       const { ctx, run } = makeCtx();
 
       // act
@@ -4983,8 +4967,6 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
         marketplace: "mp",
         plugin: "gp",
         render: "none",
-        credentialOps,
-        deviceFlowHttp: deviceFlow.http,
         cloneCacheSeam: seam,
       });
 
@@ -4992,9 +4974,8 @@ test("plugin reinstall authentication: a cold GitHub cache threads one provider 
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1);
       assert.equal(captured.auth?.host, "github.com");
+      assert.strictEqual(captured.auth?.credentialOps, DEFAULT_CREDENTIAL_OPS);
       assert.equal(gitState.cloneCalls.length, 1);
-      assert.deepEqual(credentialCalls, { approve: [], fill: [], reject: [] });
-      assert.deepEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5023,9 +5004,6 @@ test("plugin reinstall authentication: a host the registry does not claim thread
       await rm(cloneRoot, { recursive: true, force: true });
       const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
       const { seam, captured } = capturingReinstallSeam(gitOps);
-      const { credentialOps, calls: credentialCalls } = createCredentialOpsFake({
-        boundary: "memory",
-      });
       const { ctx, run } = makeCtx();
 
       // act
@@ -5037,7 +5015,6 @@ test("plugin reinstall authentication: a host the registry does not claim thread
         marketplace: "mp",
         plugin: "gp",
         render: "none",
-        credentialOps,
         cloneCacheSeam: seam,
       });
 
@@ -5045,142 +5022,9 @@ test("plugin reinstall authentication: a host the registry does not claim thread
       assert.equal(outcome.partition, "reinstalled");
       assert.equal(captured.count, 1);
       assert.deepStrictEqual(
-        { credentialOps: captured.auth?.credentialOps, host: captured.auth?.host },
-        { credentialOps, host: "gitlab.example.com" },
+        { kind: captured.auth?.kind, host: captured.auth?.host },
+        { kind: "stored-credential", host: "gitlab.example.com" },
       );
-      // Attaching a bundle consults nothing on its own: the credential helper
-      // is queried only when the server issues a challenge, and this clone
-      // succeeds without one.
-      assert.deepEqual(credentialCalls, { approve: [], fill: [], reject: [] });
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("plugin reinstall authentication: a bulk cold-cache sweep shares one host memo", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-auth-memo-"));
-    try {
-      // arrange
-      const secondSha = "b2c3d4e5f60718293a4b5c6d7e8f901234567890";
-      const fixtureRepoDir = path.join(cwd, "repo-fixture");
-      await mkdir(path.join(fixtureRepoDir, ".claude-plugin"), { recursive: true });
-      await writeFile(
-        path.join(fixtureRepoDir, ".claude-plugin", "plugin.json"),
-        JSON.stringify({ name: "unused", version: "9.9.9" }),
-      );
-      const skillDir = path.join(fixtureRepoDir, "skills", "greet");
-      await mkdir(skillDir, { recursive: true });
-      await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: greet\n---\n\nHi.\n");
-      const marketplaceRoot = path.join(cwd, "mp-src");
-      await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
-      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-      await writeFile(
-        manifestPath,
-        JSON.stringify({
-          name: "mp",
-          plugins: [
-            { name: "gh1", source: { source: "github", repo: "org/one", sha: GIT_SOURCE_SHA } },
-            { name: "gh2", source: { source: "github", repo: "org/two", sha: secondSha } },
-          ],
-        }),
-      );
-      const locations = locationsFor("project", cwd);
-      await mkdir(locations.extensionRoot, { recursive: true });
-      const makeRecord = async (repo: string, sha: string) => ({
-        version: `sha-${sha.slice(0, 12)}`,
-        installedAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-        enabled: true,
-        provenance: "explicit" as const,
-        compatibility: {
-          installable: true,
-          notes: [] as string[],
-          supported: [] as string[],
-          unsupported: [] as string[],
-        },
-        resources: {
-          skills: [],
-          prompts: [],
-          agents: [],
-          mcpServers: [],
-          hooks: [],
-          workflows: [],
-        },
-        resolvedSource: await locations.pluginCloneDir(
-          pluginCloneKey(`https://github.com/${repo}`, sha),
-        ),
-        resolvedSha: sha,
-      });
-      await saveState(locations.extensionRoot, {
-        schemaVersion: 2,
-        marketplaces: {
-          mp: {
-            name: "mp",
-            scope: "project",
-            source: pathSource("./mp-src"),
-            addedFromCwd: cwd,
-            manifestPath,
-            marketplaceRoot,
-            plugins: {
-              gh1: await makeRecord("org/one", GIT_SOURCE_SHA),
-              gh2: await makeRecord("org/two", secondSha),
-            },
-          },
-        },
-      });
-      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-      const bundles: (GitAuthBundle | undefined)[] = [];
-      const base = installSeamWith(gitOps);
-      const seam: UpdateCloneCacheSeam = {
-        ...base,
-        materializePluginClone: (args) => {
-          bundles.push(args.resolveAuth());
-          return base.materializePluginClone(args);
-        },
-      };
-      const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
-      const deviceFlow = createDeviceFlowFake({
-        boundary: "memory",
-        network: "disabled",
-        deviceCode: DEVICE_CODE,
-        pollResponses: [
-          { kind: "success", accessToken: "tok-abc", tokenType: "bearer", scope: "repo" },
-        ],
-      });
-      const { ctx, run } = makeCtx();
-
-      // act
-      const outcomes = await reinstallPlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "marketplace", marketplace: "mp" },
-        credentialOps,
-        deviceFlowHttp: deviceFlow.http,
-        cloneCacheSeam: seam,
-      });
-      const firstBundle = bundles[0];
-      const secondBundle = bundles[1];
-      if (firstBundle?.kind !== "device-flow" || secondBundle?.kind !== "device-flow") {
-        throw new Error("expected one device-flow auth bundle for each cold-cache reinstall");
-      }
-
-      await firstBundle.onAuthRequired();
-      await secondBundle.onAuthRequired();
-
-      // assert
-      assert.deepEqual(
-        outcomes.map(({ name, partition }) => ({ name, partition })),
-        [
-          { name: "gh1", partition: "reinstalled" },
-          { name: "gh2", partition: "reinstalled" },
-        ],
-      );
-      assert.equal(bundles.length, 2);
-      assert.equal(deviceFlow.calls.requestCode.length, 1);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
