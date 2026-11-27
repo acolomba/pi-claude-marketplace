@@ -12,6 +12,7 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { DEFAULT_CREDENTIAL_OPS } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import { createPluginTransportContext } from "../../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -28,8 +29,6 @@ import {
   GitCommandError,
   InvalidGitHubBaseUrlError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import {
@@ -59,7 +58,6 @@ import type {
 import type * as FetchOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -172,18 +170,6 @@ function requiredAuth(auth: GitAuthBundle | undefined): GitAuthBundle {
   }
 
   return auth;
-}
-
-/** Narrows a bundle the case expects to sign in, and fails the case otherwise. */
-function requiredDeviceFlow(
-  auth: GitAuthBundle | undefined,
-): Extract<GitAuthBundle, { kind: "device-flow" }> {
-  const bundle = requiredAuth(auth);
-  if (bundle.kind !== "device-flow") {
-    assert.fail(`expected a device-flow bundle for ${bundle.host}`);
-  }
-
-  return bundle;
 }
 
 function gitBoundary(options: GitBoundaryOptions): GitBoundary {
@@ -468,27 +454,13 @@ test("keeps a pinned warm URL clone offline and byte-identical", async () => {
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
     const git = gitBoundary({ allowedRemoteUrls: [] });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      deviceCode: {
-        device_code: "unused",
-        expires_in: 1,
-        interval: 0,
-        user_code: "UNUSED",
-        verification_uri: "https://example.invalid/device",
-      },
-      network: "disabled",
-    });
     const boundary = notificationBoundary("pinned warm");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      deviceFlowHttp: deviceFlow.http,
       run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "warm" },
@@ -500,8 +472,6 @@ test("keeps a pinned warm URL clone offline and byte-identical", async () => {
     ]);
     assert.deepStrictEqual(cache.calls, []);
     assert.deepStrictEqual(git.schedule, []);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
-    assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
     assert.deepStrictEqual(await snapshotTree(locations.pluginClonesDir), cacheBefore);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(await stagingEntries(locations), []);
@@ -536,14 +506,12 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
     const git = gitBoundary({ allowedRemoteUrls: [networkUrl], fixtureSourceDir: fixture });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("cold pinned URL");
     const cloneKey = pluginCloneKey(cloneUrl, pin);
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -567,7 +535,6 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
       `checkout ${pin}`,
       "resolve-local HEAD",
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(await snapshotTree(locations.pluginClonesDir), [
       { path: cloneKey, type: "directory" },
       { path: path.join(cloneKey, ".claude-plugin"), type: "directory" },
@@ -617,13 +584,11 @@ test("D-SG-10: checks an unpinned warm mirror's ref with ls-remote, keeps a curr
       remoteRefs: { "refs/remotes/origin/main": head },
     });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("warm mirror");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -641,7 +606,6 @@ test("D-SG-10: checks an unpinned warm mirror's ref with ls-remote, keeps a curr
       `resolve-remote ${networkUrl} ref=main auth=example.com`,
       "resolve-local HEAD",
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(await stagingEntries(locations), []);
     verifyNotifications(boundary);
@@ -677,13 +641,11 @@ test("materializes a cold unpinned URL mirror at the typed wire url", async () =
       writeHead: true,
     });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("cold URL mirror");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -725,109 +687,7 @@ test("materializes a cold unpinned URL mirror at the typed wire url", async () =
   });
 });
 
-test("materializes a cold unpinned GitHub mirror through Device Flow once per host", async () => {
-  await withWorkspace(async ({ cwd }) => {
-    // arrange
-    const cloneUrl = "https://github.com/acme/plugin";
-    const networkUrl = "https://github.com/acme/plugin.git";
-    const head = "4444444444444444444444444444444444444444";
-    const fixture = path.join(cwd, "fixture");
-    await writePluginTree(fixture, "private", "4.0.0");
-    const marketplace = await marketplaceRecord({
-      cwd,
-      entries: [
-        { name: "private", source: { source: "github", repo: "acme/plugin" }, version: "4.0.0" },
-      ],
-      name: "marketplace",
-      scope: "project",
-    });
-    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
-    const git = gitBoundary({
-      allowedRemoteUrls: [networkUrl],
-      fixtureSourceDir: fixture,
-      head,
-      localRefs: { "refs/heads/main": head },
-      remoteHead: head,
-      remoteRefs: { "refs/remotes/origin/HEAD": head },
-      writeHead: true,
-    });
-    const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      deviceCode: {
-        device_code: "device-code",
-        expires_in: 900,
-        interval: 0,
-        user_code: "ABCD-1234",
-        verification_uri: "https://github.com/login/device",
-      },
-      network: "disabled",
-      pollResponses: [
-        { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
-      ],
-    });
-    const boundary = notificationBoundary("Device Flow", 2, 3);
-    const originalMirror = cache.seam.materializeOrRefreshPluginMirror;
-    const seam: FetchCloneCacheSeam = {
-      ...cache.seam,
-      async materializeOrRefreshPluginMirror(args) {
-        // D-SG-14: the retry of a run no helper answered calls onAuthRequired.
-        assert.deepStrictEqual(await requiredDeviceFlow(args.auth).onAuthRequired(), {
-          ok: true,
-          cred: { password: "token", username: "x-access-token" },
-        });
-        return originalMirror(args);
-      },
-    };
-
-    // act
-    await fetchPlugins({
-      cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
-      ctx: boundary.ctx,
-      cwd,
-      deviceFlowHttp: deviceFlow.http,
-      run: boundary.run,
-      scope: "project",
-      target: { kind: "plugin", marketplace: "marketplace", plugin: "private" },
-    });
-
-    // assert
-    assert.deepStrictEqual(boundary.notifications, [
-      {
-        message: "Open https://github.com/login/device and enter: ABCD-1234",
-        severity: "info",
-      },
-      {
-        message: [
-          "● marketplace [project]",
-          "  ○ private v4.0.0 (available)",
-          "    SSH not configured, cloning via HTTPS: https://github.com/acme/plugin.git",
-        ].join("\n"),
-      },
-    ]);
-    assert.deepStrictEqual(credentials.calls, {
-      approve: [
-        {
-          credential: { password: "token", username: "x-access-token" },
-          host: "github.com",
-        },
-      ],
-      fill: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(deviceFlow.calls, {
-      pollToken: [{ clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "device-code", intervalSec: 0 }],
-      requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
-    });
-    assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=- auth=github.com`]);
-    assert.deepStrictEqual(await stagingEntries(locations), []);
-    verifyNotifications(boundary);
-  });
-});
-
-test("reuses a stored GitHub credential without Device Flow", async () => {
+test("a pinned GitHub clone's bundle carries the production credential surface by reference", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://github.com/acme/plugin";
@@ -839,34 +699,15 @@ test("reuses a stored GitHub credential without Device Flow", async () => {
       scope: "project",
     });
     await saveMarketplaces(cwd, "project", [marketplace]);
-    const storedCredential: GitCredentials = {
-      password: "stored-token",
-      username: "x-access-token",
-    };
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [["github.com", storedCredential]],
-    });
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      deviceCode: {
-        device_code: "unused",
-        expires_in: 1,
-        interval: 0,
-        user_code: "UNUSED",
-        verification_uri: "https://example.invalid/device",
-      },
-      network: "disabled",
-    });
-    const boundary = notificationBoundary("stored credential");
+    const boundary = notificationBoundary("production credential surface");
+    const bundles: GitAuthBundle[] = [];
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
       },
-      async materializePluginClone(args) {
-        const auth = requiredAuth(args.resolveAuth());
-        assert.deepStrictEqual(await auth.credentialOps.fill(auth.host), storedCredential);
-        return path.join(cwd, "not-written");
+      materializePluginClone(args) {
+        bundles.push(args.resolveAuth());
+        return Promise.resolve(path.join(cwd, "not-written"));
       },
       resolvePluginPin(args) {
         return Promise.resolve({ cloneUrl, pin: args.source.sha ?? pin });
@@ -876,10 +717,8 @@ test("reuses a stored GitHub credential without Device Flow", async () => {
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
-      deviceFlowHttp: deviceFlow.http,
       run: boundary.run,
       scope: "project",
       target: { kind: "plugin", marketplace: "marketplace", plugin: "stored" },
@@ -889,116 +728,10 @@ test("reuses a stored GitHub credential without Device Flow", async () => {
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ◌ stored (remote)" },
     ]);
-    assert.deepStrictEqual(credentials.calls, {
-      approve: [],
-      fill: [{ host: "github.com" }],
-      reject: [],
-    });
-    assert.deepStrictEqual(deviceFlow.calls, { pollToken: [], requestCode: [] });
-    verifyNotifications(boundary);
-  });
-});
-
-test("memoizes one accepted Device Flow result across a same-host sweep", async () => {
-  await withWorkspace(async ({ cwd }) => {
-    // arrange
-    const pinA = "6666666666666666666666666666666666666666";
-    const pinB = "7777777777777777777777777777777777777777";
-    const marketplace = await marketplaceRecord({
-      cwd,
-      entries: [
-        { name: "zeta", source: { source: "github", repo: "acme/a", sha: pinA } },
-        { name: "alpha", source: { source: "github", repo: "acme/b", sha: pinB } },
-      ],
-      name: "marketplace",
-      scope: "project",
-    });
-    await saveMarketplaces(cwd, "project", [marketplace]);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      deviceCode: {
-        device_code: "device-code",
-        expires_in: 900,
-        interval: 0,
-        user_code: "ABCD-1234",
-        verification_uri: "https://github.com/login/device",
-      },
-      network: "disabled",
-      pollResponses: [
-        { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
-      ],
-    });
-    const boundary = notificationBoundary("memoized Device Flow", 2, 3);
-    const authResults: unknown[] = [];
-    const seam: FetchCloneCacheSeam = {
-      materializeOrRefreshPluginMirror() {
-        return Promise.reject(new Error("unexpected mirror call"));
-      },
-      async materializePluginClone(args) {
-        const auth = requiredAuth(args.resolveAuth());
-        assert.ok(auth.kind === "device-flow");
-        authResults.push(await auth.onAuthRequired());
-        return path.join(cwd, "not-written");
-      },
-      resolvePluginPin(args) {
-        return Promise.resolve({
-          cloneUrl:
-            args.source.kind === "github"
-              ? `https://github.com/${args.source.owner}/${args.source.repo}`
-              : args.source.url,
-          pin: args.source.sha ?? "missing",
-        });
-      },
-    };
-
-    // act
-    await fetchPlugins({
-      cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
-      ctx: boundary.ctx,
-      cwd,
-      deviceFlowHttp: deviceFlow.http,
-      run: boundary.run,
-      scope: "project",
-      target: { kind: "marketplace", marketplace: "marketplace" },
-    });
-
-    // assert
-    assert.deepStrictEqual(authResults, [
-      {
-        cred: { password: "token", username: "x-access-token" },
-        ok: true,
-      },
-      {
-        cred: { password: "token", username: "x-access-token" },
-        ok: true,
-      },
-    ]);
-    assert.deepStrictEqual(boundary.notifications, [
-      {
-        message: "Open https://github.com/login/device and enter: ABCD-1234",
-        severity: "info",
-      },
-      {
-        message:
-          "● marketplace [project]\n  ◌ zeta (remote)\n  ◌ alpha (remote)\n\nPlugin fetch: 2 successes",
-      },
-    ]);
-    assert.deepStrictEqual(credentials.calls, {
-      approve: [
-        {
-          credential: { password: "token", username: "x-access-token" },
-          host: "github.com",
-        },
-      ],
-      fill: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(deviceFlow.calls, {
-      pollToken: [{ clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "device-code", intervalSec: 0 }],
-      requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
-    });
+    assert.strictEqual(bundles.length, 1);
+    const [bundle] = bundles;
+    assert.strictEqual(bundle?.host, "github.com");
+    assert.strictEqual(bundle.credentialOps, DEFAULT_CREDENTIAL_OPS);
     verifyNotifications(boundary);
   });
 });
@@ -1037,13 +770,11 @@ test("preserves marketplace and manifest ordering across both scopes", async () 
     await saveMarketplaces(cwd, "user", [sameUser, alpha]);
     const git = gitBoundary({ allowedRemoteUrls: [] });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("ordered sweep");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1073,7 +804,6 @@ test("preserves marketplace and manifest ordering across both scopes", async () 
     ]);
     assert.deepStrictEqual(cache.calls, []);
     assert.deepStrictEqual(git.schedule, []);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verifyNotifications(boundary);
   });
 });
@@ -1099,13 +829,11 @@ test("filters unrelated marketplaces and nonmatching manifest entries", async ()
     await saveMarketplaces(cwd, "project", [unrelated, selected]);
     const git = gitBoundary({ allowedRemoteUrls: [] });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("filtered target");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1119,7 +847,6 @@ test("filters unrelated marketplaces and nonmatching manifest entries", async ()
     ]);
     assert.deepStrictEqual(cache.calls, []);
     assert.deepStrictEqual(git.schedule, []);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verifyNotifications(boundary);
   });
 });
@@ -1143,13 +870,11 @@ test("isolates a malformed manifest and continues the healthy marketplace", asyn
     await saveMarketplaces(cwd, "project", [healthy, broken]);
     const git = gitBoundary({ allowedRemoteUrls: [] });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("malformed manifest", 1);
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1175,7 +900,6 @@ test("isolates a malformed manifest and continues the healthy marketplace", asyn
     ]);
     assert.deepStrictEqual(cache.calls, []);
     assert.deepStrictEqual(git.schedule, []);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verifyNotifications(boundary);
   });
 });
@@ -1216,13 +940,11 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
         return originalClone(args);
       },
     };
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("failure-tolerant sweep");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1293,13 +1015,11 @@ test("derives partially available and unavailable git rows exactly", async () =>
       fixtureSourceDir: fixture,
     });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("reasoned rows");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1351,13 +1071,11 @@ test("flags binaries on a fetched git row of an official marketplace", async () 
     await saveMarketplaces(cwd, "project", [marketplace]);
     const git = gitBoundary({ allowedRemoteUrls: [cloneUrl], fixtureSourceDir: fixture });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("official binaries");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1399,7 +1117,6 @@ test("GLK-07: a successful seam with a still-cold cache reports remote with the 
       scope: "project",
     });
     await saveMarketplaces(cwd, "project", [marketplace]);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("remote row");
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
@@ -1416,7 +1133,6 @@ test("GLK-07: a successful seam with a still-cold cache reports remote with the 
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1430,7 +1146,6 @@ test("GLK-07: a successful seam with a still-cold cache reports remote with the 
         message: "● marketplace [project]\n  ◌ remote v3.2.1 (remote)\n    Remote plugin",
       },
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verifyNotifications(boundary);
   });
 });
@@ -1448,7 +1163,6 @@ test("GLK-07: reads the post-fetch row once through list's rule against the warm
     });
     const locations = await saveMarketplaces(cwd, "project", [marketplace]);
     const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, pin));
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("concurrent cache visibility");
     let postFetchReads = 0;
     const status: FetchStatus = {
@@ -1475,7 +1189,6 @@ test("GLK-07: reads the post-fetch row once through list's rule against the warm
     // act
     await fetchPluginsWithStatus({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1506,7 +1219,6 @@ test("GLK-07: reads the post-fetch row once through list's rule against the warm
         type: "file",
       },
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(await stagingEntries(locations), []);
     verifyNotifications(boundary);
   });
@@ -1561,14 +1273,12 @@ test("renders fresh status after materialization through the required capability
       },
     };
     const controlledFetch = createFetchPlugins(status);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("fresh status capability");
     const cloneKey = pluginCloneKey(cloneUrl, pin);
 
     // act
     await controlledFetch({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1598,7 +1308,6 @@ test("renders fresh status after materialization through the required capability
         type: "file",
       },
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(await stagingEntries(locations), []);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(sequence, ["presence:not-cached", "materialize", "candidate:resolved"]);
@@ -1627,7 +1336,6 @@ test("narrows permission and non-Error failures without aborting the sweep", asy
       scope: "project",
     });
     await saveMarketplaces(cwd, "project", [marketplace]);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("failure narrowing");
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
@@ -1652,7 +1360,6 @@ test("narrows permission and non-Error failures without aborting the sweep", asy
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1677,7 +1384,6 @@ test("narrows permission and non-Error failures without aborting the sweep", asy
         severity: "error",
       },
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verifyNotifications(boundary);
   });
 });
@@ -1707,12 +1413,10 @@ test("cleans failed clone staging and converges on retry", async () => {
     const retryGit = gitBoundary({ allowedRemoteUrls: [networkUrl], fixtureSourceDir: fixture });
     const retryCache = cacheBoundary(retryGit.gitOps);
     const retryBoundary = notificationBoundary("clone retry");
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
 
     // act
     await fetchPlugins({
       cloneCacheSeam: failedCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
       run: failedBoundary.run,
@@ -1723,7 +1427,6 @@ test("cleans failed clone staging and converges on retry", async () => {
     const stagingAfterFailure = await stagingEntries(locations);
     await fetchPlugins({
       cloneCacheSeam: retryCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
       run: retryBoundary.run,
@@ -1777,13 +1480,11 @@ test("accepts a concurrent cache winner and removes losing staging", async () =>
       },
     };
     const cache = cacheBoundary(racingGitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("cache race");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -1830,12 +1531,10 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
     const retryGit = gitBoundary({ allowedRemoteUrls: [networkUrl], fixtureSourceDir: fixture });
     const retryCache = cacheBoundary(retryGit.gitOps);
     const retryBoundary = notificationBoundary("cleanup retry");
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
 
     // act
     await fetchPlugins({
       cloneCacheSeam: failedCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
       run: failedBoundary.run,
@@ -1846,7 +1545,6 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
     const leakedTree = await stagingEntries(locations);
     await fetchPlugins({
       cloneCacheSeam: retryCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
       run: retryBoundary.run,
@@ -1870,88 +1568,6 @@ test("surfaces a cleanup leak and retries safely after permissions are repaired"
   });
 });
 
-test("classifies a denied Device Flow as authentication required", async () => {
-  await withWorkspace(async ({ cwd }) => {
-    // arrange
-    const cloneUrl = "https://github.com/acme/denied";
-    const pin = "1234567890abcdef1234567890abcdef12345678";
-    const marketplace = await marketplaceRecord({
-      cwd,
-      entries: [{ name: "denied", source: { source: "github", repo: "acme/denied", sha: pin } }],
-      name: "marketplace",
-      scope: "project",
-    });
-    await saveMarketplaces(cwd, "project", [marketplace]);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      deviceCode: {
-        device_code: "device-code",
-        expires_in: 900,
-        interval: 0,
-        user_code: "DENY-1234",
-        verification_uri: "https://github.com/login/device",
-      },
-      network: "disabled",
-      pollResponses: [{ kind: "access_denied" }],
-    });
-    const boundary = notificationBoundary("denied Device Flow", 2, 3);
-    const seam: FetchCloneCacheSeam = {
-      materializeOrRefreshPluginMirror() {
-        return Promise.reject(new Error("unexpected mirror call"));
-      },
-      async materializePluginClone(args) {
-        assert.deepStrictEqual(await requiredDeviceFlow(args.resolveAuth()).onAuthRequired(), {
-          ok: false,
-          reason: "User cancelled authorization. Run the command again to retry.",
-        });
-        throw cloneFailure(
-          { kind: "https-auth", detail: "no-credential" },
-          new Error("User cancelled authorization. Run the command again to retry."),
-        );
-      },
-      resolvePluginPin() {
-        return Promise.resolve({ cloneUrl, pin });
-      },
-    };
-
-    // act
-    await fetchPlugins({
-      cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
-      ctx: boundary.ctx,
-      cwd,
-      deviceFlowHttp: deviceFlow.http,
-      run: boundary.run,
-      scope: "project",
-      target: { kind: "plugin", marketplace: "marketplace", plugin: "denied" },
-    });
-
-    // assert
-    assert.deepStrictEqual(boundary.notifications, [
-      {
-        message: "Open https://github.com/login/device and enter: DENY-1234",
-        severity: "info",
-      },
-      {
-        message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ denied (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> User cancelled authorization. Run the command again to retry.",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(credentials.calls, {
-      approve: [],
-      fill: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(deviceFlow.calls, {
-      pollToken: [{ clientId: "Ov23liNcyK08uGdU0mMl", deviceCode: "device-code", intervalSec: 0 }],
-      requestCode: [{ clientId: "Ov23liNcyK08uGdU0mMl", scope: "repo" }],
-    });
-    verifyNotifications(boundary);
-  });
-});
-
 test("GHB-03: fetching a GitHub-source plugin on an invalid base fails the command instead of rendering a failed row", async (t) => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
@@ -1968,7 +1584,6 @@ test("GHB-03: fetching a GitHub-source plugin on an invalid base fails the comma
     await saveMarketplaces(cwd, "project", [marketplace]);
     const git = gitBoundary({ allowedRemoteUrls: [] });
     const cache = cacheBoundary(git.gitOps);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
 
     // act & assert
@@ -1976,7 +1591,6 @@ test("GHB-03: fetching a GitHub-source plugin on an invalid base fails the comma
       () =>
         fetchPlugins({
           cloneCacheSeam: cache.seam,
-          credentialOps: credentials.credentialOps,
           ctx,
           cwd,
           run: runWithNothingLoaded(),
@@ -1993,106 +1607,11 @@ test("GHB-03: fetching a GitHub-source plugin on an invalid base fails the comma
     );
     assert.deepStrictEqual(cache.calls, []);
     assert.deepStrictEqual(git.schedule, []);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verify(ctx);
   });
 });
 
-test("fails cleanly when Device Flow credential approval rejects", async () => {
-  await withWorkspace(async ({ cwd }) => {
-    // arrange
-    const cloneUrl = "https://github.com/acme/approve-failure";
-    const pin = "234567890abcdef1234567890abcdef123456789";
-    const marketplace = await marketplaceRecord({
-      cwd,
-      entries: [
-        {
-          name: "approve-failure",
-          source: { source: "github", repo: "acme/approve-failure", sha: pin },
-        },
-      ],
-      name: "marketplace",
-      scope: "project",
-    });
-    await saveMarketplaces(cwd, "project", [marketplace]);
-    const credentials = createCredentialOpsFake({
-      approveError: new Error("credential approve failed"),
-      boundary: "memory",
-    });
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      deviceCode: {
-        device_code: "device-code",
-        expires_in: 900,
-        interval: 0,
-        user_code: "FAIL-1234",
-        verification_uri: "https://github.com/login/device",
-      },
-      network: "disabled",
-      pollResponses: [
-        { accessToken: "token", kind: "success", scope: "repo", tokenType: "bearer" },
-      ],
-    });
-    const boundary = notificationBoundary("approve failure", 2, 3);
-    const seam: FetchCloneCacheSeam = {
-      materializeOrRefreshPluginMirror() {
-        return Promise.reject(new Error("unexpected mirror call"));
-      },
-      async materializePluginClone(args) {
-        await assert.rejects(
-          requiredDeviceFlow(args.resolveAuth()).onAuthRequired(),
-          new Error("credential approve failed"),
-        );
-        throw cloneFailure(
-          { kind: "https-auth", detail: "no-credential" },
-          new Error("credential approve failed"),
-        );
-      },
-      resolvePluginPin() {
-        return Promise.resolve({ cloneUrl, pin });
-      },
-    };
-
-    // act
-    await fetchPlugins({
-      cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
-      ctx: boundary.ctx,
-      cwd,
-      deviceFlowHttp: deviceFlow.http,
-      run: boundary.run,
-      scope: "project",
-      target: { kind: "plugin", marketplace: "marketplace", plugin: "approve-failure" },
-    });
-
-    // assert
-    assert.deepStrictEqual(boundary.notifications, [
-      {
-        message: "Open https://github.com/login/device and enter: FAIL-1234",
-        severity: "info",
-      },
-      {
-        message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ approve-failure (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> credential approve failed",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(credentials.calls, {
-      approve: [
-        {
-          credential: { password: "token", username: "x-access-token" },
-          host: "github.com",
-        },
-      ],
-      fill: [],
-      reject: [],
-    });
-    assert.strictEqual(credentials.storedCredential("github.com"), null);
-    verifyNotifications(boundary);
-  });
-});
-
-test("D-SG-14: keeps a stale credential the host refused", async () => {
+test("D-SG-14: a clone the host refused fails the row as authentication required", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://github.com/acme/stale";
@@ -2104,21 +1623,13 @@ test("D-SG-14: keeps a stale credential the host refused", async () => {
       scope: "project",
     });
     await saveMarketplaces(cwd, "project", [marketplace]);
-    const staleCredential: GitCredentials = {
-      password: "stale-token",
-      username: "x-access-token",
-    };
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [["github.com", staleCredential]],
-    });
     const boundary = notificationBoundary("refused credential");
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       materializePluginClone(args) {
-        assert.strictEqual(requiredAuth(args.resolveAuth()).kind, "device-flow");
+        assert.strictEqual(requiredAuth(args.resolveAuth()).host, "github.com");
         return Promise.reject(cloneFailure({ kind: "https-auth", detail: "rejected" }));
       },
       resolvePluginPin() {
@@ -2129,7 +1640,6 @@ test("D-SG-14: keeps a stale credential the host refused", async () => {
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -2145,8 +1655,6 @@ test("D-SG-14: keeps a stale credential the host refused", async () => {
         severity: "error",
       },
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
-    assert.deepStrictEqual(credentials.storedCredential("github.com"), staleCredential);
     verifyNotifications(boundary);
   });
 });
@@ -2190,12 +1698,10 @@ test("D-SG-10: retains a warm mirror whose check and re-clone fail and converges
     });
     const retryCache = cacheBoundary(retryGit.gitOps);
     const retryBoundary = notificationBoundary("mirror refresh retry");
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
 
     // act
     await fetchPlugins({
       cloneCacheSeam: failedCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
       run: failedBoundary.run,
@@ -2205,7 +1711,6 @@ test("D-SG-10: retains a warm mirror whose check and re-clone fail and converges
     const treeAfterFailure = await snapshotTree(locations.pluginClonesDir);
     await fetchPlugins({
       cloneCacheSeam: retryCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
       run: retryBoundary.run,
@@ -2275,13 +1780,11 @@ test("D-SG-10 / SG-TRN-03: a moved warm mirror that cannot be moved aside fails 
     const cache = cacheBoundary(git.gitOps, {
       rename: (from, to) => (from === mirrorRoot ? Promise.reject(renameError) : rename(from, to)),
     });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("mirror in use");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -2336,12 +1839,10 @@ test("cleans a non-race promotion failure and converges on retry", async () => {
     const retryGit = gitBoundary({ allowedRemoteUrls: [networkUrl], fixtureSourceDir: fixture });
     const retryCache = cacheBoundary(retryGit.gitOps);
     const retryBoundary = notificationBoundary("promotion retry");
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
 
     // act
     await fetchPlugins({
       cloneCacheSeam: failedCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: failedBoundary.ctx,
       cwd,
       run: failedBoundary.run,
@@ -2352,7 +1853,6 @@ test("cleans a non-race promotion failure and converges on retry", async () => {
     const stagingAfterFailure = await stagingEntries(locations);
     await fetchPlugins({
       cloneCacheSeam: retryCache.seam,
-      credentialOps: credentials.credentialOps,
       ctx: retryBoundary.ctx,
       cwd,
       run: retryBoundary.run,
@@ -2393,7 +1893,6 @@ test("narrows an unreadable warm mirror probe to source missing", async () => {
     await writePluginTree(mirrorRoot, "corrupt", "1.0.0");
     await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
     await writeFile(path.join(mirrorRoot, ".git", "HEAD"), "ref: refs/heads/main\n");
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("corrupt mirror");
     const seam: FetchCloneCacheSeam = {
       materializeOrRefreshPluginMirror() {
@@ -2413,7 +1912,6 @@ test("narrows an unreadable warm mirror probe to source missing", async () => {
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -2425,7 +1923,6 @@ test("narrows an unreadable warm mirror probe to source missing", async () => {
     assert.deepStrictEqual(boundary.notifications, [
       { message: "● marketplace [project]\n  ⊘ corrupt (unavailable) {source missing}" },
     ]);
-    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     verifyNotifications(boundary);
   });
 });
@@ -2551,7 +2048,6 @@ for (const { title, failure, expectedRow } of [
         scope: "project",
       });
       await saveMarketplaces(cwd, "project", [marketplace]);
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
       const boundary = notificationBoundary(`host ${failure.kind}`);
       const seam: FetchCloneCacheSeam = {
         materializeOrRefreshPluginMirror: () => Promise.reject(cloneFailure(failure)),
@@ -2562,7 +2058,6 @@ for (const { title, failure, expectedRow } of [
       // act
       await fetchPlugins({
         cloneCacheSeam: seam,
-        credentialOps: credentials.credentialOps,
         ctx: boundary.ctx,
         cwd,
         run: boundary.run,
@@ -2673,13 +2168,11 @@ for (const { title, sha, expectedLockObservations } of [
         materializePluginClone: () => Promise.resolve(path.join(cwd, "absent")),
         resolvePluginPin: () => Promise.resolve({ cloneUrl, pin: sha ?? "unpinned" }),
       };
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
       const boundary = notificationBoundary("locked read");
 
       // act
       await fetchWithStatus({
         cloneCacheSeam: seam,
-        credentialOps: credentials.credentialOps,
         ctx: boundary.ctx,
         cwd,
         run: boundary.run,
@@ -2724,13 +2217,11 @@ test("GLK-05: a lock lost after the locked fetch read its row fails the row as l
       materializePluginClone: () => assert.fail("an unpinned fetch never clones by sha"),
       resolvePluginPin: () => assert.fail("an unpinned fetch never resolves a pin"),
     };
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("lost lock");
 
     // act
     await fetchWithStatus({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -2775,13 +2266,11 @@ test("GLK-07: a fetched row shows the version its plugin.json declares over its 
       },
       resolvePluginPin: () => Promise.resolve({ cloneUrl, pin }),
     };
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
     const boundary = notificationBoundary("declared version");
 
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: credentials.credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -2868,7 +2357,6 @@ for (const { implementation, inventory, row } of [
       await saveMarketplaces(cwd, "project", [marketplace]);
       const git = gitBoundary({ allowedRemoteUrls: [eventsUrl], fixtureSourceDir: fixture });
       const cache = cacheBoundary(git.gitOps);
-      const credentials = createCredentialOpsFake({ boundary: "memory" });
       const boundary = notificationBoundary(`${implementation} fetch row`);
       const run = runWithSoftDeps(
         softDepStatus({
@@ -2880,7 +2368,6 @@ for (const { implementation, inventory, row } of [
       // act
       await fetchPlugins({
         cloneCacheSeam: cache.seam,
-        credentialOps: credentials.credentialOps,
         ctx: boundary.ctx,
         cwd,
         run,
@@ -3006,7 +2493,6 @@ test("OQ-7, D-SG-19: a fetch makes one transport context, and every clone-cache 
     // act
     await fetchWithContexts({
       cloneCacheSeam: transportRecordingSeam(cwd, contexts, seen),
-      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -3072,7 +2558,6 @@ test("OQ-7: a fetch given a transport context plans over it and makes none", asy
     // act
     await fetchWithContexts({
       cloneCacheSeam: transportRecordingSeam(cwd, [given], seen),
-      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -3125,7 +2610,6 @@ test("D-SG-19: two fetch commands make two transport contexts", async () => {
       const boundary = notificationBoundary("one of two fetches");
       await fetchWithContexts({
         cloneCacheSeam: transportRecordingSeam(cwd, [], []),
-        credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
         ctx: boundary.ctx,
         cwd,
         run: boundary.run,
@@ -3176,7 +2660,6 @@ test("NFR-5: a fetch of a pinned github plugin whose clone is warm asks no trans
     // act
     await fetchPlugins({
       cloneCacheSeam: transportRecordingSeam(cwd, [], seen),
-      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -3245,7 +2728,6 @@ test("D-SG-22: a fetch that clones a github plugin names the transport under its
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -3282,7 +2764,6 @@ test("D-SG-22: a fetch whose github clone fails names each attempt under its fai
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -3339,7 +2820,6 @@ test("D-SG-22: a sweep of one plugin in two scopes names each clone under its ow
     // act
     await fetchPlugins({
       cloneCacheSeam: seam,
-      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,
@@ -3400,7 +2880,6 @@ test("D-SG-22, OQ-3: a fetch that finds its github mirror current names no clone
     // act
     await fetchPlugins({
       cloneCacheSeam: cache.seam,
-      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
       ctx: boundary.ctx,
       cwd,
       run: boundary.run,

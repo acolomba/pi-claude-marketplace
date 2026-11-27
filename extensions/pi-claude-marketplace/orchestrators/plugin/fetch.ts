@@ -11,12 +11,11 @@
 //     surface (no git-ops handle, no default-git-ops constant, no clone-refresh
 //     helper, no platform-git import). BLOCK F in `eslint.config.js` enforces
 //     that, because this file is not in its `NETWORK_SEAMS` list.
-//   - auth: `auth-host.ts`'s `buildCloneAuth` with a single sweep-wide
-//     `authMemo` so a bulk sweep triggers each host's device flow at most once
-//     (FTCH-06).
-//   - transport: one GitHub transport context per fetch command, made beside
-//     the `authMemo`, so every clone of the sweep plans over it and the
-//     command probes once (OQ-7, D-SG-19).
+//   - auth: `auth-host.ts`'s `buildCloneAuth` over the production credential
+//     surface, at install parity (FTCH-06, D-81-05).
+//   - transport: one GitHub transport context per fetch command, so every
+//     clone of the sweep plans over it and the command probes once (OQ-7,
+//     D-SG-19).
 //   - classification: the fs-only presence probe (`makePresenceProbe`) for the
 //     no-op gate, and `list`'s own rule (`resolveListCandidate`) for every row
 //     that shows a status or a version, so a fetch row reads as the `list` row
@@ -81,7 +80,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { makePresenceProbe } from "./git-source-probe.ts";
 import type { ListCandidate, resolveListCandidate } from "./list-candidate-version.ts";
@@ -134,10 +133,6 @@ export interface FetchPluginsOptions {
   readonly target: FetchTarget;
   /** Test-only clone-cache seam override; production uses the real imports. */
   readonly cloneCacheSeam?: FetchCloneCacheSeam;
-  /** Defaults to DEFAULT_CREDENTIAL_OPS at use (auth at install parity, D-81-05). */
-  readonly credentialOps?: CredentialOps;
-  /** Device Flow HTTP seam; callers can inject a network-free collaborator. */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
   /**
    * OQ-7, D-SG-19: the command's GitHub transport context. Omitted, the fetch
    * makes one for the command.
@@ -150,12 +145,12 @@ export interface FetchPluginsOptions {
  * marketplace MANIFEST (not installed state), materializes each cold/unpinned
  * git source into the shared cache through the clone-cache seam (no-ops for
  * path + pinned-warm sources), derives the fresh post-fetch status row, and
- * renders one cascade block per (scope, marketplace). A single authMemo spans
- * the whole sweep (once-per-host). A per-plugin failure is captured as a
- * `(failed)` row, and a manifest-load failure as a per-marketplace `(failed)`
- * block -- neither aborts the sweep. OQ-7, D-SG-19: the sweep also shares one
- * transport context, the caller's or one `newTransportContext` makes, so every
- * clone of the command plans over the same checks and the command probes once.
+ * renders one cascade block per (scope, marketplace). A per-plugin failure is
+ * captured as a `(failed)` row, and a manifest-load failure as a
+ * per-marketplace `(failed)` block -- neither aborts the sweep. OQ-7, D-SG-19:
+ * the sweep also shares one transport context, the caller's or one
+ * `newTransportContext` makes, so every clone of the command plans over the
+ * same checks and the command probes once.
  */
 export function createFetchPlugins(
   status: FetchStatus,
@@ -166,17 +161,12 @@ export function createFetchPlugins(
 
     const { targets, manifestFailures } = await enumerateFetchTargets(opts);
 
-    // FTCH-06 / D-81-05: ONE authMemo Map spans the whole sweep so a bulk sweep of
-    // N private-host plugins triggers each host's device flow at most once. A
-    // per-plugin memo would re-trigger the flow N times.
-    const authMemo = new Map<string, AuthAttemptResult>();
     const transportContext = opts.transportContext ?? newTransportContext();
     const seam = opts.cloneCacheSeam ?? {
       resolvePluginPin,
       materializePluginClone,
       materializeOrRefreshPluginMirror,
     };
-    const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
 
     // Group rows by (scope, marketplace) so the cascade renders one block per pair
     // (project-first via compareByNameThenScope at the emit seam).
@@ -195,16 +185,14 @@ export function createFetchPlugins(
       // A thrown fetch is captured as a `(failed)` row and the sweep continues
       // to the remaining plugins. Only an invalid GitHub base override escapes
       // and ends the sweep (GHB-03).
-      // eslint-disable-next-line no-await-in-loop -- the shared `authMemo` runs the device flow once per host
+      // eslint-disable-next-line no-await-in-loop -- each unpinned fetch locks the scope (retries: 0)
       const row = await fetchOne(target, {
         ctx,
         run,
         seam,
         status,
-        credentialOps,
-        authMemo,
+        credentialOps: DEFAULT_CREDENTIAL_OPS,
         transportContext,
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       });
       pushRow(target.scope, target.marketplace, row);
     }
@@ -353,9 +341,7 @@ interface FetchOneDeps {
   readonly seam: FetchCloneCacheSeam;
   readonly status: FetchStatus;
   readonly credentialOps: CredentialOps;
-  readonly authMemo: Map<string, AuthAttemptResult>;
   readonly transportContext: PluginTransportContext;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
 }
 
 /**
@@ -448,9 +434,8 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
  * Run the git materialize through the injected clone-cache seam. Pinned sources
  * resolve their pin then clone into the per-sha immutable cache; unpinned
  * sources refresh the single mutable URL-keyed mirror in place. Both arms thread
- * the host-keyed auth bundle (once-per-host via the shared authMemo). Mirrors
- * install's `makeInstallCloneProbe` structure; fetch reaches the git surface
- * only through the seam. OQ-7: the clone and a mirror refresh get `transport`,
+ * the host-keyed auth bundle. Mirrors install's `makeInstallCloneProbe`
+ * structure; fetch reaches the git surface only through the seam. OQ-7: the clone and a mirror refresh get `transport`,
  * so they walk one plan; a pinned source's pin is its sha and sends nothing.
  */
 async function materializeThroughSeam(
