@@ -100,7 +100,7 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
 ' "$input_file") || exit $?
 ```
 
-An outcome reports a command result. The fifteen kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
+An outcome reports a command result. The fifteen kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic` and lifecycle-only kinds do not. Silence, unrelated events, or only diagnostics fail with exactly `No command outcome received`.
 
 Unknown kinds remain in the selected data but cannot establish an outcome. Additional fields are preserved. An unfamiliar severity, a nonboolean `needsReload`, or an unsupported schema version fails with `Unsupported command envelope`. These checks cover the fields used here. They do not replace validation of the full payload against the schema.
 
@@ -162,6 +162,8 @@ Completed changes remain. The severity example prints `error`, and the reload ex
 ## Schema reference
 
 The current `schemaVersion` is `1`. A new optional field, a new kind, or a new closed-set member keeps the same version. Removing or renaming a field, changing its type, or changing its meaning requires a version bump.
+
+Removing a kind that no command emits any more keeps the same version. For example, the version stayed `1` when the extension removed the `device-flow-prompt` kind together with Device Flow (D-SG-27).
 
 A closed set lists the currently supported values. Consumers must handle unfamiliar values conservatively even when the version stays the same. Preserve unknown fields and kinds when forwarding records. Do not treat an unfamiliar kind as proof of a command outcome. If a new severity or other value prevents a safe verdict, report an unsupported value instead of assuming success. The examples above follow this policy. The committed schema describes the current producer and rejects additional object properties. An older copy of that strict schema can therefore reject valid additive output from a newer producer.
 
@@ -988,7 +990,7 @@ Print mode uses Pi's silent `notify` behavior. Scripts that need plugin output m
 
 Entries emitted during `session_start` and `resources_discover` are not streamed in JSON or RPC mode. These hooks run before the output subscription starts. RPC clients can retrieve those entries with `get_entries`. The absence of a startup entry from the stream does not mean that the hook did not run.
 
-RPC front-ends receive custom `claude-plugin` entries through the JSON strategy. They do not also receive the human `notify` text. Front-ends must render these entries, at least the `device-flow-prompt` fields `verificationUri` and `userCode`, so users can authorize the device.
+RPC front-ends receive custom `claude-plugin` entries through the JSON strategy. They do not also receive the human `notify` text. Front-ends must render these entries.
 
 A slash-command-only run does not create its initial session file until an assistant message exists. This applies even when persistence is enabled. The independent `--no-session` flag disables persistence altogether. An entry in session memory or the event stream therefore does not prove that Pi wrote a session file.
 

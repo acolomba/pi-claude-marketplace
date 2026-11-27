@@ -5270,23 +5270,9 @@ ______________________________________________________________________
 
 ## Out-of-band notifications
 
-Notifications emitted directly via `ctx.ui.notify(message, severity?)` from outside the structured `notify(ctx, pi, NotificationMessage)` entrypoint. These bypass the renderer's severity / reload-hint / soft-dep pipeline and are reserved for surfaces that pre-date the `NotificationMessage` payload contract (e.g. interactive Device Flow prompts where the domain supplies `verificationUri`/`userCode` and the dispatch module's text strategy renders the message).
+Notifications emitted directly via `ctx.ui.notify(message, severity?)` from outside the structured `notify(ctx, pi, NotificationMessage)` entrypoint. These bypass the renderer's severity, reload-hint, and soft-dependency pipeline. Only surfaces that pre-date the `NotificationMessage` payload contract use them.
 
 The byte form is locked by per-surface unit tests (NOT by `test/architecture/catalog-uat/catalog-contract.test.ts`, whose driver only knows the structured `notify()` entrypoint). The `<!-- catalog-state: -->` annotations below are for human-readable discoverability; the catalog-uat parser intentionally skips this section because its H2 title is not a `/claude:plugin` command header.
-
-### Device Flow user-code prompt (AUTH-03)
-
-<!-- catalog-state: device-flow-prompt -->
-
-```text
-Open https://github.com/login/device and enter: ABCD-1234
-```
-
-The dispatch module's text strategy renders this prompt through `formatRawSurface` in `shared/notification-grammar.ts`. `initiateDeviceFlow` (in `extensions/pi-claude-marketplace/domain/github-auth.ts`) supplies `verificationUri` and `userCode` through its callback exactly once after a successful `POST /login/device/code` and before the poll loop starts. The literal example shows GitHub's standard verification URL plus a mock user code; the domain maps those values from `deviceCode.verification_uri` and `deviceCode.user_code` in the GitHub response. Severity: `info` (the second arg to `ctx.ui.notify` is the magic string `"info"`).
-
-AUTH-03 contract: the user is shown a one-time code (`user_code`) AND a verification URL (`verification_uri`) so they can authorize the OAuth App from any browser. AUTH-09 contract: the access token is NOT yet acquired when this notification fires (the poll loop runs AFTER), so `access_token` / `accessToken` / `cred.password` are NOT interpolatable into this message. The text strategy's byte form is locked by `test/shared/notification-grammar.test.ts` and `test/shared/notification-dispatch.test.ts`; `test/domain/github-auth.test.ts` checks the callback values. Any change to the emission string requires a lockstep update of the catalog AND the byte-form lock tests.
-
-Triggers: `marketplace add <owner>/<private-repo>` (first access; Phase 35 Plan 35-01) and -- rarely -- `marketplace update <name>` when the stored credential has been evicted from the OS keychain (Phase 35 Plan 35-02). The post-Phase-35-01 happy path on `marketplace update` is silent reuse (AUTH-02): the stored token in the keychain hits on `credentialOps.fill`, no Device Flow runs, no notification fires.
 
 ### Autoapply status (AAP-04 / AAP-D2)
 
