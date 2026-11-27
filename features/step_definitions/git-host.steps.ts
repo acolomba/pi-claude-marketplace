@@ -6,7 +6,8 @@
  * given size, letting it serve again, the GitHub base address pi runs with, a
  * pi with no git on its path, a pi with upstream's git timeout or keep
  * variable, the credential a user stores for the host, and
- * the requests the host receives. A step names a repository
+ * the requests the host receives, with a check that no path or header of
+ * them carries a secret. A step names a repository
  * through the `git repository` parameter type, by the marketplace or the
  * plugin it serves; a hosted marketplace names the directory its catalog is
  * served under. Every arm is released with its scenario (HOST-03).
@@ -16,7 +17,8 @@
  * start that pi with the GitHub redirect, which sends its github.com requests
  * to the stand-in and to the git host and refuses every other host, and state
  * the requests the stand-in received and the requests the redirect routed or
- * refused (D-BG-01, D-BG-03).
+ * refused (D-BG-01, D-BG-03). Such a pi may also start with upstream, ssh,
+ * or token variables of the user's shell (D-SG-18, D-SG-24, SG-AUTH-01).
  */
 
 import assert from "node:assert/strict";
@@ -439,11 +441,26 @@ Given(
 const SSH_VARIABLES: ReadonlySet<string> = new Set(["GIT_SSH_COMMAND", "GIT_SSH"]);
 const SSH_VARIABLE_VALUES: ReadonlySet<string> = new Set(["ssh", ""]);
 
-/** D-SG-24, D-SG-18: the one upstream or ssh variable `name` set to `value`, for a profile Pi. */
+// SG-AUTH-01: the token variables a user's shell may hold. The product reads
+// none of them, so any non-empty value serves.
+const TOKEN_VARIABLES: ReadonlySet<string> = new Set(["GITHUB_TOKEN", "GH_TOKEN"]);
+
+/**
+ * D-SG-24, D-SG-18, SG-AUTH-01: the one upstream, ssh, or token variable
+ * `name` set to `value`, for a profile Pi.
+ */
 function profilePiVariable(name: string, value: string): ProfilePiVariables {
   if (SSH_VARIABLES.has(name)) {
     if (!SSH_VARIABLE_VALUES.has(value)) {
       assert.fail(`${name} must name the ssh stand-in "ssh" or be empty, not ${value}`);
+    }
+
+    return { [name]: value };
+  }
+
+  if (TOKEN_VARIABLES.has(name)) {
+    if (value === "") {
+      assert.fail(`${name} must hold a value`);
     }
 
     return { [name]: value };
@@ -471,6 +488,29 @@ Given(
   },
 );
 
+// SG-AUTH-01: several variables at once, such as both token variables a
+// user's shell may hold, each under the rule of the one-variable step. A
+// name may appear once.
+Given(
+  "pi runs with github's requests routed to the git host and these environment variables:",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
+    const [header, ...rows] = table.raw();
+    assert.deepStrictEqual(header, ["name", "value"]);
+    let variables: ProfilePiVariables = {};
+    for (const [name = "", value = ""] of rows) {
+      if (Object.hasOwn(variables, name)) {
+        assert.fail(`the variable ${name} appears twice`);
+      }
+
+      variables = { ...variables, ...profilePiVariable(name, value) };
+    }
+
+    await writeRedirectConfig(this.tokens.home, { gitHost: this.gitHost.address });
+    await startPiWithGitHubRouted(this, variables);
+  },
+);
+
 // A retry after a held request: the host answers the repository again, so the
 // next command reaches it (HOST-03).
 When(
@@ -488,6 +528,35 @@ Then("the git host receives these requests:", function (this: ScenarioWorld, tab
   ]);
   assert.deepStrictEqual([["method", "path", "status"], ...rows], table.raw());
 });
+
+// A header value as sent and, for a Basic credential, also decoded, because
+// git sends a user and a password base64-encoded.
+function headerTexts(value: string): string[] {
+  const basic = /^basic\s+(\S+)$/iu.exec(value);
+  return basic?.[1] === undefined
+    ? [value]
+    : [value, Buffer.from(basic[1], "base64").toString("utf8")];
+}
+
+// SG-AUTH-01: a secret, such as a token, appears in no path and no header of
+// any request the last command sent to the git host, a Basic credential
+// decoded. A command that sent no request would pass over nothing, so the
+// step requires one (D-07-03).
+Then(
+  "no request the git host received carries {string}",
+  function (this: ScenarioWorld, secret: string) {
+    const requests = this.requestHeadersOfLastCommand();
+    assert.notStrictEqual(requests.length, 0, "the git host received no request");
+    const carrying = requests.filter(
+      (request) =>
+        request.path.includes(secret) ||
+        Object.values(request.headers).some((value) =>
+          headerTexts(value).some((text) => text.includes(secret)),
+        ),
+    );
+    assert.deepStrictEqual(carrying, [], `a request the git host received carries ${secret}`);
+  },
+);
 
 // The sign-in requests of the last `When`.
 async function signInRequestsOfLastWhen(world: ScenarioWorld): Promise<DeviceFlowRequest[]> {

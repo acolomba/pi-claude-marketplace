@@ -2,7 +2,8 @@
  * @fileoverview Checks the https git host's own answers: a request it cannot
  * serve, a body the backend never reads, an armed repository whose name the
  * request percent-encodes, and the catalog files it serves for hosted
- * marketplaces (HOST-01, HOST-03, HOST-04, D-PL5-06), and the certificate's
+ * marketplaces (HOST-01, HOST-03, HOST-04, D-PL5-06), the headers it records
+ * for each request (SG-AUTH-01), and the certificate's
  * `github.com` name (D-SG-14). It also checks that a system git client trusts
  * the host through the host's CA file alone, fetches a commit by SHA over
  * protocols v2 and v0, and sees upload-pack's own refusal of a commit the
@@ -143,14 +144,15 @@ interface Answer {
 }
 
 /**
- * Sends a GET of `requestPath` with `body` over TLS that trusts the host, and
- * returns the status and the body it answered.
+ * Sends a GET of `requestPath` with `body` and the extra `headers` over TLS
+ * that trusts the host, and returns the status and the body it answered.
  */
 async function send(
   host: HttpsGitHost,
   requestPath: string,
   body = Buffer.alloc(0),
   signal?: AbortSignal,
+  headers: Readonly<Record<string, string>> = {},
 ): Promise<Answer> {
   const ca = await readFile(host.certificatePath);
   const { hostname, port } = new URL(`https://${host.address}`);
@@ -161,7 +163,7 @@ async function send(
         port,
         path: requestPath,
         method: "GET",
-        headers: { "content-length": body.length },
+        headers: { ...headers, "content-length": body.length },
         ca,
         agent: false,
         signal,
@@ -283,6 +285,48 @@ describe("HttpsGitHost", () => {
       requests: [{ method: "GET", path: INFO_REFS, status: "dropped" }],
       connections: 1,
     });
+  });
+
+  test("SG-AUTH-01: returns the path and every header of a request since the window", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    const window = host.mark();
+
+    // act
+    await send(host, INFO_REFS, Buffer.alloc(0), undefined, {
+      authorization: "Basic c3RhbmQtaW46d29yZA==",
+    });
+
+    // assert
+    assert.deepStrictEqual(host.requestHeadersSince(window), [
+      {
+        path: INFO_REFS,
+        headers: {
+          authorization: "Basic c3RhbmQtaW46d29yZA==",
+          "content-length": "0",
+          host: host.address,
+          connection: "close",
+        },
+      },
+    ]);
+  });
+
+  test("SG-AUTH-01: returns the headers of no request that came before the window", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    await send(host, INFO_REFS, Buffer.alloc(0), undefined, {
+      authorization: "Basic ZWFybGllcg==",
+    });
+    const window = host.mark();
+
+    // act
+    await get(host, "/acme/tools.git/HEAD");
+
+    // assert
+    assert.deepStrictEqual(
+      host.requestHeadersSince(window).map((request) => request.path),
+      ["/acme/tools.git/HEAD"],
+    );
   });
 
   test("answers a served catalog file with its bytes and keeps serving repositories", async (t) => {

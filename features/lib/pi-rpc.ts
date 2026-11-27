@@ -111,6 +111,15 @@ export interface RpcGitEnvironment {
   /** The user's ssh program, under the same rule as `GIT_SSH_COMMAND` (D-SG-18). */
   readonly GIT_SSH?: string;
   /**
+   * A GitHub token a user's shell may hold, set only for a scenario's own Pi,
+   * which proves that the product reads no token variable (SG-AUTH-01). The
+   * run's shared Pi never sets it, and the shell's value never reaches a
+   * child.
+   */
+  readonly GITHUB_TOKEN?: string;
+  /** The GitHub CLI's token variable, under the same rule as `GITHUB_TOKEN` (SG-AUTH-01). */
+  readonly GH_TOKEN?: string;
+  /**
    * The harness CONNECT proxy, set only for the Device Flow profile, so a
    * system git request of that Pi reaches `github.com` through the git host
    * or is refused and logged (D-SG-14). Lowercase, the spelling git and curl
@@ -257,6 +266,8 @@ const OPTIONAL_GIT_VARIABLES = [
   "CLAUDE_CODE_REMOTE",
   "GIT_SSH_COMMAND",
   "GIT_SSH",
+  "GITHUB_TOKEN",
+  "GH_TOKEN",
   "https_proxy",
   "no_proxy",
 ] as const satisfies ReadonlyArray<keyof RpcGitEnvironment>;

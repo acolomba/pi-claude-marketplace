@@ -109,6 +109,16 @@ export interface GitHostRequest {
   readonly status: number | "pending" | "dropped";
 }
 
+/**
+ * One request the host received, with the headers it carried: its path with
+ * the query, and each header by its lower-case name, a repeated header's
+ * values joined with `, ` (SG-AUTH-01).
+ */
+export interface GitHostRequestHeaders {
+  readonly path: string;
+  readonly headers: Readonly<Record<string, string>>;
+}
+
 /** The host's request and connection counts at one moment. */
 export interface RequestWindow {
   readonly requests: number;
@@ -136,11 +146,24 @@ export interface GitHostSnapshot {
 interface LoggedRequest {
   readonly method: string;
   readonly path: string;
+  readonly headers: Readonly<Record<string, string>>;
   status: number | "pending" | "dropped";
 }
 
 function copyRequest(request: LoggedRequest): GitHostRequest {
   return { method: request.method, path: request.path, status: request.status };
+}
+
+// The headers of `req`, one string each, a repeated header's values joined.
+function headersOf(req: IncomingMessage): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(req.headers)) {
+    if (value !== undefined) {
+      headers[name] = Array.isArray(value) ? value.join(", ") : value;
+    }
+  }
+
+  return headers;
 }
 
 function listen(server: Server): Promise<number> {
@@ -480,6 +503,13 @@ export class HttpsGitHost {
     };
   }
 
+  /** Returns the path and the headers of every request since `window` opened. */
+  requestHeadersSince(window: RequestWindow): readonly GitHostRequestHeaders[] {
+    return this.log
+      .slice(window.requests)
+      .map((request) => ({ path: request.path, headers: { ...request.headers } }));
+  }
+
   /** Resolves when a request arrives after `window`, without polling the host log. */
   waitForRequestAfter(window: RequestWindow, timeoutMs = 5_000): Promise<void> {
     if (this.log.length > window.requests) {
@@ -600,6 +630,7 @@ export class HttpsGitHost {
     const logged: LoggedRequest = {
       method: req.method ?? "",
       path: req.url ?? "",
+      headers: headersOf(req),
       status: "pending",
     };
     this.log.push(logged);

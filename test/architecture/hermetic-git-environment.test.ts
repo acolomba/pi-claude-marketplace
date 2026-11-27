@@ -7,7 +7,8 @@
  * `GIT_SSL_CAINFO`, the ssh variables (`GIT_SSH`, `GIT_SSH_COMMAND`,
  * `GIT_SSH_VARIANT`, `SSH_AUTH_SOCK`, `SSH_ASKPASS`), the proxy variables in
  * both cases, `XDG_CONFIG_HOME`, `GCM_*`, the locale,
- * `CLAUDE_CODE_PLUGIN_PREFER_HTTPS` and `CLAUDE_CODE_REMOTE` (D-SG-24), and
+ * `CLAUDE_CODE_PLUGIN_PREFER_HTTPS` and `CLAUDE_CODE_REMOTE` (D-SG-24),
+ * `GITHUB_TOKEN` and `GH_TOKEN` (SG-AUTH-01), and
  * the two upstream variables that steer the product's git,
  * `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` (SG-TRN-05) and
  * `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` (SG-TRN-06), then asserts
@@ -22,7 +23,8 @@
  * delay only from the run (D-PL8-09). So do upstream's git timeout and keep
  * variables: only a scenario's own Pi gets them, from the run (D-SG-13,
  * D-SG-15), and so do upstream's https switch and remote-session marker
- * (D-SG-24). A profile Pi gets
+ * (D-SG-24) and the token variables `GITHUB_TOKEN` and `GH_TOKEN`
+ * (SG-AUTH-01). A profile Pi gets
  * the run's `TMPDIR`, inside the sandbox home, never the shell's (HAR-05),
  * and pi-subagents' background-child marker (D-BG-10) and its hook gate
  * (D-BG-12) only from its profile. Pi gets system git's CA file and its
@@ -98,6 +100,8 @@ const INHERITED_VARIABLES = {
   CLAUDE_CODE_REMOTE: "1",
   CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS: "1",
   CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: "1",
+  GITHUB_TOKEN: "shell-github-token-value",
+  GH_TOKEN: "shell-gh-token-value",
   GIT_WORK_TREE: "/shell/repo",
   GIT_OBJECT_DIRECTORY: "/shell/repo/.git/objects",
   GIT_EXEC_PATH: "/shell/libexec/git-core",
@@ -538,6 +542,37 @@ describe("rpcChildEnvironment", () => {
       GIT_SSL_CAINFO: "/run/cert.pem",
       GIT_SSH_COMMAND: "ssh",
       GIT_SSH: "",
+    });
+  });
+
+  test("SG-AUTH-01: adds a scenario Pi's GITHUB_TOKEN and GH_TOKEN, not the shell's", (t) => {
+    // arrange
+    inheritVariables(t);
+    const git = {
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      GITHUB_TOKEN: "scenario-github-token-value",
+      GH_TOKEN: "scenario-gh-token-value",
+    } satisfies RpcGitEnvironment;
+
+    // act
+    const environment = rpcChildEnvironment(sandbox, git);
+
+    // assert
+    assert.deepStrictEqual(environment, {
+      HOME: "/sandbox/home",
+      PI_CODING_AGENT_DIR: "/sandbox/agent",
+      PI_OFFLINE: "1",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      GITHUB_TOKEN: "scenario-github-token-value",
+      GH_TOKEN: "scenario-gh-token-value",
     });
   });
 

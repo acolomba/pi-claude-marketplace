@@ -74,7 +74,12 @@ import { currentRun } from "./pi-process.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { HookGate } from "../lib/hook-files.ts";
-import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
+import type {
+  GitHostRequestHeaders,
+  GitHostTraffic,
+  HttpsGitHost,
+  RequestWindow,
+} from "../lib/https-git-host/server.ts";
 import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
@@ -269,11 +274,18 @@ type ScenarioPiVariables = Pick<
 /**
  * The variables a profile Pi without the GitHub base override may add to the
  * run's git environment: upstream's switch to https and its remote-session
- * marker (D-SG-24), and the user's ssh command or program (D-SG-18).
+ * marker (D-SG-24), the user's ssh command or program (D-SG-18), and the
+ * token variables a user's shell may hold, which the product never reads
+ * (SG-AUTH-01).
  */
 export type ProfilePiVariables = Pick<
   RpcGitEnvironment,
-  "CLAUDE_CODE_PLUGIN_PREFER_HTTPS" | "CLAUDE_CODE_REMOTE" | "GIT_SSH_COMMAND" | "GIT_SSH"
+  | "CLAUDE_CODE_PLUGIN_PREFER_HTTPS"
+  | "CLAUDE_CODE_REMOTE"
+  | "GIT_SSH_COMMAND"
+  | "GIT_SSH"
+  | "GITHUB_TOKEN"
+  | "GH_TOKEN"
 >;
 
 // What a profile Pi starts with: its profile, whether it starts with
@@ -618,6 +630,19 @@ export class ScenarioWorld extends World {
     }
 
     return this.gitHost.requestsSince(window);
+  }
+
+  /**
+   * Returns the path and the headers of each request the git host received
+   * since the last `When` step started (SG-AUTH-01).
+   */
+  requestHeadersOfLastCommand(): readonly GitHostRequestHeaders[] {
+    const window = this.requestWindow;
+    if (window === undefined) {
+      throw new Error("no command has run in this scenario");
+    }
+
+    return this.gitHost.requestHeadersSince(window);
   }
 
   /** Returns the launches of the ssh stand-in since the last `When` step started. */
