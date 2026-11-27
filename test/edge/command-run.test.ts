@@ -10,7 +10,6 @@ import {
   notify,
   notifyUsageInfo,
   notifyDiagnostic,
-  notifyDeviceFlowPrompt,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
@@ -643,23 +642,6 @@ for (const { name, emit, earlier } of [
       notifyDiagnostic(ctx, run, "Warning.", ["Detail."]);
     },
     earlier: [{ kind: "diagnostic", severity: "warning", header: "Warning.", lines: ["Detail."] }],
-  },
-  {
-    name: "prompt",
-    emit: (ctx, run) => {
-      notifyDeviceFlowPrompt(ctx, run, {
-        verificationUri: "https://example.test",
-        userCode: "ABCD",
-      });
-    },
-    earlier: [
-      {
-        kind: "device-flow-prompt",
-        severity: "info",
-        verificationUri: "https://example.test",
-        userCode: "ABCD",
-      },
-    ],
   },
   {
     name: "empty diagnostic",

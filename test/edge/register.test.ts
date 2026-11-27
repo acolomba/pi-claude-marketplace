@@ -74,7 +74,6 @@ import {
   notifyUsageInfo,
   notifyUsageError,
   notifyDiagnostic,
-  notifyDeviceFlowPrompt,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { retryTree } from "../orchestrators/plugin/scope-tree-inventory.ts";
@@ -535,16 +534,16 @@ for (const mode of ["json", "rpc"]) {
       });
       let late!: () => void;
       const origin = { kind: "command", commandId: "plugin update", invocationId: "run-list-1" };
-      const prompt = {
+      const progress = {
         customType: "claude-plugin",
         payload: {
           schemaVersion: 1,
           origin,
-          kind: "device-flow-prompt",
-          severity: "info",
+          kind: "diagnostic",
+          severity: "warning",
           needsReload: false,
-          verificationUri: "https://example.test/device",
-          userCode: "WAIT-1234",
+          header: "Waiting.",
+          lines: ["Pending."],
         },
       };
       const warning = {
@@ -579,10 +578,10 @@ for (const mode of ["json", "rpc"]) {
               };
       const expected =
         ending === "success"
-          ? [prompt, warning]
+          ? [progress, warning]
           : ending === "throw"
-            ? [prompt, warning, completion]
-            : [prompt, completion];
+            ? [progress, warning, completion]
+            : [progress, completion];
       const { registration, verifyRegistrar } = registerCommandUnderTest({
         runs: 1,
         appendAttempts: expected.length,
@@ -599,10 +598,7 @@ for (const mode of ["json", "rpc"]) {
             notifyDiagnostic(ctx, run, "Late.", ["Ignored."]);
           };
 
-          notifyDeviceFlowPrompt(ctx, run, {
-            verificationUri: "https://example.test/device",
-            userCode: "WAIT-1234",
-          });
+          notifyDiagnostic(ctx, run, "Waiting.", ["Pending."]);
           await pending;
           if (ending === "success" || ending === "throw") {
             notify(ctx, run, {
@@ -644,7 +640,7 @@ for (const mode of ["json", "rpc"]) {
       late();
 
       // assert
-      assert.deepStrictEqual(beforeRelease, [prompt]);
+      assert.deepStrictEqual(beforeRelease, [progress]);
       assert.deepStrictEqual(events, [...expected, "settled"]);
       assert.deepStrictEqual(capture.entries, expected);
       capture.assertValid();
@@ -1081,23 +1077,6 @@ for (const mode of ["json", "rpc"]) {
       },
       earlier: [
         { kind: "diagnostic", severity: "warning", header: "Warning.", lines: ["Detail."] },
-      ],
-    },
-    {
-      name: "prompt-only",
-      emit: (ctx, run) => {
-        notifyDeviceFlowPrompt(ctx, run, {
-          verificationUri: "https://example.test",
-          userCode: "ABCD",
-        });
-      },
-      earlier: [
-        {
-          kind: "device-flow-prompt",
-          severity: "info",
-          verificationUri: "https://example.test",
-          userCode: "ABCD",
-        },
       ],
     },
   ] satisfies Array<{

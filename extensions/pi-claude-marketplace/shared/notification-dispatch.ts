@@ -80,7 +80,6 @@ import type {
   AutoapplyStatusSurface,
   BackgroundUpdatePlugin,
   CascadeNotificationMessage,
-  DeviceFlowPrompt,
   HookSurface,
   LoadSurface,
   McpConfigNotice,
@@ -375,29 +374,6 @@ export function notifyDiagnostic(
   }
 
   emitPresentation(ctx, run, resolveRawSurface({ kind: "diagnostic", header, lines }));
-}
-
-/**
- * RAWS-03 / D-09: shows the Device Flow prompt as the `device-flow-prompt`
- * kind. `auth-host.ts` binds the domain's device-code callback to this helper.
- * AUTH-09: it copies the two prompt values by name, so no other member of
- * `prompt` reaches the kind. The text strategy composes the sentence at
- * explicit `"info"` severity.
- */
-export function notifyDeviceFlowPrompt(
-  ctx: NotificationContext,
-  run: NotificationRun,
-  prompt: DeviceFlowPrompt,
-): void {
-  emitPresentation(
-    ctx,
-    run,
-    resolveRawSurface({
-      kind: "device-flow-prompt",
-      verificationUri: prompt.verificationUri,
-      userCode: prompt.userCode,
-    }),
-  );
 }
 
 /**

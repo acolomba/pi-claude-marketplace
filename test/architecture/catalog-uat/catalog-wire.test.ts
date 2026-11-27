@@ -35,7 +35,6 @@ import {
   notifyAutoapplyStatus,
   notifyBackgroundUpdate,
   notifyCommandError,
-  notifyDeviceFlowPrompt,
   notifyDiagnostic,
   notifyHookNotice,
   notifyMcpConfigNotices,
@@ -157,7 +156,16 @@ function catalogOrigin(example: CatalogExample): NotificationOrigin {
   return { kind: "command", commandId, invocationId: tupleKey(example.section, example.state) };
 }
 
-const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
+/**
+ * The raw kinds a run emits. No command emits `device-flow-prompt` after
+ * D-SG-27, so no sample, origin, or helper exists for it.
+ */
+type EmittedRawKind = Exclude<RawSurface["kind"], "device-flow-prompt">;
+
+/** The sample of one emitted raw kind. */
+type EmittedRawSurface = Extract<RawSurface, { kind: EmittedRawKind }>;
+
+const RAW_ORIGINS: Readonly<Record<EmittedRawKind, NotificationOrigin>> = {
   "usage-error": { kind: "command", commandId: "plugin install", invocationId: "raw-usage-error" },
   "usage-info": { kind: "command", commandId: "plugin list", invocationId: "raw-usage-info" },
   "autoapply-status": {
@@ -166,11 +174,6 @@ const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
     invocationId: "raw-autoapply-status",
   },
   diagnostic: { kind: "command", commandId: "plugin import", invocationId: "raw-diagnostic" },
-  "device-flow-prompt": {
-    kind: "command",
-    commandId: "marketplace add",
-    invocationId: "raw-device-flow",
-  },
   "async-rewake-summary": { kind: "hook" },
   "stop-override-cap": { kind: "hook" },
   "reconcile-aborted": { kind: "load" },
@@ -200,7 +203,7 @@ const ABSOLUTE_PATH =
   /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\\?\\|\\\\|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
 
 /** One sample per raw kind; a kind missing from the table fails typecheck. */
-const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { kind: K }> } = {
+const RAW_SAMPLES: { readonly [K in EmittedRawKind]: Extract<RawSurface, { kind: K }> } = {
   "usage-error": {
     kind: "usage-error",
     message: "unknown flag --bogus",
@@ -220,11 +223,6 @@ const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { k
     kind: "diagnostic",
     header: "import: 1 warning",
     lines: ["skipped settings entry: not an object"],
-  },
-  "device-flow-prompt": {
-    kind: "device-flow-prompt",
-    verificationUri: "https://github.com/login/device",
-    userCode: "ABCD-1234",
   },
   "async-rewake-summary": { kind: "async-rewake-summary", summary: "Background checks finished." },
   "stop-override-cap": { kind: "stop-override-cap", pluginId: "guard@official", cap: 8 },
@@ -322,7 +320,11 @@ function presentRawSamples(): PresentedSource[] {
 }
 
 /** Dispatches each raw sample through the public helper that owns its kind. */
-function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: RawSurface): void {
+function emitRawSample(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  surface: EmittedRawSurface,
+): void {
   switch (surface.kind) {
     case "usage-error":
       notifyUsageError(ctx, run, surface);
@@ -335,9 +337,6 @@ function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: 
       return;
     case "diagnostic":
       notifyDiagnostic(ctx, run, surface.header, surface.lines);
-      return;
-    case "device-flow-prompt":
-      notifyDeviceFlowPrompt(ctx, run, surface);
       return;
     case "async-rewake-summary":
       notifyAsyncRewakeSummary(ctx, run, surface.summary);
@@ -510,7 +509,7 @@ function realPayloads(): {
   }));
 }
 
-test("WIRE-02: the retained inventory and separate command error cover all 24 kinds", () => {
+test("WIRE-02: the retained inventory and separate command error cover all 23 emitted kinds", () => {
   // arrange
   const error = resolveCommandError(new Error("operation failed"), false);
   const origin = {
@@ -528,7 +527,6 @@ test("WIRE-02: the retained inventory and separate command error cover all 24 ki
     "autoapply-status",
     "background-update",
     "cascade",
-    "device-flow-prompt",
     "diagnostic",
     "hook-notice",
     "internal-error",
@@ -550,7 +548,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 24 ki
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 343);
+  assert.strictEqual(PRESENTED.length, 342);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));

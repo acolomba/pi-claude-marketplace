@@ -22,12 +22,8 @@ import { createCommandRunState } from "../../extensions/pi-claude-marketplace/sh
 import { createJsonCapture } from "../edge/json-capture.ts";
 import { runWithAllLoaded } from "../shared/notification-run-seeds.ts";
 
-import {
-  CREDENTIAL_LEAK_TARGETS,
-  EXTENSION_ROOT_REL,
-  PRESENTATION_SINK_TARGETS,
-} from "./gate-targets.ts";
-import { filesMatching, REPO_ROOT, stripComments } from "./source-scan.ts";
+import { CREDENTIAL_LEAK_TARGETS, EXTENSION_ROOT_REL } from "./gate-targets.ts";
+import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
@@ -80,10 +76,7 @@ const [
   MIGRATE_FILE,
   WITH_STATE_GUARD_FILE,
   GIT_CREDENTIAL_FILE,
-  GITHUB_AUTH_FILE,
   GIT_PLATFORM_FILE,
-  AUTH_REGISTRY_FILE,
-  AUTH_HOST_FILE,
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
   GIT_ONE_SHOT_CREDENTIAL_FILE,
@@ -100,10 +93,7 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "persistence/migrate.ts",
   "transaction/with-state-guard.ts",
   "platform/git-credential.ts",
-  "domain/github-auth.ts",
   "platform/git.ts",
-  "domain/auth-registry.ts",
-  "orchestrators/auth-host.ts",
   "orchestrators/marketplace/add.ts",
   "orchestrators/marketplace/update.ts",
   "platform/git-one-shot-credential.ts",
@@ -119,18 +109,10 @@ const STATE_WRITE_FILES: ReadonlyArray<string> = [
 
 const FORBIDDEN_STATE_FIELDS = /\b(password|access_token|githubToken|gitToken)\b/i;
 
-const PROVIDER_FILES: ReadonlyArray<string> = [
-  AUTH_REGISTRY_FILE,
-  // buildAuthForHost binds the provider flow and the device-code prompt per
-  // host; a token interpolation regression here would leak, so the PROV-05
-  // scan covers it.
-  AUTH_HOST_FILE,
-];
-
 /**
- * The marketplace verbs that construct the Device Flow `onAuthRequired`
- * closure. The closure captures `credentialOps` by reference, so both are
- * scanned for a credential interpolated into an Error or a notify message.
+ * The marketplace verbs that build the host-bound credential bundles and place
+ * the GAUTH-04 stored-credential hint, so both are scanned for a credential
+ * interpolated into an Error or a notify message.
  */
 const CREDENTIAL_CAPTURING_ORCHESTRATORS: ReadonlyArray<string> = [
   MARKETPLACE_ADD_FILE,
@@ -195,155 +177,6 @@ const ERROR_LITERAL_CALL_SITE = /new\s+Error\s*\(\s*(`(?:[^`\\]|\\.)*`)/g;
 /** The `new Error(\`...\`)` / `ctx.ui.notify(\`...\`)` call forms. */
 const ERROR_OR_UI_NOTIFY_LITERAL_CALL_SITE =
   /(?:new\s+Error\s*\(|ctx\.ui\.notify\s*\()\s*(`(?:[^`\\]|\\.)*`)/g;
-
-/**
- * AUTH-09 / D-11: the only form in which the device-code callback may be
- * called. The argument is an object literal holding exactly the verification
- * URI and the user code from the device-code response, so neither a token
- * field, a variable, nor a spread object can reach the callback.
- */
-const ALLOWED_DEVICE_CODE_CALL =
-  /\.onDeviceCode\(\s*\{\s*verificationUri:\s*deviceCode\.verification_uri,\s*userCode:\s*deviceCode\.user_code,?\s*\}\s*\)/g;
-
-/** The device-code callback's member declaration on the Device Flow options. */
-const ALLOWED_DEVICE_CODE_DECLARATION =
-  /\bonDeviceCode:\s*\(\s*prompt:\s*DeviceFlowPrompt\s*\)\s*=>\s*void;/g;
-
-/**
- * AUTH-09 / D-11: the only form in which a provider file may bind the
- * device-code callback to the dispatch module's prompt helper. The bound
- * callback forwards its argument and nothing else.
- */
-const ALLOWED_PROMPT_BINDING =
-  /onDeviceCode:\s*\(\s*prompt\s*\)\s*=>\s*\{\s*notifyDeviceFlowPrompt\(\s*ctx\s*,\s*run\s*,\s*prompt\s*\);?\s*\}/g;
-
-/** The prompt helper's import under its own name. An `as` rename does not match. */
-const ALLOWED_PROMPT_HELPER_IMPORT =
-  /\bimport\s*\{[^}]*\bnotifyDeviceFlowPrompt\b(?!\s+as\b)[^}]*\}\s*from\s*"[^"]*\/notification-dispatch\.ts"/g;
-
-/** The prompt helper's declaration in the dispatch module. */
-const ALLOWED_PROMPT_HELPER_DECLARATION =
-  /\bexport function notifyDeviceFlowPrompt\(\s*ctx: NotificationContext,\s*run: NotificationRun,\s*prompt: DeviceFlowPrompt,?\s*\): void \{/g;
-
-/** Any mention of either identifier, used to discover the files that name one. */
-const DEVICE_PROMPT_REFERENCE = /\b(?:onDeviceCode|notifyDeviceFlowPrompt)\b/;
-
-const [SINK_FILE] = PRESENTATION_SINK_TARGETS;
-
-/**
- * The only extension files that may name the device-code callback or the
- * prompt helper, sorted: the binding, the Device Flow module, and the
- * dispatch module that declares the helper.
- */
-const DEVICE_PROMPT_REFERENCE_FILES: ReadonlyArray<string> = [
-  AUTH_HOST_FILE,
-  GITHUB_AUTH_FILE,
-  SINK_FILE,
-].sort();
-
-function countMatches(src: string, pattern: RegExp): number {
-  return [...src.matchAll(pattern)].length;
-}
-
-/**
- * Counts every device-code callback call in the Device Flow module and
- * requires each one to be in the allowed form. At least one call
- * must exist, so a renamed or removed callback fails the gate instead of
- * leaving the allow-list satisfied by zero calls (D-07-03).
- *
- * Every other mention of the identifier must be its member declaration. That
- * clause rejects the call forms the call count cannot see: `.call(`, bracket
- * access, and a renamed destructure.
- */
-async function scanDeviceCodeCalls(): Promise<void> {
-  const stripped = stripComments(await readFile(path.join(REPO_ROOT, GITHUB_AUTH_FILE), "utf8"));
-  const calls = countMatches(stripped, /\bonDeviceCode\s*\(/g);
-  const allowedCalls = countMatches(stripped, ALLOWED_DEVICE_CODE_CALL);
-  const mentions = countMatches(stripped, /\bonDeviceCode\b/g);
-  const declarations = countMatches(stripped, ALLOWED_DEVICE_CODE_DECLARATION);
-
-  assert.ok(
-    calls > 0,
-    `D-07-03: no onDeviceCode call exists in ${GITHUB_AUTH_FILE}, so the AUTH-09 allow-list below passes over nothing. Re-aim the gate at the module that now passes the device-code prompt.`,
-  );
-  assert.strictEqual(
-    allowedCalls,
-    calls,
-    `AUTH-09 violation: ${GITHUB_AUTH_FILE} calls onDeviceCode ${calls} time(s), but only ${allowedCalls} call(s) pass exactly verificationUri and userCode from the device-code response.`,
-  );
-  assert.strictEqual(
-    mentions,
-    declarations + allowedCalls,
-    `AUTH-09 violation: ${GITHUB_AUTH_FILE} names onDeviceCode ${mentions} time(s), but only ${declarations + allowedCalls} are its declaration or the allowed call. Any other reference can pass the callback a value the call form cannot inspect.`,
-  );
-}
-
-/**
- * The references in one comment-stripped file that are not in an allowed
- * form, or an empty list. The Device Flow module's `onDeviceCode` mentions
- * belong to `scanDeviceCodeCalls`.
- */
-function strayPromptReferences(rel: string, stripped: string): string[] {
-  const bindings = countMatches(stripped, ALLOWED_PROMPT_BINDING);
-  const stray: string[] = [];
-
-  if (rel !== GITHUB_AUTH_FILE) {
-    const mentions = countMatches(stripped, /\bonDeviceCode\b/g);
-    if (mentions !== bindings) {
-      stray.push(
-        `${rel} names onDeviceCode ${mentions} time(s), ${bindings} in the allowed binding`,
-      );
-    }
-  }
-
-  const helperMentions = countMatches(stripped, /\bnotifyDeviceFlowPrompt\b/g);
-  const helperAllowed =
-    bindings +
-    countMatches(stripped, ALLOWED_PROMPT_HELPER_IMPORT) +
-    countMatches(stripped, ALLOWED_PROMPT_HELPER_DECLARATION);
-  if (helperMentions !== helperAllowed) {
-    stray.push(
-      `${rel} names notifyDeviceFlowPrompt ${helperMentions} time(s), ${helperAllowed} in its import, its declaration, or the allowed binding`,
-    );
-  }
-
-  return stray;
-}
-
-/**
- * Walks the whole extension tree for every file that names the
- * device-code callback or the prompt helper. Only the three files in
- * `DEVICE_PROMPT_REFERENCE_FILES` may name either one, and every mention must
- * be an allowed form. At least one allowed binding must exist (D-07-03).
- * Returns the files that name either identifier, sorted.
- */
-async function scanPromptReferences(): Promise<ReadonlyArray<string>> {
-  const named = await filesMatching(EXTENSION_ROOT_REL, DEVICE_PROMPT_REFERENCE);
-  const outside = named.filter((rel) => !DEVICE_PROMPT_REFERENCE_FILES.includes(rel));
-  let bindings = 0;
-  const stray: string[] = [];
-  for (const rel of named) {
-    const stripped = stripComments(await readFile(path.join(REPO_ROOT, rel), "utf8"));
-    bindings += countMatches(stripped, ALLOWED_PROMPT_BINDING);
-    stray.push(...strayPromptReferences(rel, stripped));
-  }
-
-  assert.deepStrictEqual(
-    outside,
-    [],
-    `AUTH-09 violation: only ${DEVICE_PROMPT_REFERENCE_FILES.join(", ")} may name onDeviceCode or notifyDeviceFlowPrompt, but these files do too: ${outside.join(", ")}`,
-  );
-  assert.ok(
-    bindings > 0,
-    `D-07-03: no onDeviceCode: (prompt) => { notifyDeviceFlowPrompt(ctx, run, prompt); } binding exists under ${EXTENSION_ROOT_REL}, so the AUTH-09 reference allow-list passes over nothing. Re-aim the gate at the module that now binds the device-code prompt.`,
-  );
-  assert.deepStrictEqual(
-    stray,
-    [],
-    `AUTH-09 violation: a device-code prompt reference is not in an allowed form:\n  ${stray.join("\n  ")}`,
-  );
-  return named;
-}
 
 test("AUTH-09: no credential field name appears in any state-write code path", async () => {
   assert.ok(
@@ -435,37 +268,6 @@ test("AUTH-09: platform/git-process.ts never puts a credential, a run's input, o
   );
 });
 
-test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error message and passes only the prompt values to onDeviceCode", async () => {
-  const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
-  const exists = await access(absPath).then(
-    () => true,
-    () => false,
-  );
-  assert.ok(
-    exists,
-    `D-07-03: ${GITHUB_AUTH_FILE} is declared in CREDENTIAL_LEAK_TARGETS but does not resolve, so the scan below would report success having opened nothing.`,
-  );
-
-  const src = await readFile(absPath, "utf8");
-  const stripped = stripComments(src);
-  // Forbidden: template literal OR string concatenation that interpolates
-  //   - access_token, accessToken
-  //   - cred.<field> (e.g. cred.password, cred.access_token)
-  //   - r.accessToken (from the PollResult success branch)
-  // INSIDE a `new Error(...)` constructor. The device-code prompt is held to
-  // its exact allowed form by `scanDeviceCodeCalls`.
-  const errorWithToken =
-    /new\s+Error\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
-  assert.doesNotMatch(
-    stripped,
-    errorWithToken,
-    "Error in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
-  );
-
-  assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, ERROR_LITERAL_CALL_SITE);
-  await scanDeviceCodeCalls();
-});
-
 /**
  * D-PL5-07: a request member or a header name that would send something of
  * the user's: a `headers`, `credentials`, `authorization`, or `cookie` key or
@@ -499,74 +301,14 @@ test("AUTH-09 / D-PL5-07: platform/hosted-manifest-fetch.ts sends no header, cre
   );
 });
 
-test("AUTH-09: describeDeviceCodeErrorBody never references a credential field", async () => {
-  // The gate above scans new Error(...) call sites; it cannot
-  // see through the describeDeviceCodeErrorBody(res) call inside
-  // requestCodeImpl's `new Error(...)` -- a lexical scan of that call site
-  // only ever sees `res.status` and a function-call expression. This test
-  // instead scans the helper's OWN body directly: at this point in the flow
-  // no credential has been issued yet, so describeDeviceCodeErrorBody may
-  // only ever read the provider's `error` / `error_description` fields.
-  const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
-  const src = await readFile(absPath, "utf8");
-  const stripped = stripComments(src);
-  const fnMatch = /async function describeDeviceCodeErrorBody\([\s\S]*?\n}\n/.exec(stripped);
-  assert.ok(fnMatch, "describeDeviceCodeErrorBody function body not found for AUTH-09 scan");
-
-  const forbiddenField =
-    /\b(password|access_token|accessToken|cred\.[a-z]+|githubToken|gitToken)\b/i;
-  // The named-field check above matches specific field NAMES only. A
-  // regression that dumps the whole response body instead of reading the
-  // named `error`/`error_description` fields (e.g. via JSON.stringify(data)
-  // or res.text()) would slip past it undetected, so it is forbidden here
-  // too.
-  const forbiddenBodyDump = /JSON\.stringify\s*\(|(?:res|response)\.text\s*\(/i;
-  assert.strictEqual(
-    forbiddenField.test(fnMatch[0]) || forbiddenBodyDump.test(fnMatch[0]),
-    false,
-    "describeDeviceCodeErrorBody references a credential field or dumps the whole response body (AUTH-09 violation)",
-  );
-});
-
-test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", async () => {
-  // DeviceFlowResult's failure arm is built as a plain object literal
-  // (`{ ok: false, reason: ... }`), not a `new Error(...)` call or the
-  // device-code prompt, so the gate above does not scan it. This test covers that
-  // construction form directly.
-  //
-  // Two checks combine here. The first is the original bounded-prefix scan,
-  // kept unchanged so it still catches every case it already covers (a
-  // concatenation leak, or a leak as the FIRST interpolation). The second closes
-  // a proven bypass: `[^,}]*` cannot cross the `}` that closes a preceding
-  // `${...}`, so it only ever inspects the FIRST interpolation in a
-  // multi-interpolation template literal (e.g.
-  // `` `Device Flow failed: ${r.error}${r.accessToken}` `` -- the SECOND
-  // interpolation was invisible to the bounded scan). The second check
-  // captures the COMPLETE template literal following each `reason:` as one
-  // token (see `fullTemplateLiteralsAfter`) and scans it in full.
-  const absPath = path.join(REPO_ROOT, GITHUB_AUTH_FILE);
-  const src = await readFile(absPath, "utf8");
-  const stripped = stripComments(src);
-
-  const reasonFieldWithToken =
-    /reason:\s*(?:[^,}]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^,}]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
-  assert.doesNotMatch(
-    stripped,
-    reasonFieldWithToken,
-    "a reason: field in domain/github-auth.ts interpolates a token field (AUTH-09 violation)",
-  );
-
-  assertNoCredentialInLiterals(GITHUB_AUTH_FILE, stripped, /reason:\s*(`(?:[^`\\]|\\.)*`)/g);
-});
-
 test("AUTH-09: the git hookDebugLog calls never interpolate a credential field", async () => {
   // The git modules that hold a credential log near it with hookDebugLog:
   // the D-SG-14 retry in git.ts after a sign-in, and the keychain approve and
   // reject failures in git-credential.ts. That call form is not `new
-  // Error(...)` or the device-code prompt, so it falls outside every other
-  // gate in this file; this test closes that gap.
+  // Error(...)`, so it falls outside every other gate in this file; this test
+  // closes that gap.
   //
-  // Two checks combine here (mirroring the twin `reason:` gate above). The
+  // Two checks combine here. The
   // first is the original bounded-prefix scan, kept unchanged so it still
   // catches every case it already covers. The second closes a proven bypass:
   // `[^)]*` does not allow a literal `)` before the interpolation it is
@@ -615,56 +357,15 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   }
 });
 
-test("PROV-05: every provider file is scanned for token interpolation in an Error message, and every device-code prompt binding has the exact form", async () => {
-  // Each provider descriptor file carries credential-shaping logic
-  // (credentialFrom) and endpoint/clientId literals. A regression that
-  // interpolated a token into an Error or the device-code prompt here would
-  // leak it, so the AUTH-09 gate must cover the whole provider set, not just
-  // github-auth.ts.
-  const errorWithToken =
-    /new\s+Error\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
-
-  assert.ok(
-    PROVIDER_FILES.length > 0,
-    "D-07-03: with no provider file declared, the PROV-05 scan reports success having opened nothing.",
-  );
-
-  const visited: string[] = [];
-  for (const rel of PROVIDER_FILES) {
-    const absPath = path.join(REPO_ROOT, rel);
-    const src = await readFile(absPath, "utf8");
-    visited.push(rel);
-    const stripped = stripComments(src);
-    assert.doesNotMatch(
-      stripped,
-      errorWithToken,
-      `Error in ${rel} interpolates a token field (AUTH-09 violation)`,
-    );
-    assertNoCredentialInLiterals(rel, stripped, ERROR_LITERAL_CALL_SITE);
-  }
-
-  assert.deepStrictEqual(
-    visited,
-    [...PROVIDER_FILES],
-    "D-07-03: the scan must have opened every declared provider file; one that stopped resolving drops out of this list.",
-  );
-  assert.deepStrictEqual(
-    await scanPromptReferences(),
-    DEVICE_PROMPT_REFERENCE_FILES,
-    "D-07-03: the reference scan must have found every file allowed to name the device-code callback or the prompt helper; one that stopped resolving drops out of this list.",
-  );
-});
-
 test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
-  // Closes review WR-02. The two marketplace verbs construct the Device Flow
-  // onAuthRequired closure. The closure captures `credentialOps` by
-  // reference -- a future regression that interpolates
-  // `credentialOps.fill(...).then(c => ctx.ui.notify(\`got ${c.password}\`))`
-  // would be an AUTH-09 violation. This gate scans for that class of
-  // bug in the orchestrator files.
+  // Closes review WR-02. The two marketplace verbs build the host-bound
+  // credential bundles and place the GAUTH-04 stored-credential hint; no
+  // closure there captures a credential surface (D-SG-27). A future
+  // regression that interpolated a credential field into an Error or a
+  // notify message would still be an AUTH-09 violation, so this gate scans
+  // for that class of bug in the orchestrator files.
   //
-  // The regex mirrors the github-auth.ts gate: forbidden is a
-  // template literal OR string concatenation that interpolates
+  // Forbidden is a template literal OR string concatenation that interpolates
   //   - access_token, accessToken
   //   - cred.<field> (e.g. cred.password)
   //   - r.accessToken

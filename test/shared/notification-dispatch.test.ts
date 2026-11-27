@@ -16,7 +16,6 @@ import {
   notifyAsyncRewakeSummary,
   notifyHookNotice,
   notifyBackgroundUpdate,
-  notifyDeviceFlowPrompt,
   notifyDiagnostic,
   notifyMcpConfigNotices,
   notifyMcpMigration,
@@ -552,16 +551,6 @@ for (const { kind, outcome, emit } of [
     outcome: false,
     emit: (ctx, run) => {
       notifyDiagnostic(ctx, run, "Warning.", ["Detail."]);
-    },
-  },
-  {
-    kind: "device-flow-prompt",
-    outcome: false,
-    emit: (ctx, run) => {
-      notifyDeviceFlowPrompt(ctx, run, {
-        verificationUri: "https://example.test",
-        userCode: "ABCD",
-      });
     },
   },
   {
@@ -7851,78 +7840,6 @@ test("notifyPluginPathSkipped emits the skipped scope and reason at warning seve
         "warning",
       ],
     ],
-  );
-});
-
-test("retains a caught invalid device prompt append for final validation", () => {
-  // arrange
-  const capture = createJsonCapture();
-  const ctx = {
-    mode: "rpc",
-    hasUI: true,
-    get ui() {
-      return capture.ui;
-    },
-  };
-  const run = {
-    ...runWithNothingLoaded(),
-    entrySink: {
-      appendEntry(customType: string, payload: unknown) {
-        assert.ok(typeof payload === "object" && payload !== null);
-        try {
-          capture.entrySink.appendEntry(customType, { ...payload, accessToken: "forbidden-token" });
-        } catch {
-          throw new Error("Invalid payload.");
-        }
-      },
-    },
-  };
-
-  // act
-  notifyDeviceFlowPrompt(ctx, run, {
-    verificationUri: "https://github.com/login/device",
-    userCode: "BAD-1234",
-  });
-
-  // assert
-  assert.deepStrictEqual(capture.entries, [
-    {
-      customType: "claude-plugin",
-      payload: {
-        schemaVersion: 1,
-        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-        kind: "device-flow-prompt",
-        severity: "info",
-        needsReload: false,
-        verificationUri: "https://github.com/login/device",
-        userCode: "BAD-1234",
-        accessToken: "forbidden-token",
-      },
-    },
-    {
-      customType: "claude-plugin",
-      payload: { ...faultError("Invalid payload.").payload, accessToken: "forbidden-token" },
-    },
-  ]);
-  assert.throws(() => {
-    capture.assertValid();
-  }, assert.AssertionError);
-});
-
-test("notifyDeviceFlowPrompt emits the verification URI and user code at info severity", (t) => {
-  // arrange
-  const ctx = createContext(t);
-
-  // act
-  notifyDeviceFlowPrompt(ctx, runWithNothingLoaded(), {
-    verificationUri: "https://github.com/login/device",
-    userCode: "ABCD-1234",
-  });
-
-  // assert
-  assert.deepStrictEqual(
-    ctx.ui.notify.mock.calls.map((call) => call.arguments),
-    [["Open https://github.com/login/device and enter: ABCD-1234", "info"]],
   );
 });
 

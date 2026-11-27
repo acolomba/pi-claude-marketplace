@@ -142,10 +142,7 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/persistence/migrate.ts",
   "extensions/pi-claude-marketplace/transaction/with-state-guard.ts",
   "extensions/pi-claude-marketplace/platform/git-credential.ts",
-  "extensions/pi-claude-marketplace/domain/github-auth.ts",
   "extensions/pi-claude-marketplace/platform/git.ts",
-  "extensions/pi-claude-marketplace/domain/auth-registry.ts",
-  "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
   // AUTH-09, D-SG-14: the one-shot helper writes the token a Device Flow

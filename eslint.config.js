@@ -62,10 +62,6 @@ const GIT_PROCESS_IMPORTERS = [
  * are directory-scoped.
  */
 const NETWORK_SEAMS = [
-  // D-79-04: a provider maps a token to the type-only GitCredentials shape.
-  "extensions/pi-claude-marketplace/domain/auth-registry.ts",
-  // D-32-01: the Device Flow engine types its credentials from platform/git.
-  "extensions/pi-claude-marketplace/domain/github-auth.ts",
   // D-79-05: builds the host-keyed credential bundle from platform/git-credential.ts.
   "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   // Passes the injected gitOps seam to the marketplace adds an import performs.

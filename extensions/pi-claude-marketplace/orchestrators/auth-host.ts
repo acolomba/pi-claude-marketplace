@@ -1,68 +1,44 @@
 /**
- * Host-keyed auth bundle factory (D-79-05).
+ * Host-keyed auth bundle factory (GAUTH-03, D-1-03, GHB-02).
  *
- * `buildAuthForHost` is the single seam that turns a bare host into a
- * `GitAuthBundle` bound to that host: the user's credential helper on every
- * host, plus that host's registered Device Flow when the provider registry
- * claims it. The marketplace clone path (add.ts / update.ts) calls it directly
- * and the plugin clone paths reach it through `buildCloneAuth`, instead of any
- * of them hardcoding `github.com` + `initiateDeviceFlow`.
+ * This module binds a git request to the host whose stored credential it
+ * uses, and it holds no sign-in (D-SG-27). EVERY host gets a
+ * `stored-credential` bundle from `buildStoredCredentialAuth`: git asks the
+ * user's credential helpers itself, a helper miss fails as git failed, and a
+ * credential the host refuses fails as `StoredCredentialRejectedError` and
+ * stays stored as far as this extension is concerned (GAUTH-04, D-SG-28). No
+ * command, load, or background pass shows a device code or waits for input.
  *
- * GAUTH-03 contract: EVERY host gets a bundle. git asks the user's credential
- * helpers itself on every host, and the bundle decides what an authentication
- * failure of the run leads to (D-SG-14). The provider registry gates only the
- * interactive half:
- *   - Provider found  -> a `device-flow` bundle whose `onAuthRequired` runs
- *     that provider's Device Flow, host-keyed (PROV-03). `platform/git.ts`
- *     calls it when no helper answered a request to that host, then runs the
- *     request once more.
- *   - No provider     -> a `stored-credential` bundle from
- *     `buildStoredCredentialAuth`, so a credential already in the user's
- *     helper still authenticates, a miss fails as git failed, and a refused
- *     credential stays stored (GAUTH-04).
+ * The marketplace clone path (add.ts / update.ts) calls `buildAuthForHost`
+ * directly, and the plugin clone paths reach it through `buildCloneAuth`.
+ * GitHub bundles come from `buildGitHubAuth`: while
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it binds the override host;
+ * unset, it binds github.com (GHB-02).
  *
- * GitHub bundles come from `buildGitHubAuth`. While
- * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it binds the override host
- * with a stored credential and no Device Flow (GHB-02); unset, it binds
- * github.com through `buildAuthForHost`.
- *
- * `buildAuthForHost` requires a notification context because the Device Flow
- * renders a user code through it. A caller with none -- the autoupdate cascade
- * -- asks for `buildStoredCredentialAuth` directly (D-3-04).
+ * The builders still take the command's notification context and run, unread,
+ * so their callers stay as they are until the builders are replaced.
  *
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
  * only `import type` from platform/git.ts is permitted -- so consumers
  * (install-outcome.ts) that import it stay clean under BLOCK F in
- * `eslint.config.js`. It imports the provider registry (domain), the Device
- * Flow engine (domain), the device-flow prompt helper (shared), the credential
- * surface with the bundle and sign-in types (platform/git-credential.ts), and
- * the GitHub base seam (shared/github-base-url.ts).
+ * `eslint.config.js`. It imports the credential surface with the bundle type
+ * (platform/git-credential.ts) and the GitHub base seam
+ * (shared/github-base-url.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
- * enforced by test/architecture/no-credential-leak.test.ts (PROV-05).
+ * enforced by test/architecture/no-credential-leak.test.ts.
  */
 
-import { findProviderForHost } from "../domain/auth-registry.ts";
-import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_GIT, createCredentialOps } from "../platform/git-credential.ts";
-import { hookDebugLog } from "../shared/debug-log.ts";
-import { DeviceFlowUnavailableError } from "../shared/errors.ts";
 import {
   GITHUB_HOST,
   gitHubAddressOf,
   gitHubOverrideHost,
   gitHubWireUrl,
 } from "../shared/github-base-url.ts";
-import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
 
-import type { DeviceFlowHttp } from "../domain/github-auth.ts";
-import type {
-  AuthAttemptResult,
-  CredentialOps,
-  GitAuthBundle,
-  OnAuthRequiredFn,
-} from "../platform/git-credential.ts";
+import type { CredentialOps, GitAuthBundle } from "../platform/git-credential.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
 
@@ -165,9 +141,8 @@ export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
  * a credential the server rejects stays stored because it is the only copy
  * (GAUTH-04, D-1-01). It does no I/O.
  *
- * `buildAuthForHost` returns it for a host the provider registry does not
- * claim. The autoupdate cascade asks for it on every host, because it has no
- * notification context to render a Device Flow user code in (D-3-04).
+ * Every builder of this module returns it (D-SG-27). The autoupdate cascade
+ * asks for it directly, because it has no notification context (D-3-04).
  */
 export function buildStoredCredentialAuth(
   host: string,
@@ -177,108 +152,41 @@ export function buildStoredCredentialAuth(
 }
 
 /**
- * Build the `GitAuthBundle` for `host`. Every host gets one, so an
- * authentication failure on any host maps by the bundle's kind (GAUTH-03,
- * D-1-01, D-SG-14).
- *
- * A registry host gets a `device-flow` bundle: its `onAuthRequired` runs that
- * provider's Device Flow (D-79-05) and, if an `authMemo` is supplied, records
- * the result so the flow runs AT MOST ONCE per host across a single command
- * invocation (D-79-02). A host the registry does not claim gets
- * `buildStoredCredentialAuth`'s bundle.
- *
- * The memo caps Device Flow round-trips, not git's own helper queries: git
- * asks the user's credential helpers on every run, and `platform/git.ts`
- * reaches `onAuthRequired` only after a run failed because no helper answered
- * (D-SG-14). That is the AUTH-02 silent-reuse contract.
+ * Build the `GitAuthBundle` for `host`: the stored-credential bundle, on every
+ * host and every run, github.com and gitlab.com included (GAUTH-03, D-1-01,
+ * D-SG-27).
  *
  * The bundle hands git no credential of its own: git makes every lookup in
- * the user's helpers itself, and a sign-in's token reaches git only through a
- * one-shot helper for the one retried run (`platform/git-one-shot-credential.ts`,
- * D-SG-14). `platform/git.ts` runs that retry only for a request to the
- * bundle's host and keys the helper to that host, so a request to another
- * host never gets the token (D-1-03, T-79-04).
+ * the user's helpers itself, and `platform/git.ts` maps an authentication
+ * failure only for a request to the bundle's host (D-1-03, T-79-04).
  */
 export function buildAuthForHost(args: {
   host: string;
   credentialOps: CredentialOps;
   ctx: NotificationContext;
   run: NotificationRun;
-  deviceFlowHttp?: DeviceFlowHttp;
-  authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle {
-  const { host, credentialOps, ctx, run, deviceFlowHttp, authMemo } = args;
-
-  const provider = findProviderForHost(host);
-  // AAP-02 / D-13: a run no command opened, such as an autoapply load, gets no
-  // interactive Device Flow, as the autoupdate cascade gets none (D-3-04). A
-  // credential miss then fails that row instead of holding the load.
-  if (provider === undefined || run.origin.kind !== "command") {
-    return buildStoredCredentialAuth(host, credentialOps);
-  }
-
-  const onAuthRequired: OnAuthRequiredFn = async (): Promise<AuthAttemptResult> => {
-    // D-79-02: once-per-host memo short-circuits a repeated flow.
-    const memoized = authMemo?.get(host);
-    if (memoized !== undefined) {
-      // AUTH-09: the line names the host only, so a debug trace tells a
-      // reused sign-in from a new one.
-      hookDebugLog(`reusing the sign-in for ${host}`, "auth");
-      return memoized;
-    }
-
-    if (ctx.mode === "print") {
-      throw new DeviceFlowUnavailableError();
-    }
-
-    const result = await initiateDeviceFlow({
-      provider,
-      host,
-      credentialOps,
-      onDeviceCode: (prompt) => {
-        notifyDeviceFlowPrompt(ctx, run, prompt);
-      },
-      ...(deviceFlowHttp !== undefined && { http: deviceFlowHttp }),
-    });
-    authMemo?.set(host, result);
-    return result;
-  };
-
-  return { kind: "device-flow", credentialOps, host, onAuthRequired };
+  return buildStoredCredentialAuth(args.host, args.credentialOps);
 }
 
 /**
- * GHB-02 / D-79-05: build the auth bundle for a GitHub source. While
- * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it is a stored-credential
- * bundle bound to the override host, built without a provider lookup, so no
- * Device Flow runs even when that host is github.com or gitlab.com. Unset, it
- * is `buildAuthForHost`'s bundle for github.com. An invalid value throws
+ * GHB-02: build the auth bundle for a GitHub source. While
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it is bound to the override
+ * host; unset, it is bound to github.com. An invalid value throws
  * `InvalidGitHubBaseUrlError`.
  */
 export function buildGitHubAuth(args: {
   credentialOps: CredentialOps;
   ctx: NotificationContext;
   run: NotificationRun;
-  deviceFlowHttp?: DeviceFlowHttp;
-  authMemo?: Map<string, AuthAttemptResult>;
 }): GitAuthBundle {
-  const overrideHost = gitHubOverrideHost();
-  if (overrideHost !== undefined) {
-    return buildStoredCredentialAuth(overrideHost, args.credentialOps);
-  }
-
-  return buildAuthForHost({ ...args, host: GITHUB_HOST });
+  return buildStoredCredentialAuth(gitHubOverrideHost() ?? GITHUB_HOST, args.credentialOps);
 }
 
 /**
- * PROV-03 / T-79-09 / D-81-05 / GAUTH-03: build the host-keyed auth bundle for
- * a resolved clone url.
- *
- * Returns a bundle for every host, so a private source on any host
- * authenticates from the user's credential helper; a registry host adds that
- * provider's Device Flow on a helper miss. `buildAuthForHost` never
- * interpolates credentials into any surfaced string (AUTH-09). D-79-02: the
- * command-scope `authMemo` caps the device flow at once per host.
+ * T-79-09 / D-81-05 / GAUTH-03: build the host-keyed auth bundle for a
+ * resolved clone url, so a private source on any host authenticates from the
+ * user's credential helper.
  *
  * Shared by the install, reinstall, fetch, `info --fetch`, and update probes,
  * and by the pinned and unpinned arms within each, so none of those call
@@ -296,20 +204,11 @@ export function buildCloneAuth(
     readonly ctx: NotificationContext;
     readonly run: NotificationRun;
     readonly credentialOps: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
   },
 ): GitAuthBundle {
-  const authArgs = {
-    credentialOps: auth.credentialOps,
-    ctx: auth.ctx,
-    run: auth.run,
-    ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
-    ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-  };
   if (kind === "github" || gitHubWireUrl(cloneUrl) !== cloneUrl) {
-    return buildGitHubAuth(authArgs);
+    return buildGitHubAuth(auth);
   }
 
-  return buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(cloneUrl, kind) });
+  return buildAuthForHost({ ...auth, host: hostFromCloneUrl(cloneUrl, kind) });
 }

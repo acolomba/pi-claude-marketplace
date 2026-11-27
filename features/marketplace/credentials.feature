@@ -31,6 +31,31 @@ Feature: Marketplace credentials
     Then the user's ssh receives no launch
     Then the user scope holds no marketplace record
 
+  Scenario: Adding a private GitHub marketplace with no stored credential fails as authentication required and shows no device code
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload | summary                      |
+      | cascade | error    | false        | Some operations have failed. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                               | cause truncated | marketplace clone note | marketplace clone url             | marketplace clone retries     |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | Fetching the marketplace from GitHub failed on both attempts. HTTPS (https://github.com/acme/tools.git): git clone --depth failed: https-auth, exit code 128\n\nSSH (git@github.com:acme/tools.git): git clone --depth failed: ssh-auth, exit code 128, git clone --depth failed: ssh-auth, exit code 128 | false           | ssh-not-configured     | https://github.com/acme/tools.git | git@github.com:acme/tools.git |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then the user's ssh receives these launches:
+      | argv                                                                                                                 |
+      | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com                                  |
+      | -o BatchMode=yes -o StrictHostKeyChecking=yes -o SendEnv=GIT_PROTOCOL git@github.com git-upload-pack 'acme/tools.git' |
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+    Then the user scope holds no marketplace record
+    Then the user scope holds no marketplace checkout
+
   Scenario: Adding a private GitHub marketplace with a stored credential clones it and asks for nothing
     Given the marketplace "tools" is published as a github source
     Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"

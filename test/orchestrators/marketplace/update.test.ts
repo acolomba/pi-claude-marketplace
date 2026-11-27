@@ -6245,15 +6245,12 @@ test("UPD-12: a non-Error remote rejection on a GitHub update under the override
   });
 });
 
-test("GHB-04: a declined Device Flow on a GitHub update without the override keeps its chain without the stored-credential line", async () => {
+test("GAUTH-04 / D-SG-27: a GitHub update without the override that git found no credential for places the github.com stored-credential line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const authError = remoteFailure(
-      { kind: "https-auth", detail: "no-credential" },
-      new Error("cancelled"),
-    );
+    const authError = remoteFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps } = createGitOps({ remoteThrows: authError });
 
     // act
@@ -6271,7 +6268,7 @@ test("GHB-04: a declined Device Flow on a GitHub update without the override kee
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ declined [project] (failed)\n  Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace "declined". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
+          "Some operations have failed.\n\n⊘ declined [project] (failed)\n  Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace \"declined\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for github.com; store one with: printf 'protocol=https\\nhost=github.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
         severity: "error",
       },
     ]);
