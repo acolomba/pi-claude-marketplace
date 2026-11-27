@@ -146,6 +146,42 @@ Feature: Plugin github transport apply
       | -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com |
       | -G git@github.com                                                                   |
 
+  Scenario: Applying a config that re-enables a github dependency whose clone fails names that clone on the dependency's own failed row
+    Given the marketplace "gits" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp          |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install app@gits --scope project"
+    Given the user has run "/claude:plugin disable app@gits --scope project"
+    Given the user has run "/claude:plugin disable ghp@gits --scope project"
+    Given the cached clones of git plugins in the project scope are deleted
+    Given the git host answers 404 for the plugin "ghp"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | gits        | app    | true    |
+      | gits        | ghp    | true    |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons    | scope   | leaks | rollback partial | clone note         | clone url                       | clone retries               |
+      | gits             | project           | ghp@gits | ghp  | failed | unreadable | project |       |                  | ssh-not-configured | https://github.com/acme/ghp.git | git@github.com:acme/ghp.git |
+    Then the installation record of the project scope holds these plugins:
+      | id       | version | enabled |
+      | app@gits | 1.0.0   | false   |
+      | ghp@gits | 1.0.0   | false   |
+
   Scenario: Importing a Claude Code config with two github plugins probes once
     Given the user's ssh is denied for "github.com"
     Given pi runs with github's requests routed to the git host
