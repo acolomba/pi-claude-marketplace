@@ -33,7 +33,9 @@ import * as defaultGit from "../../../extensions/pi-claude-marketplace/platform/
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  CleanupLeakError,
   GitCommandError,
+  GitHubTransportsFailedError,
   InvalidMarketplaceManifestError,
   MarketplaceInBaseLayerOnlyError,
   MarketplaceInLocalLayerOnlyError,
@@ -487,6 +489,24 @@ function noCredential(): GitCommandError {
   );
 }
 
+function sshPublicKeyDenied(): GitCommandError {
+  return new GitCommandError(
+    { kind: "ssh-auth", detail: "publickey" },
+    { operation: "clone", exitCode: 128 },
+  );
+}
+
+function bothTransportsFailed(
+  first: { readonly transport: "ssh" | "https"; readonly error: Error },
+  last: { readonly transport: "ssh" | "https"; readonly error: Error },
+): GitHubTransportsFailedError {
+  const urls = { ssh: "git@github.com:acme/tools.git", https: "https://github.com/acme/tools.git" };
+  return new GitHubTransportsFailedError("marketplace", [
+    { ...first, url: urls[first.transport] },
+    { ...last, url: urls[last.transport] },
+  ]);
+}
+
 for (const { title, makeError, lacks } of [
   {
     title: "GAUTH-04: reports a no-credential failure",
@@ -494,8 +514,61 @@ for (const { title, makeError, lacks } of [
     lacks: true,
   },
   {
+    title: "GAUTH-04: reports a no-credential failure behind a cleanup leak",
+    makeError: (): unknown => new CleanupLeakError(noCredential(), "left /scope/staging behind"),
+    lacks: true,
+  },
+  {
     title: "GAUTH-04: does not report a stored credential the host rejected",
     makeError: (): unknown => new StoredCredentialRejectedError("gitlab.example.com"),
+    lacks: false,
+  },
+  {
+    title: "GAUTH-04: does not report a git failure that shows the credential was sent",
+    makeError: (): unknown =>
+      new GitCommandError(
+        { kind: "https-auth", detail: "rejected" },
+        { operation: "ls-remote", exitCode: 128 },
+      ),
+    lacks: false,
+  },
+  {
+    title: "does not report an SSH key the host refused",
+    makeError: (): unknown => sshPublicKeyDenied(),
+    lacks: false,
+  },
+  {
+    title: "D-SG-22: reports a GitHub failure whose HTTPS attempt found no credential",
+    makeError: (): unknown =>
+      bothTransportsFailed(
+        { transport: "https", error: noCredential() },
+        { transport: "ssh", error: sshPublicKeyDenied() },
+      ),
+    lacks: true,
+  },
+  {
+    title:
+      "D-SG-22: does not report a GitHub failure whose HTTPS attempt sent a refused credential",
+    makeError: (): unknown =>
+      bothTransportsFailed(
+        { transport: "ssh", error: sshPublicKeyDenied() },
+        { transport: "https", error: new StoredCredentialRejectedError("github.com") },
+      ),
+    lacks: false,
+  },
+  {
+    title: "D-SG-22: does not report a GitHub HTTPS network failure followed by an SSH refusal",
+    makeError: (): unknown =>
+      bothTransportsFailed(
+        {
+          transport: "https",
+          error: new GitCommandError(
+            { kind: "network", curlCode: 7 },
+            { operation: "clone", exitCode: 128 },
+          ),
+        },
+        { transport: "ssh", error: sshPublicKeyDenied() },
+      ),
     lacks: false,
   },
   {

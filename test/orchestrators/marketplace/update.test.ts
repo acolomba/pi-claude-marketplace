@@ -518,7 +518,8 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-403", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const transportError = remoteFailure({ kind: "https-auth", detail: "rejected" });
+    // git's bare 403 status line does not show that a credential was sent.
+    const transportError = remoteFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps, state } = createGitOps({ remoteThrows: transportError });
 
     // act
@@ -1918,13 +1919,13 @@ test("GAUTH-04: a cancelled credential lookup on a url host renders {authenticat
   });
 });
 
-test("GAUTH-04: a 401 challenge on a url host carries the same stored-credential cause line", async () => {
+test("GAUTH-04: a url host that refused the credential git sent gains no stored-credential cause line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-401", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    // git reads a 401 or 403 answer as https-auth (mirrors D-76-08), so both
-    // details must reach the cause line.
+    // git's `Authentication failed for` line shows that a helper gave a
+    // credential, so no line about storing one applies.
     const httpErr = remoteFailure({ kind: "https-auth", detail: "rejected" });
     const { gitOps } = createGitOps({ remoteThrows: httpErr });
 
@@ -1943,7 +1944,7 @@ test("GAUTH-04: a 401 challenge on a url host carries the same stored-credential
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-401 [project] (failed)\n  ⊘ urlmp-401 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-401\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+          'Some operations have failed.\n\n⊘ urlmp-401 [project] (failed)\n  ⊘ urlmp-401 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-401". -> git ls-remote failed: https-auth, exit code 128',
         severity: "error",
       },
     ]);

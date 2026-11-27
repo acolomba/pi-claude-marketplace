@@ -2111,8 +2111,9 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
     try {
       // arrange
       await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
+      // git's bare 401 status line does not show that a credential was sent.
       const unauthorized = new GitCommandError(
-        { kind: "https-auth", detail: "rejected" },
+        { kind: "https-auth", detail: "no-credential" },
         { operation: "clone", exitCode: 128 },
       );
       const { gitOps } = createGitOps({ syncThrows: unauthorized });
