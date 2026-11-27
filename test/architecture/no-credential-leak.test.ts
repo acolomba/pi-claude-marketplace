@@ -79,6 +79,8 @@ const [
   MARKETPLACE_UPDATE_FILE,
   HOSTED_MANIFEST_FETCH_FILE,
   GIT_PROCESS_FILE,
+  AUTH_HOST_FILE,
+  PLUGIN_UPDATE_FLOW_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
 
 /**
@@ -94,6 +96,8 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "orchestrators/marketplace/update.ts",
   "platform/hosted-manifest-fetch.ts",
   "platform/git-process.ts",
+  "orchestrators/auth-host.ts",
+  "orchestrators/plugin/update-flow.ts",
 ];
 
 const STATE_WRITE_FILES: ReadonlyArray<string> = [
@@ -105,13 +109,16 @@ const STATE_WRITE_FILES: ReadonlyArray<string> = [
 const FORBIDDEN_STATE_FIELDS = /\b(password|access_token|githubToken|gitToken)\b/i;
 
 /**
- * The marketplace verbs that build the host-bound credential bundles and place
- * the GAUTH-04 stored-credential hint, so both are scanned for a credential
+ * The orchestrator modules that build the host-bound credential bundles and
+ * place the GAUTH-04 stored-credential hint: the two marketplace verbs, the
+ * bundle module, and the plugin update verb. Each is scanned for a credential
  * interpolated into an Error or a notify message.
  */
 const CREDENTIAL_CAPTURING_ORCHESTRATORS: ReadonlyArray<string> = [
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
+  AUTH_HOST_FILE,
+  PLUGIN_UPDATE_FLOW_FILE,
 ];
 
 /**
@@ -316,10 +323,10 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   }
 });
 
-test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
-  // Closes review WR-02. The two marketplace verbs bind each request to its
-  // host and place the GAUTH-04 stored-credential hint; a bundle holds only
-  // the host (D-SG-27). A future
+test("AUTH-09: the credential-capturing orchestrators never interpolate a credential field in an Error or ctx.ui.notify message", async () => {
+  // Closes review WR-02. These modules bind each request to its host and
+  // place the GAUTH-04 stored-credential hint; a bundle holds only the host
+  // (D-SG-27). A future
   // regression that interpolated a credential field into an Error or a
   // notify message would still be an AUTH-09 violation, so this gate scans
   // for that class of bug in the orchestrator files.
@@ -354,7 +361,30 @@ test("AUTH-09: orchestrators/marketplace/{add,update}.ts never interpolate a cre
   assert.deepStrictEqual(
     visited,
     [...CREDENTIAL_CAPTURING_ORCHESTRATORS],
-    "D-07-03: the scan must have opened both credential-capturing orchestrators; one that stopped resolving drops out of this list.",
+    "D-07-03: the scan must have opened every credential-capturing orchestrator; one that stopped resolving drops out of this list.",
+  );
+});
+
+test("AUTH-09 / GAUTH-04: the stored-credential hint in orchestrators/auth-host.ts interpolates the host and nothing else", async () => {
+  // The hint is a String.raw literal, not an Error or notify literal, so the
+  // scan above never reads it. Its `password=<token>` text is a placeholder,
+  // so this scan pins the interpolations instead of the field names.
+  const stripped = stripComments(await readFile(path.join(REPO_ROOT, AUTH_HOST_FILE), "utf8"));
+  const hints = fullTemplateLiteralsAfter(
+    stripped,
+    /NO_STORED_CREDENTIAL_CAUSE\b[^=]*=[^`]*String\.raw\s*(`(?:[^`\\]|\\.)*`)/g,
+  );
+  assert.strictEqual(
+    hints.length,
+    1,
+    `D-07-03: ${AUTH_HOST_FILE} must define NO_STORED_CREDENTIAL_CAUSE as one String.raw literal, or this scan passes over nothing. Re-aim it at the module that now builds the hint.`,
+  );
+
+  const interpolations = [...(hints[0] ?? "").matchAll(/\$\{([^}]*)\}/g)].map((m) => m[1]);
+  assert.deepStrictEqual(
+    interpolations,
+    ["host", "host"],
+    `AUTH-09 violation: the stored-credential hint in ${AUTH_HOST_FILE} interpolates more than the host`,
   );
 });
 

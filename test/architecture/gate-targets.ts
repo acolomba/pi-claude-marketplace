@@ -151,6 +151,11 @@ export const CREDENTIAL_LEAK_TARGETS = [
   // AUTH-09: the git process module starts every git process and builds
   // every git failure message. Appended last for the reason given above.
   "extensions/pi-claude-marketplace/platform/git-process.ts",
+  // AUTH-09 / GAUTH-04: the host binding and the stored-credential hint, and
+  // the plugin update verb that places the hint on a url marketplace sync.
+  // Appended last for the reason given above.
+  "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
+  "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
 ] as const;
 
 /**
