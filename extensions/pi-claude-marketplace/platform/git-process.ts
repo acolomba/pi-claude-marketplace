@@ -3,8 +3,8 @@
 // D-SG-01: the extension runs the user's system git, with no fallback. Every
 // git process it starts comes from this module. A run passes an argument array
 // to an absolute git path, with no shell, through the shared launcher
-// (platform/process-run.ts). The launcher writes the input to stdin and closes
-// it, and its timeout stops the whole process tree (SG-PRC-01).
+// (platform/process-run.ts). git's stdin is closed, and the launcher's timeout
+// stops the whole process tree (SG-PRC-01).
 //
 // D-SG-04: git is looked up in the absolute entries of PATH only. A relative
 // or empty entry resolves against the child's working directory, so a
@@ -29,11 +29,9 @@
 // directory, because git ignores a ceiling that equals its working directory.
 // The user's own git configuration stays: HOME, the global and system config
 // files, GIT_CONFIG_COUNT and its keys, GIT_CONFIG_PARAMETERS, credential
-// helpers, and proxies. A request's own `-c` pairs (D-SG-16, D-SG-14) come
-// before the module's pairs. git keeps the last value of a single-valued key,
-// so no request pair can undo the hardening. The request pairs still come
-// after every config file, so an empty `credential.helper` among them still
-// resets the user's helpers.
+// helpers, and proxies. A request's own `-c` pairs (D-SG-16), such as an
+// `insteadOf` rewrite, come before the module's pairs. git keeps the last
+// value of a single-valued key, so no request pair can undo the hardening.
 //
 // SG-PRC-03: a request without a working directory runs in the neutral
 // directory, a private, empty directory that platform/git-neutral-directory.ts
@@ -147,7 +145,6 @@ export type GitSubcommand =
   | "tag"
   | "update-ref"
   | "for-each-ref"
-  | "credential"
   | "version";
 
 /** One git command to run. */
@@ -157,8 +154,8 @@ export interface GitRequest {
   /** Pi-owned flags after the subcommand, in the order given. */
   readonly options?: readonly string[];
   /**
-   * D-SG-16, D-SG-14: Pi-owned `-c` pairs, such as an `insteadOf` rewrite or
-   * a credential helper. They come before the module's own pairs: git keeps
+   * D-SG-16: Pi-owned `-c` pairs, such as an `insteadOf` rewrite. They come
+   * before the module's own pairs: git keeps
    * the last value of a single-valued key, so the hardening placed after them
    * always wins (D-SG-05). They never go through GIT_CONFIG_COUNT, which the
    * module keeps for the user.
@@ -172,8 +169,6 @@ export interface GitRequest {
   readonly operands?: readonly string[];
   /** The directory git runs in. Omitted, the command runs in the neutral directory. */
   readonly cwd?: string;
-  /** Written to stdin, which then closes. Without input, stdin is closed from the start. */
-  readonly input?: string;
   /** Milliseconds before git and its process tree are stopped. */
   readonly timeoutMs: number;
   /** Stops git and its process tree when the owning operation is cancelled. */
@@ -344,7 +339,7 @@ const NO_PROTOCOL = "/";
 // `--verify` and otherwise prints it back, so its operands need `--verify`.
 // `checkout` reads the marker as a pathspec, so an operand that starts with
 // `-` is refused and `--` ends the argv, which keeps every operand a ref.
-// `credential` and `version` take no operands. The marker is added once, and
+// `version` takes no operands. The marker is added once, and
 // only when operands are present.
 interface OperandRule {
   /** Whether the request's operands may reach git. */
@@ -391,7 +386,6 @@ const SUBCOMMAND_RULES: Readonly<Record<GitSubcommand, SubcommandRule>> = {
   "for-each-ref": { operands: MARKER_RULE, ssh: false },
   "rev-parse": { operands: VERIFY_MARKER_RULE, ssh: false },
   checkout: { operands: DASH_REFUSED_RULE, ssh: false },
-  credential: { operands: NO_OPERANDS_RULE, ssh: false },
   version: { operands: NO_OPERANDS_RULE, ssh: false },
 };
 
@@ -1036,7 +1030,7 @@ async function startFailedWithoutGit(
 }
 
 // The error's operation is the subcommand and its first Pi-owned word, such as
-// `credential fill`, never an operand or the input (AUTH-09).
+// `rev-parse --verify`, never an operand (AUTH-09).
 function operationOf(request: GitRequest): string {
   return [request.subcommand, ...(request.options ?? []).slice(0, 1)].join(" ");
 }
@@ -1187,7 +1181,6 @@ export function createGitProcess(options: GitProcessOptions): SystemGitProcess {
         timeoutMs,
         killGraceMs: options.killGraceMs,
         signal: request.signal,
-        ...(request.input !== undefined && { input: request.input }),
         stdout: STDOUT_CAPTURE,
         stderr: STDERR_CAPTURE,
         windowsHide: true,

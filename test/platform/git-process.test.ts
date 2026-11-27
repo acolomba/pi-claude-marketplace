@@ -52,13 +52,11 @@ import type { TestContext } from "node:test";
 
 const NODE_SPAWN = spawn as ProcessSpawn;
 const KILL_GRACE_MS = 200;
-const FILL_INPUT = "protocol=https\nhost=github.com\n\n";
 
-const FILL: GitRequest = {
-  subcommand: "credential",
-  options: ["fill"],
+const VERSION: GitRequest = {
+  subcommand: "version",
+  options: ["--build-options"],
   lane: "network",
-  input: FILL_INPUT,
   timeoutMs: 5_000,
 };
 
@@ -536,6 +534,33 @@ async function httpsFixture(t: TestContext): Promise<HttpsFixture> {
   };
 }
 
+interface PasswordRemote extends HttpsFixture {
+  /** The network-lane `ls-remote` of the served repository. */
+  readonly listing: GitRequest;
+}
+
+// E10, SG-PRC-03: the https stand-in with `acme/tools` armed to ask for a
+// password, so listing it makes git look for a credential.
+async function passwordRemote(t: TestContext): Promise<PasswordRemote> {
+  const fixture = await httpsFixture(t);
+  await fixture.host.arm("tools", { kind: "credential", user: "acme", password: "secret" });
+  return {
+    ...fixture,
+    listing: {
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [fixture.url],
+      timeoutMs: 10_000,
+    },
+  };
+}
+
+// A listing of a password remote that found no credential and ran no prompt.
+const REJECTS_WITHOUT_CREDENTIAL = rejectsWithFailure(
+  { kind: "https-auth", detail: "no-credential" },
+  128,
+);
+
 interface PidRecordingSpawn {
   readonly spawn: ProcessSpawn;
   /** The pid of the first git started with `subcommand` among its arguments. */
@@ -676,22 +701,22 @@ describe("createGitProcess", () => {
     );
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
-    control.writeStdout("username=x-access-token\npassword=token-1\n");
+    control.writeStdout("git version 2.43.0\n");
     control.close(0);
     const run = await pending;
 
     // assert
     assert.deepStrictEqual(run, {
       exitCode: 0,
-      stdout: "username=x-access-token\npassword=token-1\n",
+      stdout: "git version 2.43.0\n",
       stderr: "",
     });
     assert.deepStrictEqual(control.launches(), [
       [
         "/usr/bin/git",
-        [...hardening("/dev/null"), "credential", "fill"],
+        [...hardening("/dev/null"), "version", "--build-options"],
         {
           cwd: "/private/tmp",
           env: {
@@ -700,15 +725,13 @@ describe("createGitProcess", () => {
             GIT_CEILING_DIRECTORIES: "/private",
           },
           shell: false,
-          stdio: ["pipe", "pipe", "pipe"],
+          stdio: ["ignore", "pipe", "pipe"],
           detached: true,
           windowsHide: true,
         },
       ],
     ]);
     assert.deepStrictEqual(host.probes, ["/opt/tools/git", "/usr/bin/git"]);
-    assert.strictEqual(control.input(), FILL_INPUT);
-    assert.strictEqual(control.inputEnded(), true);
   });
 
   test("SG-PRC-02, SG-PRC-03: forces the non-interactive values and keeps the user's git configuration", async () => {
@@ -751,7 +774,7 @@ describe("createGitProcess", () => {
     });
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.close(0);
     await pending;
@@ -785,7 +808,7 @@ describe("createGitProcess", () => {
     });
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.close(0);
     await pending;
@@ -814,7 +837,7 @@ describe("createGitProcess", () => {
       });
 
       // act
-      const pending = git.run(FILL);
+      const pending = git.run(VERSION);
       await started;
       control.close(0);
       await pending;
@@ -837,7 +860,7 @@ describe("createGitProcess", () => {
     );
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.close(0);
     await pending;
@@ -846,7 +869,7 @@ describe("createGitProcess", () => {
     assert.deepStrictEqual(control.launches(), [
       [
         String.raw`C:\Git\cmd\git.exe`,
-        [...hardening(String.raw`\\.\NUL`), "credential", "fill"],
+        [...hardening(String.raw`\\.\NUL`), "version", "--build-options"],
         {
           cwd: String.raw`C:\Users\user\AppData\Local\Temp`,
           env: {
@@ -855,7 +878,7 @@ describe("createGitProcess", () => {
             GIT_CEILING_DIRECTORIES: String.raw`C:\Users\user\AppData\Local`,
           },
           shell: false,
-          stdio: ["pipe", "pipe", "pipe"],
+          stdio: ["ignore", "pipe", "pipe"],
           detached: false,
           windowsHide: true,
         },
@@ -981,7 +1004,7 @@ describe("createGitProcess", () => {
 
     // act & assert
     await assert.rejects(
-      git.run(FILL),
+      git.run(VERSION),
       gitFailure({
         failure: { kind: "git-missing", detail: "not-found" },
         operation: "lookup",
@@ -1004,7 +1027,7 @@ describe("createGitProcess", () => {
 
       // act & assert
       await assert.rejects(
-        git.run(FILL),
+        git.run(VERSION),
         gitFailure({
           failure: { kind: "git-missing", detail: "not-found" },
           operation: "lookup",
@@ -1099,7 +1122,7 @@ describe("createGitProcess", () => {
 
       // act & assert
       await assert.rejects(
-        git.run(FILL),
+        git.run(VERSION),
         gitFailure({
           failure: { kind: "git-missing", detail: "macos-shim" },
           operation: "lookup",
@@ -1204,7 +1227,7 @@ describe("createGitProcess", () => {
       // arrange
       const startError = Object.assign(new Error(`spawn /usr/bin/git ${code}`), { code });
       const { git, control, started, host } = createFakeGit(undefined, undefined, null);
-      const pending = git.run(FILL);
+      const pending = git.run(VERSION);
       await started;
       host.files.delete("/usr/bin/git");
       control.fail(startError);
@@ -1212,7 +1235,7 @@ describe("createGitProcess", () => {
         pending,
         gitFailure({
           failure: { kind: "git-missing", detail: "not-found" },
-          operation: "credential fill",
+          operation: "version --build-options",
           exitCode: null,
           stderr: "",
           cause: startError,
@@ -1233,14 +1256,14 @@ describe("createGitProcess", () => {
     // arrange
     const startError = Object.assign(new Error("spawn /usr/bin/git ENOENT"), { code: "ENOENT" });
     const { git, control, started, host } = createFakeGit(undefined, undefined, null);
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.fail(startError);
     await assert.rejects(
       pending,
       gitFailure({
         failure: { kind: "failed" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
         cause: startError,
@@ -1272,13 +1295,13 @@ describe("createGitProcess", () => {
     test(`D-SG-04: reports ${label} as git-missing and looks git up again`, async () => {
       // arrange
       const { git, control, started, host } = createFakeGit();
-      const pending = git.run(FILL);
+      const pending = git.run(VERSION);
       await started;
       control.writeStderr(stderr);
       control.close(code);
       await assert.rejects(
         pending,
-        gitFailure({ failure, operation: "credential fill", exitCode: code, stderr }),
+        gitFailure({ failure, operation: "version --build-options", exitCode: code, stderr }),
       );
 
       // act
@@ -1295,7 +1318,7 @@ describe("createGitProcess", () => {
     const { git, control, started } = createFakeGit();
 
     // act
-    const pending = git.run({ ...FILL, signal: new AbortController().signal });
+    const pending = git.run({ ...VERSION, signal: new AbortController().signal });
     await started;
     control.writeStdout("out");
     control.writeStderr("warning");
@@ -1311,7 +1334,7 @@ describe("createGitProcess", () => {
     const { git, control, started } = createFakeGit();
 
     // act
-    const pending = git.run({ ...FILL, allowExit: [1] });
+    const pending = git.run({ ...VERSION, allowExit: [1] });
     await started;
     control.writeStdout("listed");
     control.close(1);
@@ -1330,7 +1353,7 @@ describe("createGitProcess", () => {
       const { git, control, started } = createFakeGit();
 
       // act
-      const pending = git.run({ ...FILL, ...(allowExit !== undefined && { allowExit }) });
+      const pending = git.run({ ...VERSION, ...(allowExit !== undefined && { allowExit }) });
       await started;
       control.writeStderr(
         "fatal: unexpected answer from 'https://user:secret@example.test/x.git/'\n",
@@ -1342,7 +1365,7 @@ describe("createGitProcess", () => {
         pending,
         gitFailure({
           failure: { kind: "failed" },
-          operation: "credential fill",
+          operation: "version --build-options",
           exitCode: code,
           stderr: "fatal: unexpected answer from 'https://***@example.test/x.git/'\n",
         }),
@@ -1356,7 +1379,7 @@ describe("createGitProcess", () => {
     const stdout = "x".repeat(8_388_608);
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.writeStdout(stdout);
     control.close(0);
@@ -1371,7 +1394,7 @@ describe("createGitProcess", () => {
     const { git, control, started } = createFakeGit();
 
     // act
-    const pending = git.run({ ...FILL, allowExit: [1] });
+    const pending = git.run({ ...VERSION, allowExit: [1] });
     await started;
     control.writeStdout("x".repeat(8_388_609));
     control.close(1);
@@ -1381,7 +1404,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "failed" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: 1,
         stderr: "",
         cause: new RangeError(
@@ -1396,7 +1419,7 @@ describe("createGitProcess", () => {
     const { git, control, started } = createFakeGit();
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.close(null);
 
@@ -1405,7 +1428,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "no-stderr" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
       }),
@@ -1417,7 +1440,7 @@ describe("createGitProcess", () => {
     const { git, control, started } = createFakeGit();
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.writeStderr("fatal: transport 'ext' not allowed\n");
     control.close(128);
@@ -1427,7 +1450,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "protocol-refused" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: 128,
         stderr: "fatal: transport 'ext' not allowed\n",
       }),
@@ -1440,10 +1463,10 @@ describe("createGitProcess", () => {
     const { git, launches } = createSequencedGit({ neutral: "/private/tmp" });
 
     // act
-    const pending = git.run(FILL);
-    const fill = await launches.at(0);
-    fill.writeStderr("error: unknown option `no-such-flag'\n");
-    fill.close(129);
+    const pending = git.run(VERSION);
+    const first = await launches.at(0);
+    first.writeStderr("error: unknown option `no-such-flag'\n");
+    first.close(129);
     const version = await launches.at(1);
     version.writeStdout("git version 2.17.1\nextra\n");
     version.close(0);
@@ -1453,7 +1476,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "git-too-old" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: 129,
         stderr: "error: unknown option `no-such-flag'\n",
       }),
@@ -1462,7 +1485,7 @@ describe("createGitProcess", () => {
     assert.deepStrictEqual(
       launches.all().map(([command, args, options]) => [command, args, options.cwd]),
       [
-        ["/usr/bin/git", [...hardening("/dev/null"), "credential", "fill"], "/private/tmp"],
+        ["/usr/bin/git", [...hardening("/dev/null"), "version", "--build-options"], "/private/tmp"],
         ["/usr/bin/git", [...hardening("/dev/null"), "version"], "/private/tmp"],
       ],
     );
@@ -1474,9 +1497,9 @@ describe("createGitProcess", () => {
     const { git, launches } = createSequencedGit();
 
     // act
-    const pending = git.run(FILL);
-    const fill = await launches.at(0);
-    fill.close(129);
+    const pending = git.run(VERSION);
+    const first = await launches.at(0);
+    first.close(129);
     const version = await launches.at(1);
     version.writeStderr("error: unknown option `version'\n");
     version.close(129);
@@ -1486,7 +1509,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "git-too-old" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: 129,
         stderr: "",
       }),
@@ -1503,7 +1526,7 @@ describe("createGitProcess", () => {
     const { git, launches, host } = createSequencedGit();
 
     // act
-    const pending = git.run({ ...FILL, signal: controller.signal });
+    const pending = git.run({ ...VERSION, signal: controller.signal });
     (await launches.at(0)).close(129);
     await launches.at(1);
     controller.abort(new Error("cancelled"));
@@ -1519,7 +1542,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "git-too-old" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: 129,
         stderr: "",
       }),
@@ -1542,7 +1565,7 @@ describe("createGitProcess", () => {
     const { git, started, host } = createFakeGit();
 
     // act
-    const pending = git.run({ ...FILL, timeoutMs: 50 });
+    const pending = git.run({ ...VERSION, timeoutMs: 50 });
     await started;
     t.mock.timers.tick(50);
     t.mock.timers.tick(KILL_GRACE_MS);
@@ -1553,7 +1576,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "timeout", timeoutMs: 50 },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
       }),
@@ -1573,10 +1596,10 @@ describe("createGitProcess", () => {
 
     // act & assert
     await assert.rejects(
-      git.run({ ...FILL, signal: controller.signal }),
+      git.run({ ...VERSION, signal: controller.signal }),
       gitFailure({
         failure: { kind: "aborted" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
         cause: reason,
@@ -1594,7 +1617,7 @@ describe("createGitProcess", () => {
     const { git, started, host } = createFakeGit();
 
     // act
-    const pending = git.run({ ...FILL, signal: controller.signal });
+    const pending = git.run({ ...VERSION, signal: controller.signal });
     await started;
     controller.abort(reason);
     t.mock.timers.tick(KILL_GRACE_MS);
@@ -1605,7 +1628,7 @@ describe("createGitProcess", () => {
       pending,
       gitFailure({
         failure: { kind: "aborted" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
         cause: reason,
@@ -1631,10 +1654,10 @@ describe("createGitProcess", () => {
 
     // act & assert
     await assert.rejects(
-      git.run(FILL),
+      git.run(VERSION),
       gitFailure({
         failure: { kind: "failed" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
         cause: launchError,
@@ -1657,10 +1680,10 @@ describe("createGitProcess", () => {
 
     // act & assert
     await assert.rejects(
-      git.run({ ...FILL, cwd: "/gone" }),
+      git.run({ ...VERSION, cwd: "/gone" }),
       gitFailure({
         failure: { kind: "failed" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
         cause: missing,
@@ -1675,10 +1698,10 @@ describe("createGitProcess", () => {
 
     // act & assert
     await assert.rejects(
-      git.run(FILL),
+      git.run(VERSION),
       gitFailure({
         failure: { kind: "refused-input" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
       }),
@@ -1695,10 +1718,10 @@ describe("createGitProcess", () => {
 
     // act & assert
     await assert.rejects(
-      git.run(FILL),
+      git.run(VERSION),
       gitFailure({
         failure: { kind: "failed" },
-        operation: "credential fill",
+        operation: "version --build-options",
         exitCode: null,
         stderr: "",
         cause: refused,
@@ -1715,12 +1738,7 @@ describe("createGitProcess", () => {
     );
 
     // act
-    const pending = git.run({
-      subcommand: "credential",
-      lane: "network",
-      cwd: "/work/clone",
-      timeoutMs: 5_000,
-    });
+    const pending = git.run({ ...VERSION, cwd: "/work/clone" });
     await started;
     control.close(0);
     await pending;
@@ -1729,7 +1747,7 @@ describe("createGitProcess", () => {
     assert.deepStrictEqual(control.launches(), [
       [
         "/usr/bin/git",
-        [...hardening("/dev/null"), "credential"],
+        [...hardening("/dev/null"), "version", "--build-options"],
         {
           cwd: "/real/clone",
           env: { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/real" },
@@ -1758,37 +1776,30 @@ describe("createGitProcess", () => {
   ]) {
     test(`E10: never runs the user's ${label} program during a credential lookup`, async (t) => {
       // arrange
-      const root = await caseDirectory(t);
-      const askpass = await recordingScript(root, "askpass", "echo fromaskpass");
+      const remote = await passwordRemote(t);
+      const askpass = await recordingScript(remote.root, "askpass", "echo fromaskpass");
       const { config, variables } = configure(askpass.script);
-      const configPath = path.join(root, "gitconfig");
-      await writeFile(configPath, config);
-      const git = createGitProcess({
-        spawn: NODE_SPAWN,
-        host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
-        env: { ...hermeticGitEnvironment(root), GIT_CONFIG_GLOBAL: configPath, ...variables },
-        killGraceMs: KILL_GRACE_MS,
+      const git = await realGit({
+        root: remote.root,
+        env: { ...remote.env, ...variables },
+        config,
       });
 
       // act
-      const filled = git.run({ ...FILL, input: "protocol=https\nhost=example.test\n\n" });
+      const listed = git.run(remote.listing);
 
       // assert
-      await assert.rejects(filled, (error: unknown) => {
-        assert.ok(error instanceof GitCommandError);
-        assert.deepStrictEqual([error.kind, error.exitCode], ["https-auth", 128]);
-        return true;
-      });
+      await assert.rejects(listed, REJECTS_WITHOUT_CREDENTIAL);
       await assert.rejects(access(askpass.record), { code: "ENOENT" });
     });
   }
 
   test("SG-PRC-03: never consults the credential helper of a repository enclosing the neutral directory", async (t) => {
     // arrange
-    const root = await caseDirectory(t);
+    const remote = await passwordRemote(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
     const helper = await recordingScript(
-      root,
+      remote.root,
       "helper",
       "echo username=fromhelper\necho password=fromhelper",
     );
@@ -1798,19 +1809,15 @@ describe("createGitProcess", () => {
     const git = createGitProcess({
       spawn: NODE_SPAWN,
       host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(neutral) },
-      env: hermeticGitEnvironment(root),
+      env: remote.env,
       killGraceMs: KILL_GRACE_MS,
     });
 
     // act
-    const filled = git.run({ ...FILL, input: "protocol=https\nhost=example.test\n\n" });
+    const listed = git.run(remote.listing);
 
     // assert
-    await assert.rejects(filled, (error: unknown) => {
-      assert.ok(error instanceof GitCommandError);
-      assert.deepStrictEqual([error.kind, error.exitCode], ["https-auth", 128]);
-      return true;
-    });
+    await assert.rejects(listed, REJECTS_WITHOUT_CREDENTIAL);
     await assert.rejects(access(helper.record), { code: "ENOENT" });
   });
 
@@ -1820,7 +1827,8 @@ describe("createGitProcess", () => {
   ]) {
     test(`SG-PRC-03: runs neither the credential helper nor the ssh command of ${layout} planted in the neutral directory's parent`, async (t) => {
       // arrange
-      const root = await caseDirectory(t);
+      const remote = await passwordRemote(t);
+      const { root } = remote;
       const shared = path.join(root, "shared");
       const bin = path.join(root, "bin");
       await mkdir(bin);
@@ -1840,21 +1848,25 @@ describe("createGitProcess", () => {
         },
         env: hermeticGitEnvironment(root, {
           PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+          GIT_SSL_CAINFO: remote.host.certificatePath,
         }),
         killGraceMs: KILL_GRACE_MS,
       });
 
       // act
-      const filled = git.run({ ...FILL, input: "protocol=https\nhost=example.test\n\n" });
+      const httpsListed = git.run(remote.listing);
       const listed = git.run({ ...SSH_LIST, timeoutMs: 10_000 });
 
       // assert
       assert.strictEqual(planted, plantedSsh.script);
-      await assert.rejects(filled, rejectsAs("https-auth", 128));
-      await assert.rejects(
-        listed,
-        rejectsWithFailure({ kind: "ssh-auth", detail: "unconfirmed" }, 128),
-      );
+      // Both runs are in flight: each needs its handler before either settles.
+      await Promise.all([
+        assert.rejects(httpsListed, REJECTS_WITHOUT_CREDENTIAL),
+        assert.rejects(
+          listed,
+          rejectsWithFailure({ kind: "ssh-auth", detail: "unconfirmed" }, 128),
+        ),
+      ]);
       await access(userSsh.record);
       await assert.rejects(access(helper.record), { code: "ENOENT" });
       await assert.rejects(access(plantedSsh.record), { code: "ENOENT" });
@@ -1863,7 +1875,8 @@ describe("createGitProcess", () => {
 
   test("SG-PRC-03: takes no bare repository layout for the working directory of a network-lane command", async (t) => {
     // arrange
-    const root = await caseDirectory(t);
+    const remote = await passwordRemote(t);
+    const { root } = remote;
     const bare = path.join(root, "bare");
     const helper = await recordingScript(root, "helper", "echo username=u\necho password=p");
     const call = { cwd: root, home: root, variables: {} };
@@ -1872,15 +1885,15 @@ describe("createGitProcess", () => {
     const git = createGitProcess({
       spawn: NODE_SPAWN,
       host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
-      env: hermeticGitEnvironment(root),
+      env: remote.env,
       killGraceMs: KILL_GRACE_MS,
     });
 
     // act
-    const filled = git.run({ ...FILL, cwd: bare, input: "protocol=https\nhost=example.test\n\n" });
+    const listed = git.run({ ...remote.listing, cwd: bare });
 
     // assert
-    await assert.rejects(filled, rejectsAs("https-auth", 128));
+    await assert.rejects(listed, REJECTS_WITHOUT_CREDENTIAL);
     await assert.rejects(access(helper.record), { code: "ENOENT" });
   });
 });
@@ -1952,9 +1965,9 @@ describe("createGitProcess operands and lanes", () => {
       words: ["checkout", "--quiet", "feature", "--"],
     },
     {
-      label: "credential",
-      request: { subcommand: "credential", options: ["fill"] },
-      words: ["credential", "fill"],
+      label: "version with an option",
+      request: { subcommand: "version", options: ["--build-options"] },
+      words: ["version", "--build-options"],
     },
     {
       label: "version",
@@ -2016,16 +2029,16 @@ describe("createGitProcess operands and lanes", () => {
       words: [...LOCAL_LANE, ...["rev-parse", "--verify", "--end-of-options", "HEAD"]],
     },
     {
-      label: "a network-lane credential fill",
-      request: { ...FILL, config: ["a.b=c", "d.e=f"] },
+      label: "a network-lane version",
+      request: { ...VERSION, config: ["a.b=c", "d.e=f"] },
       pairs: ["-c", "a.b=c", "-c", "d.e=f"],
-      words: ["credential", "fill"],
+      words: ["version", "--build-options"],
     },
     {
       label: "a request whose pair repeats a hardening pair",
-      request: { ...FILL, config: ["core.hooksPath=/tmp/hooks"] },
+      request: { ...VERSION, config: ["core.hooksPath=/tmp/hooks"] },
       pairs: ["-c", "core.hooksPath=/tmp/hooks"],
-      words: ["credential", "fill"],
+      words: ["version", "--build-options"],
     },
     {
       label: "a request with an empty list",
@@ -2091,10 +2104,6 @@ describe("createGitProcess operands and lanes", () => {
     {
       label: "checkout with the operand --",
       request: { subcommand: "checkout", operands: ["--"] },
-    },
-    {
-      label: "credential with an operand",
-      request: { subcommand: "credential", operands: ["fill"] },
     },
     {
       label: "version with an operand",
@@ -2260,7 +2269,7 @@ describe("createGitProcess operands and lanes", () => {
 
     // act
     const local = git.run(LOCAL_READ);
-    const network = git.run({ ...FILL, cwd: "/work/clone" });
+    const network = git.run({ ...VERSION, cwd: "/work/clone" });
     const first = await launches.at(0);
     const second = await launches.at(1);
     second.close(0);
@@ -2289,7 +2298,7 @@ describe("createGitProcess operands and lanes", () => {
           },
         ],
         [
-          [...hardening("/dev/null"), "credential", "fill"],
+          [...hardening("/dev/null"), "version", "--build-options"],
           { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/real" },
         ],
       ],
@@ -2540,7 +2549,7 @@ describe("createGitProcess operands and lanes", () => {
       const { git, control, started } = createFakeGit({ PATH: "/usr/bin", ...variables });
 
       // act
-      const pending = git.run(FILL);
+      const pending = git.run(VERSION);
       await started;
       control.close(0);
       await pending;
@@ -2550,7 +2559,7 @@ describe("createGitProcess operands and lanes", () => {
       assert.deepStrictEqual(
         [launch?.[1], launch?.[2].env],
         [
-          [...hardening("/dev/null"), "credential", "fill"],
+          [...hardening("/dev/null"), "version", "--build-options"],
           { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/", ...allowed },
         ],
       );
@@ -2574,7 +2583,7 @@ describe("createGitProcess operands and lanes", () => {
     );
 
     // act
-    const pending = git.run(FILL);
+    const pending = git.run(VERSION);
     await started;
     control.close(0);
     await pending;
@@ -2584,7 +2593,7 @@ describe("createGitProcess operands and lanes", () => {
     assert.deepStrictEqual(
       [launch?.[1], launch?.[2].env],
       [
-        [...hardening(String.raw`\\.\NUL`), "credential", "fill"],
+        [...hardening(String.raw`\\.\NUL`), "version", "--build-options"],
         {
           ...POSIX_FORCED,
           Path: String.raw`C:\Git\cmd`,
@@ -3294,12 +3303,7 @@ describe("createGitProcess ssh", () => {
   }
 
   for (const { label, request, sshCommand } of [
-    { label: "a network-lane credential", request: FILL, sshCommand: "ssh -i /home/user/key" },
-    {
-      label: "a network-lane version",
-      request: { subcommand: "version", lane: "network", timeoutMs: 5_000 },
-      sshCommand: "ssh -i /home/user/key",
-    },
+    { label: "a network-lane version", request: VERSION, sshCommand: "ssh -i /home/user/key" },
     {
       label: "a local-lane fetch",
       request: { subcommand: "fetch", lane: "local", operands: ["origin"], timeoutMs: 5_000 },
@@ -3646,7 +3650,7 @@ const PROCESS_GROUPS = {
 // SG-PRC-02: a remote that asks for a password, a passphrase, or a host-key
 // answer fails without a prompt, and a timeout leaves no process behind.
 describe("createGitProcess without prompts or leftovers", () => {
-  test("SG-PRC-02, E10, D-SG-14: rejects an https remote that asks for a password as https-auth no-credential without askpass", async (t) => {
+  test("SG-PRC-02, E10: rejects an https remote that asks for a password as https-auth no-credential without askpass", async (t) => {
     // arrange
     const fixture = await httpsFixture(t);
     await fixture.host.arm("tools", { kind: "credential", user: "acme", password: "secret" });
@@ -3683,7 +3687,7 @@ describe("createGitProcess without prompts or leftovers", () => {
     await assert.rejects(access(askpass.record), { code: "ENOENT" });
   });
 
-  test("D-SG-14, GAUTH-04: rejects an https remote that refuses the helper's credential as https-auth rejected", async (t) => {
+  test("GAUTH-04: rejects an https remote that refuses the helper's credential as https-auth rejected", async (t) => {
     // arrange
     const fixture = await httpsFixture(t);
     await fixture.host.arm("tools", { kind: "credential", user: "acme", password: "secret" });

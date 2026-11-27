@@ -148,9 +148,8 @@ export const CREDENTIAL_LEAK_TARGETS = [
   // credential, or cookie. Appended last, so no existing positional binding
   // in no-credential-leak.test.ts is re-aimed.
   "extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts",
-  // AUTH-09: the git process module writes a `git credential` request to
-  // stdin and reads the `fill` answer, password included, from stdout.
-  // Appended last for the reason given above.
+  // AUTH-09: the git process module starts every git process and builds
+  // every git failure message. Appended last for the reason given above.
   "extensions/pi-claude-marketplace/platform/git-process.ts",
 ] as const;
 
@@ -197,12 +196,11 @@ export const LIFECYCLE_ENABLED_READ_TARGETS = [
  *
  * Closed, like the console exemption: the claim is that these five and no others
  * shell out, so the value of a sweep depends on the set being exhaustive.
- * `git-process.ts` starts every git process, the `git credential` launch
- * included (D-SG-01); the two hooks modules execute user-declared hook
- * commands, which is their entire purpose; `package-manager.ts` runs a plugin's
- * own package manager for the package install Claude Code runs (D-PL9-11,
- * PKD-03); `prompt-shell.ts` runs the `!` commands of a user-invoked skill or
- * command (D-CF1-02).
+ * `git-process.ts` starts every git process (D-SG-01); the two hooks modules
+ * execute user-declared hook commands, which is their entire purpose;
+ * `package-manager.ts` runs a plugin's own package manager for the package
+ * install Claude Code runs (D-PL9-11, PKD-03); `prompt-shell.ts` runs the `!`
+ * commands of a user-invoked skill or command (D-CF1-02).
  */
 export const SHELL_OUT_EXEMPT_TARGETS = [
   "extensions/pi-claude-marketplace/platform/git-process.ts",

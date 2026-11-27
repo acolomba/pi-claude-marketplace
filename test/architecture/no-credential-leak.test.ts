@@ -204,7 +204,7 @@ test("AUTH-09: no credential field name appears in any state-write code path", a
   );
 });
 
-test("AUTH-09: platform/git-process.ts never puts a credential, a run's input, or its stdout in a message or a debug line", async () => {
+test("AUTH-09: platform/git-process.ts never puts a credential or a run's stdout in a message or a debug line", async () => {
   const absPath = path.join(REPO_ROOT, GIT_PROCESS_FILE);
   const exists = await access(absPath).then(
     () => true,
@@ -215,8 +215,7 @@ test("AUTH-09: platform/git-process.ts never puts a credential, a run's input, o
     `D-07-03: ${GIT_PROCESS_FILE} is declared in CREDENTIAL_LEAK_TARGETS but does not resolve, so the scan below would report success having opened nothing.`,
   );
 
-  // A `git credential` request goes to stdin as the run's `input`, and the
-  // `fill` answer, password included, comes back on stdout.
+  // A run's stdout is what git printed, which no message or debug line repeats.
   const stripped = stripComments(await readFile(absPath, "utf8"));
   const messageCallSite = /(?:new\s+(?:GitCommand)?Error|hookDebugLog)\s*\(\s*(`(?:[^`\\]|\\.)*`)/g;
   const literals = fullTemplateLiteralsAfter(stripped, messageCallSite);
@@ -226,11 +225,11 @@ test("AUTH-09: platform/git-process.ts never puts a credential, a run's input, o
   );
 
   assertNoCredentialInLiterals(GIT_PROCESS_FILE, stripped, messageCallSite);
-  const runOutput = literals.filter((lit) => /\$\{[^}]*\b(?:input|stdout)\b/.test(lit));
+  const runOutput = literals.filter((lit) => /\$\{[^}]*\bstdout\b/.test(lit));
   assert.deepStrictEqual(
     runOutput,
     [],
-    `AUTH-09 violation: a message or debug-log template literal in ${GIT_PROCESS_FILE} interpolates a run's input or stdout: ${runOutput.join(", ")}`,
+    `AUTH-09 violation: a message or debug-log template literal in ${GIT_PROCESS_FILE} interpolates a run's stdout: ${runOutput.join(", ")}`,
   );
 });
 
