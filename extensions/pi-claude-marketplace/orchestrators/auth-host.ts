@@ -66,13 +66,14 @@ import type {
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
 
-// Re-export the auth/credential types the network-gated plugin orchestrators
-// (install-outcome.ts / reinstall-flow.ts) need. Those files MUST NOT import
-// from `platform/git.ts` or `platform/git-credential.ts` directly -- BLOCK F in
-// `eslint.config.js` rejects any `platform/git` import, even
-// type-only -- so this gate-clean module is their single sanctioned source for
-// the auth bundle inputs (T-79-10).
-export type { AuthAttemptResult, CredentialOps, DeviceFlowHttp };
+// Re-export the credential type the network-gated plugin orchestrators still
+// name: the clone and tag probes and the internal auth contexts type their
+// `credentialOps` with it until the builders stop taking one (D-SG-27). Those
+// files MUST NOT import from `platform/git.ts` or `platform/git-credential.ts`
+// directly -- BLOCK F in `eslint.config.js` rejects any `platform/git` import,
+// even type-only -- so this gate-clean module is their single sanctioned
+// source for it (T-79-10).
+export type { CredentialOps };
 
 /** How long a `git credential` subprocess may run before its process tree is stopped. */
 const CREDENTIAL_TIMEOUT_MS = 5_000;
