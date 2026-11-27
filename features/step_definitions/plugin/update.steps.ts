@@ -43,24 +43,44 @@ Given(
   },
 );
 
+// The plugin columns of a repair row, after its marketplace columns.
+const REPAIR_PLUGIN_COLUMNS = [
+  "id",
+  "name",
+  "status",
+  "reasons",
+  "scope",
+  "from",
+  "version",
+  "repair",
+  "cause truncated",
+  "leaks",
+  "rollback phases",
+] as const;
+
+// The rows of every cascade the command reported, in emission order. A block
+// with no plugin rows still yields one row with empty plugin cells, so no
+// block goes unseen.
 Then("the failed update names these repairs:", function (this: ScenarioWorld, table: DataTable) {
-  const cascades = this.resultsOf("command").filter((entry) => entry.kind === "cascade");
-  assert.strictEqual(
-    cascades.length,
-    1,
-    `expected one cascade result: ${JSON.stringify(cascades)}`,
+  const marketplaces = this.resultsOf("command").flatMap((entry) =>
+    entry.kind === "cascade" ? entry.marketplaces : [],
   );
-  const [result] = cascades;
-  assert.ok(result !== undefined);
 
   // D-SG-22: a block that names a marketplace re-clone adds its note and url,
   // so no clone goes unseen.
-  const namesClone = result.marketplaces.some((marketplace) => marketplace.clone !== undefined);
-  const repairs = result.marketplaces.flatMap((marketplace) =>
-    marketplace.plugins.map((plugin) => [
+  const namesClone = marketplaces.some((marketplace) => marketplace.clone !== undefined);
+  const repairs = marketplaces.flatMap((marketplace) => {
+    const block = [
       marketplace.name,
       marketplace.scope,
       ...(namesClone ? [marketplace.clone?.note ?? "", marketplace.clone?.url ?? ""] : []),
+    ];
+    if (marketplace.plugins.length === 0) {
+      return [[...block, ...REPAIR_PLUGIN_COLUMNS.map(() => "")]];
+    }
+
+    return marketplace.plugins.map((plugin) => [
+      ...block,
       plugin.id,
       plugin.name,
       plugin.status,
@@ -72,25 +92,15 @@ Then("the failed update names these repairs:", function (this: ScenarioWorld, ta
       plugin.cause === undefined ? "" : String(plugin.cause.truncated),
       (plugin.leaks ?? []).join(", "),
       (plugin.rollbackPartial ?? []).map(({ phase }) => phase).join(", "),
-    ]),
-  );
+    ]);
+  });
   assert.deepStrictEqual(
     [
       [
         "marketplace name",
         "marketplace scope",
         ...(namesClone ? ["marketplace clone note", "marketplace clone url"] : []),
-        "id",
-        "name",
-        "status",
-        "reasons",
-        "scope",
-        "from",
-        "version",
-        "repair",
-        "cause truncated",
-        "leaks",
-        "rollback phases",
+        ...REPAIR_PLUGIN_COLUMNS,
       ],
       ...repairs,
     ],

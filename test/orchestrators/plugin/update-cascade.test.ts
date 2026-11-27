@@ -167,7 +167,7 @@ test("D-SG-22: a targeted up-to-date row names the clone its update ran", () => 
   ].join("\n");
 
   // act
-  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single", false, {
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single", undefined, {
     plugins,
     marketplace: () => undefined,
   });
@@ -556,7 +556,10 @@ test("suppresses an unchanged cascade after a separately reported failure", () =
   ];
 
   // act
-  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", true);
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", {
+    marketplace: "mp",
+    scope: "project",
+  });
 
   // assert
   assert.deepStrictEqual(boundary.notifications, []);
@@ -916,7 +919,7 @@ test("D-SG-22: each row names its own subject's clone, a dependency row its key'
   ].join("\n");
 
   // act
-  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", false, {
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", undefined, {
     plugins,
     marketplace: (scope, name) =>
       scope === "project" && name === "mp"
@@ -956,7 +959,7 @@ test("D-SG-22: a target that carries its own notes reads them in place of the co
   ].join("\n");
 
   // act
-  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", false, {
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "plural", undefined, {
     plugins: command,
     marketplace: () => undefined,
   });
@@ -999,7 +1002,7 @@ test("D-SG-22: a bulk update that changed nothing keeps the block of the sync th
     runWithNothingLoaded(),
     [unchanged("hello")],
     "plural",
-    false,
+    undefined,
     {
       plugins: createGitHubCloneNotes(),
       marketplace: (scope, name) =>
@@ -1019,13 +1022,77 @@ test("D-SG-22: an aborted bulk update sends no block that only repeats the faile
   const boundary = createNotificationBoundary(0);
 
   // act
-  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), [unchanged("hello")], "plural", true, {
-    plugins: createGitHubCloneNotes(),
-    marketplace: () => ({ note: "via-ssh", url: "git@github.com:acme/mp.git" }),
-  });
+  composeUpdateCascade(
+    boundary.ctx,
+    runWithNothingLoaded(),
+    [unchanged("hello")],
+    "plural",
+    { marketplace: "mp", scope: "project" },
+    {
+      plugins: createGitHubCloneNotes(),
+      marketplace: () => ({ note: "via-ssh", url: "git@github.com:acme/mp.git" }),
+    },
+  );
 
   // assert
   assert.deepStrictEqual(boundary.notifications, []);
+  boundary.verifyBoundary();
+});
+
+test("D-SG-22: an aborted bulk update keeps the block of another marketplace's sync re-clone", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    { ...unchanged("hello"), target: { marketplace: "other", scope: "project" } },
+  ];
+  const expectedMessage = [
+    "● other [project]",
+    "  Cloning via SSH: git@github.com:acme/other.git",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(
+    boundary.ctx,
+    runWithNothingLoaded(),
+    outcomes,
+    "plural",
+    { marketplace: "mp", scope: "project" },
+    {
+      plugins: createGitHubCloneNotes(),
+      marketplace: (scope, name) =>
+        scope === "project" && name === "other"
+          ? { note: "via-ssh", url: "git@github.com:acme/other.git" }
+          : undefined,
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("D-SG-22: an aborted bulk update keeps the sync re-clone block of the failed target's marketplace in the other scope", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const expectedMessage = ["● mp [project]", "  Cloning via SSH: git@github.com:acme/mp.git"].join(
+    "\n",
+  );
+
+  // act
+  composeUpdateCascade(
+    boundary.ctx,
+    runWithNothingLoaded(),
+    [unchanged("hello")],
+    "plural",
+    { marketplace: "mp", scope: "user" },
+    {
+      plugins: createGitHubCloneNotes(),
+      marketplace: () => ({ note: "via-ssh", url: "git@github.com:acme/mp.git" }),
+    },
+  );
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
   boundary.verifyBoundary();
 });
 
@@ -1051,7 +1118,7 @@ test("D-SG-22: a bulk update keeps the up-to-date row of a plugin its update clo
     runWithNothingLoaded(),
     [unchanged("hello"), unchanged("quiet")],
     "plural",
-    false,
+    undefined,
     { plugins, marketplace: () => undefined },
   );
 
@@ -1070,7 +1137,7 @@ test("D-SG-22, OQ-3: a bulk update that cloned nothing renders only the no-op he
     runWithNothingLoaded(),
     [unchanged("hello"), unchanged("quiet")],
     "plural",
-    false,
+    undefined,
     { plugins: createGitHubCloneNotes(), marketplace: () => undefined },
   );
 
@@ -1091,10 +1158,17 @@ test("D-SG-22: after a separately reported failure, a bulk update still names an
   ].join("\n");
 
   // act
-  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), [unchanged("hello")], "plural", true, {
-    plugins,
-    marketplace: () => undefined,
-  });
+  composeUpdateCascade(
+    boundary.ctx,
+    runWithNothingLoaded(),
+    [unchanged("hello")],
+    "plural",
+    { marketplace: "mp", scope: "project" },
+    {
+      plugins,
+      marketplace: () => undefined,
+    },
+  );
 
   // assert
   assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);

@@ -174,6 +174,7 @@ import type { CandidateReport } from "./materialize-latest.ts";
 import type { StagingDiagnostic } from "./staging-diagnostics.ts";
 import type {
   UpdateCascadeOutcome,
+  UpdateCascadeTarget,
   UpdateCloneNotes,
   UpdateHooksRouting,
 } from "./update-cascade.ts";
@@ -202,7 +203,7 @@ type UpdateCascadeComposer = (
   run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
   cardinality: "single" | "plural",
-  abortedByFailure?: boolean,
+  abortedBy?: UpdateCascadeTarget,
   clones?: UpdateCloneNotes,
 ) => void;
 
@@ -622,7 +623,14 @@ async function updatePluginsWith(
         unknownGitFailure: true,
         clones,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, { composeCascade, clones }, []);
+      abortUpdateBatch(
+        ctx,
+        run,
+        outcomes,
+        cardinality,
+        { composeCascade, clones, failedTarget: t },
+        [],
+      );
       return;
     }
 
@@ -670,9 +678,14 @@ async function updatePluginsWith(
         report,
         clones: targetScoped.clones,
       });
-      abortUpdateBatch(ctx, run, outcomes, cardinality, { composeCascade, clones }, [
-        updateFailedDiagnostic(t.plugin, t.scope, report),
-      ]);
+      abortUpdateBatch(
+        ctx,
+        run,
+        outcomes,
+        cardinality,
+        { composeCascade, clones, failedTarget: t },
+        [updateFailedDiagnostic(t.plugin, t.scope, report)],
+      );
       return;
     }
 
@@ -701,7 +714,7 @@ async function updatePluginsWith(
         run,
         outcomes,
         cardinality,
-        { composeCascade, clones },
+        { composeCascade, clones, failedTarget: t },
         [updateFailedDiagnostic(t.plugin, t.scope, outcome)],
         outcome,
       );
@@ -711,7 +724,7 @@ async function updatePluginsWith(
     outcomes.push({ target: t, outcome, notes: targetContext.notes });
   }
 
-  composeCascade(ctx, run, outcomes, cardinality, false, clones);
+  composeCascade(ctx, run, outcomes, cardinality, undefined, clones);
   surfaceUpdateDiscoveryWarnings(ctx, run, outcomes);
   surfaceUpdateMcpConfigNotices(ctx, run, outcomes);
 }
@@ -918,12 +931,13 @@ function isPhase3aAggregateFailure(
  * through their own `withStateGuard` closures and may have rewritten
  * mcp-adapter.json, so their cascade and MCP notices still render.
  *
- * WR-01: the cascade is flagged aborted-by-failure so the never-silent no-op
- * headline is suppressed. If every accumulated outcome was `unchanged`, the
- * bulk-suppressed cascade is empty and the headline would otherwise emit a
- * contradictory `nothing to update` line right after the failure. An empty
- * accumulator skips the cascade so no empty-marketplaces sentinel follows the
- * failure.
+ * WR-01: the cascade is flagged aborted by `cascade.failedTarget` so the
+ * never-silent no-op headline is suppressed. If every accumulated outcome was
+ * `unchanged`, the bulk-suppressed cascade is empty and the headline would
+ * otherwise emit a contradictory `nothing to update` line right after the
+ * failure. An empty accumulator skips the cascade so no empty-marketplaces
+ * sentinel follows the failure. D-SG-22: the failed target's marketplace and
+ * scope tell the cascade which sync note the failure already named.
  *
  * `failed` is the phase-3a aggregate outcome, when the abort came from one.
  * Its MCP notices follow the cascade, because its MCP commit may have
@@ -942,12 +956,13 @@ function abortUpdateBatch(
   cascade: {
     readonly composeCascade: UpdateCascadeComposer;
     readonly clones: UpdateCloneNotes;
+    readonly failedTarget: UpdateCascadeTarget;
   },
   failedDiagnostics: readonly StagingDiagnostic[],
   failed?: UpdatePhase3FailedOutcome,
 ): void {
   if (outcomes.length > 0) {
-    cascade.composeCascade(ctx, run, outcomes, cardinality, true, cascade.clones);
+    cascade.composeCascade(ctx, run, outcomes, cardinality, cascade.failedTarget, cascade.clones);
   }
 
   surfaceCascadeStagingDiagnostics(ctx, run, failed?.dependencyStagingDiagnostics ?? []);
