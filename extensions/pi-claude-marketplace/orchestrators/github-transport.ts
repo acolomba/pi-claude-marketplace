@@ -9,7 +9,7 @@
 
 import { planPluginClone } from "../domain/github-plugin-transport.ts";
 import { stopsTheClone } from "../domain/github-transport.ts";
-import { isGitHubRepositoryFormat, isGitSubdirShorthand } from "../domain/source.ts";
+import { isGitHubOwnerRepo } from "../domain/source.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import {
   appendLeakToError,
@@ -362,7 +362,7 @@ export interface CloneTransport {
  */
 function forceApplies(source: GitBackedSource): boolean {
   return (
-    source.kind === "github" || (source.kind === "git-subdir" && isGitSubdirShorthand(source.url))
+    source.kind === "github" || (source.kind === "git-subdir" && isGitHubOwnerRepo(source.url))
   );
 }
 
@@ -390,7 +390,7 @@ export function pluginCloneTransport(
     plan: () => {
       if (source.kind === "github") {
         const repository = source.repository ?? `${source.owner}/${source.repo}`;
-        if (!isGitHubRepositoryFormat(repository)) {
+        if (!isGitHubOwnerRepo(repository)) {
           return Promise.reject(new InvalidGitHubRepositoryError(repository));
         }
       }

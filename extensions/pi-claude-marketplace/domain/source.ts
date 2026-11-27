@@ -111,27 +111,20 @@ const TILDE_USER_HINT = "per-user tilde (~user/...) is not supported; use ~/..."
 
 /**
  * D-SG-20 / upstream `KHi`, `Uze`, and `zHi`: Claude Code's GitHub
- * `owner/repo` pattern. It decides the shorthand a git-subdir `url` may hold
- * in place of a git address, and the repository a `github` plugin source may
- * name (IN-A-01). One constant keeps the two uses from drifting.
+ * `owner/repo` pattern.
  */
-const GIT_SUBDIR_SHORTHAND = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+const GITHUB_OWNER_REPO = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 /**
- * D-SG-20: whether a git-subdir `url` is the GitHub `owner/repo` shorthand,
- * which Claude Code clones from GitHub rather than as a git address.
+ * D-SG-20, D-SG-18 / upstream `KHi` and `zHi`: whether `value` is a GitHub
+ * `owner/repo` pair as Claude Code reads one. It decides two things: whether
+ * a git-subdir `url` is the shorthand Claude Code clones from GitHub rather
+ * than as a git address, and whether a `github` plugin source names a
+ * repository Claude Code clones at all; Claude Code refuses any other
+ * repository before it builds a clone URL (IN-A-01).
  */
-export function isGitSubdirShorthand(url: string): boolean {
-  return GIT_SUBDIR_SHORTHAND.test(url);
-}
-
-/**
- * IN-A-01 / upstream `zHi`: whether `repository`, a `github` source's
- * `<owner>/<repo>`, is the `owner/repo` pair Claude Code clones. Claude Code
- * refuses any other value before it builds a clone URL.
- */
-export function isGitHubRepositoryFormat(repository: string): boolean {
-  return GIT_SUBDIR_SHORTHAND.test(repository);
+export function isGitHubOwnerRepo(value: string): boolean {
+  return GITHUB_OWNER_REPO.test(value);
 }
 
 /** MM-4: non-relative string sources -- the "fallthrough" reason. */
@@ -312,7 +305,7 @@ function gitSubdirObjectSource(obj: Record<string, unknown>): ParsedSource {
     return unknownObjectSource(obj, "git-subdir source is missing url or path");
   }
 
-  const refusal = isGitSubdirShorthand(url)
+  const refusal = isGitHubOwnerRepo(url)
     ? undefined
     : gitUrlRefusal(stripSlashAndFragment(url).base);
   if (refusal !== undefined) {

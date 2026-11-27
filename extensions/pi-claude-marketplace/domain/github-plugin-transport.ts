@@ -31,7 +31,7 @@ import {
   stopsTheClone,
   writtenAddressNote,
 } from "./github-transport.ts";
-import { isGitSubdirShorthand } from "./source.ts";
+import { isGitHubOwnerRepo } from "./source.ts";
 
 import type { TransportAttempt, TransportForce, TransportPlan } from "./github-transport.ts";
 import type { GitBackedSource, GitHubSource } from "./source.ts";
@@ -246,7 +246,7 @@ export async function planPluginClone(input: PluginClonePlanInput): Promise<Tran
   }
 
   if (source.kind === "git-subdir") {
-    if (!isGitSubdirShorthand(source.url)) {
+    if (!isGitHubOwnerRepo(source.url)) {
       return asWritten(networkCloneUrl(source));
     }
 

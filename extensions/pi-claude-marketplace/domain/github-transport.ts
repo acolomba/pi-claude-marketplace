@@ -30,7 +30,7 @@ import { GITHUB_HOST, gitHubAddressOf } from "../shared/github-base-url.ts";
 
 import { networkCloneUrl } from "./clone-key.ts";
 import { isScpGitAddress } from "./git-url.ts";
-import { ensureGitSuffix, isGitSubdirShorthand } from "./source.ts";
+import { ensureGitSuffix, isGitHubOwnerRepo } from "./source.ts";
 
 import type { CloneNoteKind } from "../shared/notification-types.ts";
 import type { GitBackedSource, GitHubSource, UrlSource } from "./source.ts";
@@ -119,7 +119,7 @@ export function gitHubSshCloneUrl(source: GitHubSource): string {
  * git-subdir url list at the wire form `networkCloneUrl` gives.
  */
 export function tagReadUrl(source: GitBackedSource, force: TransportForce | undefined): string {
-  if (source.kind === "git-subdir" && isGitSubdirShorthand(source.url)) {
+  if (source.kind === "git-subdir" && isGitHubOwnerRepo(source.url)) {
     return tagReadUrl(shorthandSource(source.url), force);
   }
 
