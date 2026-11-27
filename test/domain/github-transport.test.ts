@@ -5,10 +5,7 @@ import {
   planMarketplaceClone,
   tagReadUrl,
 } from "../../extensions/pi-claude-marketplace/domain/github-transport.ts";
-import {
-  DeviceFlowUnavailableError,
-  GitCommandError,
-} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type {
   MarketplaceClonePlanInput,
@@ -337,20 +334,6 @@ for (const failure of [
     assert.deepStrictEqual(tried, [SSH_ATTEMPT]);
   });
 }
-
-test("MODE-04: gives no other transport after print mode refused the https attempt's sign-in", async () => {
-  // arrange
-  const plan = await planMarketplaceClone({
-    source: OWNER_REPO,
-    probe: probeAnswering("not-configured").probe,
-  });
-
-  // act
-  const tried = await attemptsAfter(plan, new DeviceFlowUnavailableError());
-
-  // assert
-  assert.deepStrictEqual(tried, [HTTPS_ATTEMPT]);
-});
 
 test("SG-SSH-02: gives the ssh attempt after an https attempt that found no credential", async () => {
   // arrange

@@ -299,8 +299,8 @@ const NOT_REMOTE_FAILURES: ReadonlySet<GitCommandError["kind"]> = new Set([
 /**
  * D-SG-15: whether a failed `ls-remote` means the remote could not be reached:
  * a git failure other than `NOT_REMOTE_FAILURES`, or a stored credential the
- * host refused. Any other error, such as an invalid GitHub base or a Device
- * Flow that Pi cannot show, says nothing about the remote and is thrown.
+ * host refused. Any other error, such as an invalid GitHub base, says nothing
+ * about the remote and is thrown.
  */
 function isUnreachable(err: unknown): boolean {
   if (err instanceof StoredCredentialRejectedError) {

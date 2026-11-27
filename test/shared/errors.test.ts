@@ -13,7 +13,6 @@ import {
   CrossPluginConflictError,
   DependencyCascadeError,
   DependencyDeclarationsUnreadableError,
-  DeviceFlowUnavailableError,
   DirectoryPinUnsatisfiedError,
   errorMessage,
   errorWithCleanupFailures,
@@ -62,24 +61,6 @@ import {
   UnsafeGeneratedNameError,
   withoutCleanupLeaks,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-
-describe("DeviceFlowUnavailableError", () => {
-  test("names the print refusal and its exact remedy", () => {
-    // arrange
-    const message =
-      "Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.";
-
-    // act
-    const error = new DeviceFlowUnavailableError();
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, message: error.message },
-      { name: "DeviceFlowUnavailableError", message },
-    );
-  });
-});
 
 describe("UnsupportedModeError", () => {
   test("preserves the unsupported runtime mode as structured data", () => {

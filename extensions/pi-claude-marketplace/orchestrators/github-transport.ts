@@ -208,9 +208,8 @@ async function clearBeforeRetry(
  * `retries` the URLs of the retries that ran. With no attempt to give, a
  * first failure reaches the caller unchanged and a retry's failure throws
  * `bothFailedError`'s error over the last two attempts. A retry's failure
- * that stops the clone (`stopsTheClone`: an abort, no git, or print mode's
- * refused sign-in) reaches the caller unchanged too, so its remedy shows as
- * it does after a first attempt.
+ * that stops the clone (`stopsTheClone`: an abort or no git) reaches the
+ * caller unchanged too, so its remedy shows as it does after a first attempt.
  */
 async function runAfter<T>(
   run: GitHubCloneRun<T>,

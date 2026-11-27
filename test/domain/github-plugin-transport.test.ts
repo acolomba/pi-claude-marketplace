@@ -2,10 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { planPluginClone } from "../../extensions/pi-claude-marketplace/domain/github-plugin-transport.ts";
-import {
-  DeviceFlowUnavailableError,
-  GitCommandError,
-} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { PluginSshChecks } from "../../extensions/pi-claude-marketplace/domain/github-plugin-transport.ts";
 import type {
@@ -230,7 +227,6 @@ for (const { label, failure } of [
     label: "the command was aborted",
     failure: new GitCommandError({ kind: "aborted" }, { operation: "clone" }),
   },
-  { label: "print mode refused the sign-in", failure: new DeviceFlowUnavailableError() },
 ]) {
   test(`D-SG-18: gives no ssh retry when ${label}`, async () => {
     // arrange

@@ -30,7 +30,6 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   CleanupLeakError,
-  DeviceFlowUnavailableError,
   GitCommandError,
   GitHubTransportsFailedError,
   InvalidGitHubBaseUrlError,
@@ -843,29 +842,6 @@ test("D-SG-15: an ls-remote whose stored credential the host refused keeps a val
 
   // assert
   assert.deepStrictEqual(swapped, { kind: "kept-stale", cause: lsRemoteError });
-  assert.deepStrictEqual(git.state.calls.clone, []);
-});
-
-test("D-SG-15: an ls-remote error that is no git failure, such as a Device Flow Pi cannot show, is thrown, not kept", async (t) => {
-  // arrange
-  const swap = await swapRoot(t);
-  await writeCheckout(swap.liveDir, MANIFEST_A);
-  const lsRemoteError = new DeviceFlowUnavailableError();
-  const git = gitAt({
-    localHead: COMMIT_A,
-    remoteHead: COMMIT_B,
-    cloneFrom: await remoteTree(t, MANIFEST_B),
-    lsRemoteError,
-  });
-
-  // act & assert
-  await assert.rejects(
-    refreshCloneBySwap(swapArgs(swap, git.gitOps, { keepOnUnreachable: true })),
-    (error: unknown) => {
-      assert.strictEqual(error, lsRemoteError);
-      return true;
-    },
-  );
   assert.deepStrictEqual(git.state.calls.clone, []);
 });
 

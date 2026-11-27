@@ -13,7 +13,6 @@ import {
 } from "../../extensions/pi-claude-marketplace/orchestrators/github-transport.ts";
 import {
   CleanupLeakError,
-  DeviceFlowUnavailableError,
   GitCommandError,
   GitHubTransportsFailedError,
   InvalidGitHubRepositoryError,
@@ -492,7 +491,6 @@ describe("cloneOverGitHubTransports", () => {
         { operation: "lookup" },
       ),
     },
-    { stop: "a retry whose sign-in print mode refused", failure: new DeviceFlowUnavailableError() },
   ]) {
     test(`lets ${stop} reach the caller unchanged after the first attempt failed`, async (t) => {
       // arrange
