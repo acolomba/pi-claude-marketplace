@@ -162,7 +162,7 @@ import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.t
 import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { CredentialOps } from "../auth-host.ts";
 import type { CloneTransport, PluginTransportContext } from "../github-transport.ts";
 import type { PinnedGitSource } from "./clone-cache.ts";
 import type { WorkflowNoteScript } from "./discover-names.ts";
@@ -219,12 +219,6 @@ export interface GetPluginInfoOptions {
    * inject mock-backed versions so `info --fetch` runs without the network.
    */
   readonly cloneCacheSeam?: InfoCloneCacheSeam;
-  /** FTCH-06 credential seam (install parity); tests inject a mock. */
-  readonly credentialOps?: CredentialOps;
-  /** FTCH-06 Device Flow HTTP seam (install parity); tests inject a mock. */
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  /** FTCH-06 / D-79-02 once-per-host auth memo. */
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * OQ-7, D-SG-19: the command's GitHub transport context for `--fetch`.
    * Omitted, `info --fetch` makes one for the command.
@@ -262,11 +256,10 @@ export interface InfoCloneCacheSeam {
  * FTCH-03 / D-81-05: derive the per-command fetch context from the caller
  * options. Returns undefined unless `--fetch` was passed (so every row builder
  * stays fs-only for bare info). Production defaults to the real clone-cache
- * imports + `DEFAULT_CREDENTIAL_OPS`; tests inject mock-backed seams. The
- * command-scope auth memo caps a Device Flow at once per host (D-79-02), and
- * the command's one transport context, the caller's or one
- * `newTransportContext` makes, gives every clone of both scopes one probe
- * (OQ-7, D-SG-19).
+ * imports; tests inject mock-backed seams. Every clone bundle carries
+ * `DEFAULT_CREDENTIAL_OPS` (FTCH-06), and the command's one transport context,
+ * the caller's or one `newTransportContext` makes, gives every clone of both
+ * scopes one probe (OQ-7, D-SG-19).
  */
 function buildInfoFetchContext(
   opts: GetPluginInfoOptions,
@@ -284,9 +277,7 @@ function buildInfoFetchContext(
       materializePluginClone,
       materializeOrRefreshPluginMirror,
     },
-    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    authMemo: opts.authMemo ?? new Map<string, AuthAttemptResult>(),
+    credentialOps: DEFAULT_CREDENTIAL_OPS,
     transportContext: opts.transportContext ?? newTransportContext(),
     subject: `${opts.plugin}@${opts.marketplace}`,
   };
@@ -2491,8 +2482,6 @@ interface InfoFetchContext {
   readonly run: NotificationRun;
   readonly seam: InfoCloneCacheSeam;
   readonly credentialOps: CredentialOps;
-  readonly deviceFlowHttp?: DeviceFlowHttp;
-  readonly authMemo?: Map<string, AuthAttemptResult>;
   /** OQ-7: the command's transport context, shared by both scopes' clones. */
   readonly transportContext: PluginTransportContext;
   /** D-SG-22: the subject the clones note under, `<plugin>@<marketplace>`. */

@@ -77,7 +77,6 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
-import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -233,24 +232,6 @@ async function withFsPromiseFault<T>(
 /** SG-PRC-05: a system-git clone that failed as `failure`. */
 function cloneFailure(failure: GitFailure): GitCommandError {
   return new GitCommandError(failure, { operation: "clone", exitCode: 128 });
-}
-
-function createCredentialOps() {
-  const credentials = createCredentialOpsFake({ boundary: "memory" });
-  return {
-    credOps: credentials.credentialOps,
-    state: {
-      get approveCalls() {
-        return credentials.calls.approve;
-      },
-      get fillCalls() {
-        return credentials.calls.fill;
-      },
-      get rejectCalls() {
-        return credentials.calls.reject;
-      },
-    },
-  };
 }
 
 interface GitOpsAdapterOptions {
@@ -4150,14 +4131,6 @@ test("plugin info manifest absent: D-96-04 / ENBL-17: `info --fetch` on a disabl
       scope: "user",
       cwd,
       fetch: true,
-      deviceFlowHttp: {
-        requestCode() {
-          return Promise.reject(new Error("device flow was not expected"));
-        },
-        pollToken() {
-          return Promise.reject(new Error("device flow was not expected"));
-        },
-      },
     });
 
     // assert
@@ -4359,9 +4332,9 @@ test("plugin info manifest absent: D-96-04: a mixed disabled + state-only `--fet
 // the guard by threading a `fetchCtx` into `buildStateOnlyInstalledRow` and
 // probing, and these tests go red.
 //
-// The clone-cache seam and the credential ops are the ONLY two routes from this
-// file to a network call or a credential read, so pinning all five counters at
-// zero covers the whole boundary.
+// The clone-cache seam is the ONLY route from this file to a network call, and
+// a credential is read only by a git run behind that seam, so pinning both of
+// its counters at zero covers the whole boundary.
 
 /** The byte-exact single-scope state-only block, shared by the INFO-12 cases. */
 const STATE_ONLY_BLOCK = [
@@ -4370,7 +4343,7 @@ const STATE_ONLY_BLOCK = [
   "    skills: alpha-skill",
 ].join("\n");
 
-test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest-absent record makes ZERO clone-seam and ZERO credential-seam calls", async () => {
+test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest-absent record makes ZERO clone-seam calls", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -4384,7 +4357,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest
     });
 
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -4396,7 +4368,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -4405,21 +4376,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest
       gitState.resolveRemoteRefCalls.length,
       0,
       "INFO-12: the state-only arm must not ask the remote",
-    );
-    assert.equal(
-      credState.fillCalls.length,
-      0,
-      "INFO-12: the state-only arm must not read a credential",
-    );
-    assert.equal(
-      credState.approveCalls.length,
-      0,
-      "INFO-12: the state-only arm must not store a credential",
-    );
-    assert.equal(
-      credState.rejectCalls.length,
-      0,
-      "INFO-12: the state-only arm must not erase a credential",
     );
 
     // The row itself is byte-identical to the bare INFO-09 render: `--fetch`
@@ -4443,7 +4399,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: bare `info` on a manifest-ab
 
     // The seams are supplied but `fetch` is omitted: nothing may run.
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
     // act
     await getPluginInfo({
@@ -4454,7 +4409,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: bare `info` on a manifest-ab
       scope: "user",
       cwd,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -4464,13 +4418,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: bare `info` on a manifest-ab
       0,
       "INFO-12: bare info must not ask the remote",
     );
-    assert.equal(credState.fillCalls.length, 0, "INFO-12: bare info must not read a credential");
-    assert.equal(
-      credState.approveCalls.length,
-      0,
-      "INFO-12: bare info must not store a credential",
-    );
-    assert.equal(credState.rejectCalls.length, 0, "INFO-12: bare info must not erase a credential");
     assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
   });
 });
@@ -4492,7 +4439,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
     });
 
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -4504,7 +4450,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -4513,21 +4458,6 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
       gitState.resolveRemoteRefCalls.length,
       0,
       "INFO-12: a remote-shaped record must not ask the remote",
-    );
-    assert.equal(
-      credState.fillCalls.length,
-      0,
-      "INFO-12: a remote-shaped record must not read a credential",
-    );
-    assert.equal(
-      credState.approveCalls.length,
-      0,
-      "INFO-12: a remote-shaped record must not store a credential",
-    );
-    assert.equal(
-      credState.rejectCalls.length,
-      0,
-      "INFO-12: a remote-shaped record must not erase a credential",
     );
     assert.equal(notifications[0]!.message, STATE_ONLY_BLOCK);
   });
@@ -4562,7 +4492,6 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent r
     });
 
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -4574,7 +4503,6 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent r
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -4583,21 +4511,6 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent r
       gitState.resolveRemoteRefCalls.length,
       0,
       "ENBL-17: the disabled arm must not ask the remote",
-    );
-    assert.equal(
-      credState.fillCalls.length,
-      0,
-      "ENBL-17: the disabled arm must not read a credential",
-    );
-    assert.equal(
-      credState.approveCalls.length,
-      0,
-      "ENBL-17: the disabled arm must not store a credential",
-    );
-    assert.equal(
-      credState.rejectCalls.length,
-      0,
-      "ENBL-17: the disabled arm must not erase a credential",
     );
 
     // Zero calls AND the full inventory: a guard that reached zero by returning
@@ -4645,7 +4558,6 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
     });
 
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps, state: credState } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx(2);
     // act
     await getPluginInfo({
@@ -4657,7 +4569,6 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -4670,21 +4581,6 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
       gitState.resolveRemoteRefCalls.length,
       0,
       "ENBL-17: a disabled declared record must not ask the remote",
-    );
-    assert.equal(
-      credState.fillCalls.length,
-      0,
-      "ENBL-17: a disabled declared record must not read a credential",
-    );
-    assert.equal(
-      credState.approveCalls.length,
-      0,
-      "ENBL-17: a disabled declared record must not store a credential",
-    );
-    assert.equal(
-      credState.rejectCalls.length,
-      0,
-      "ENBL-17: a disabled declared record must not erase a credential",
     );
 
     // The rendered pair, so a guard that reached zero by dropping the block
@@ -6632,7 +6528,6 @@ test("FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone t
     });
 
     const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -6645,7 +6540,6 @@ test("FTCH-03: info --fetch on a COLD pinned git plugin materializes the clone t
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // The mirror was materialized (network on cache miss), then resolved warm.
@@ -6680,7 +6574,6 @@ test("D-81-04: info --fetch degrades to `components: not resolved` + an existing
     // through to the componentsResolved: false arm with `network unreachable`.
     const netErr = cloneFailure({ kind: "network", curlCode: 6 });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // getPluginInfo MUST resolve (not reject) even though the fetch threw.
@@ -6694,7 +6587,6 @@ test("D-81-04: info --fetch degrades to `components: not resolved` + an existing
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -6724,7 +6616,6 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
 
     // The seam is provided but `fetch` is omitted: the hook must NOT run.
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -6736,7 +6627,6 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
       scope: "user",
       cwd,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -6772,7 +6662,6 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
     // this evidence: a source grep says the module holds no git import, while
     // the count says the injected surface was never reached at run time.
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -6784,7 +6673,6 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
       scope: "user",
       cwd,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // The pair asserted in one run: the claim IS made, and nothing was fetched
@@ -6834,7 +6722,6 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
 
     const netErr = cloneFailure({ kind: "network", curlCode: 6 });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -6847,7 +6734,6 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -6880,7 +6766,6 @@ test("GHB-03: info --fetch on a not-installed GitHub plugin fails the command on
     });
     setGitHubBaseUrl(t, "http://mirror.example");
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps } = createCredentialOps();
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
 
     // act & assert
@@ -6895,7 +6780,6 @@ test("GHB-03: info --fetch on a not-installed GitHub plugin fails the command on
           cwd,
           fetch: true,
           cloneCacheSeam: fetchSeamWith(gitOps),
-          credentialOps,
         }),
       (error: unknown) => {
         assert.deepStrictEqual(
@@ -6931,7 +6815,6 @@ test("GHB-03: info --fetch on an installed GitHub plugin fails the command on an
     });
     setGitHubBaseUrl(t, "http://mirror.example");
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps } = createCredentialOps();
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
 
     // act & assert
@@ -6946,7 +6829,6 @@ test("GHB-03: info --fetch on an installed GitHub plugin fails the command on an
           cwd,
           fetch: true,
           cloneCacheSeam: fetchSeamWith(gitOps),
-          credentialOps,
         }),
       (error: unknown) => {
         assert.deepStrictEqual(
@@ -6981,7 +6863,6 @@ test("GHB-04 / NFR-5: bare info on a GitHub plugin ignores an invalid base", asy
     });
     setGitHubBaseUrl(t, "http://mirror.example");
     const { gitOps, state: gitState } = createGitOps({});
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -6993,7 +6874,6 @@ test("GHB-04 / NFR-5: bare info on a GitHub plugin ignores an invalid base", asy
       scope: "user",
       cwd,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -7049,7 +6929,6 @@ test("NFR-5: info --fetch on an installed pinned GitHub plugin with a warm clone
     const { gitOps, state: gitState } = createGitOps({
       cloneThrows: new Error("network unreachable: clone"),
     });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7062,7 +6941,6 @@ test("NFR-5: info --fetch on an installed pinned GitHub plugin with a warm clone
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -7118,7 +6996,6 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
     });
 
     const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7131,7 +7008,6 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // The clone was materialized, then the now-warm tree resolved on the
@@ -7187,7 +7063,6 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones
       localRefs: { "refs/heads/main": MIRROR_HEAD },
       remoteRefs: { "refs/remotes/origin/HEAD": MIRROR_HEAD },
     });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7200,7 +7075,6 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // Cold mirror: the first clone IS the consented fetch on the unpinned arm,
@@ -7242,7 +7116,6 @@ test("FTCH-06: info --fetch folds an https-auth seam throw to `{authentication r
     // git reads a 401 answer as https-auth (SG-PRC-05).
     const authErr = cloneFailure({ kind: "https-auth", detail: "rejected" });
     const { gitOps } = createGitOps({ cloneThrows: authErr });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7255,7 +7128,6 @@ test("FTCH-06: info --fetch folds an https-auth seam throw to `{authentication r
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -7285,7 +7157,6 @@ test("FTCH-06: info --fetch folds a denied/expired Device Flow to `{authenticati
     // failure with no credential.
     const canceledErr = cloneFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps } = createGitOps({ cloneThrows: canceledErr });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7298,7 +7169,6 @@ test("FTCH-06: info --fetch folds a denied/expired Device Flow to `{authenticati
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -7350,7 +7220,6 @@ for (const { title, failure, installed, expectedRow } of [
       });
       const hostAnswer = cloneFailure(failure);
       const { gitOps } = createGitOps({ cloneThrows: hostAnswer });
-      const { credOps: credentialOps } = createCredentialOps();
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -7363,7 +7232,6 @@ for (const { title, failure, installed, expectedRow } of [
         cwd,
         fetch: true,
         cloneCacheSeam: fetchSeamWith(gitOps),
-        credentialOps,
       });
 
       // assert
@@ -7734,7 +7602,6 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
 
     const netErr = cloneFailure({ kind: "network", curlCode: 6 });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -7747,7 +7614,6 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // The two facts are ORTHOGONAL and neither suppresses the other: the
@@ -9415,7 +9281,6 @@ test("a generic explicit-fetch failure uses the probe fallback exactly", async (
       },
     });
     const { gitOps } = createGitOps({ cloneThrows: new Error("fetch failed") });
-    const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
 
     // act
@@ -9428,7 +9293,6 @@ test("a generic explicit-fetch failure uses the probe fallback exactly", async (
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps,
     });
 
     // assert
@@ -11774,7 +11638,6 @@ for (const { title, source, installed, expectedRow, expectedLockObservations } o
         localRefs: { "refs/heads/main": LOCKED_READ_HEAD },
         remoteRefs: { "refs/remotes/origin/HEAD": LOCKED_READ_HEAD },
       });
-      const { credOps: credentialOps } = createCredentialOps();
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -11787,7 +11650,6 @@ for (const { title, source, installed, expectedRow, expectedLockObservations } o
         cwd,
         fetch: true,
         cloneCacheSeam: fetchSeamWith(gitOps),
-        credentialOps,
       });
 
       // assert
@@ -12693,7 +12555,6 @@ test("D-SG-22: info --fetch that clones a github plugin names the transport unde
       cwd,
       fetch: true,
       cloneCacheSeam: fetchSeamWith(gitOps),
-      credentialOps: createCredentialOps().credOps,
     });
 
     // assert
@@ -12753,7 +12614,6 @@ test("D-SG-22: info --fetch over both scopes names each clone under its own scop
           return root;
         },
       },
-      credentialOps: createCredentialOps().credOps,
     });
 
     // assert
@@ -12794,7 +12654,6 @@ test("D-SG-22, OQ-3: info --fetch of a github plugin whose pinned clone is warm 
         cwd,
         fetch: true,
         cloneCacheSeam: fetchSeamWith(gitOps),
-        credentialOps: createCredentialOps().credOps,
       });
       return notifications;
     };
