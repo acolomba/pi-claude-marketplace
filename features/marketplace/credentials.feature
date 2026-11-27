@@ -121,3 +121,111 @@ Feature: Marketplace credentials
       | protocol | host       | user           | password              |
       | https    | github.com | x-access-token | stand-in-access-token |
     Then the user scope holds no marketplace record
+
+  Scenario: A terminal session sends the background update's GitHub requests to the git host
+    Given the marketplace "tools" is published as a github source
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the user has run "/claude:plugin marketplace add acme/tools --scope user"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope user"
+    Given the tui session starts with the environment variable "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS" set to "0"
+    When the user sends the message "hello" in the tui session
+    Then the tui session reports no notice
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+
+  Scenario: The background update of a private GitHub marketplace with no stored credential shows no notice and asks for nothing
+    Given the marketplace "tools" is published as a github source
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the user has run "/claude:plugin marketplace add acme/tools --scope user"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope user"
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given the tui session starts with the environment variable "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS" set to "0"
+    When the user sends the message "hello" in the tui session
+    Then the tui session reports no notice
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+      | CONNECT | github.com:443 | git host  |
+
+  Scenario: The background update of a private GitHub marketplace fetches with the stored GitHub credential
+    Given the marketplace "tools" is published as a github source
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the user has run "/claude:plugin marketplace add acme/tools --scope user"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope user"
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given the user has stored a credential for github.com with the user "x-access-token" and the password "stand-in-access-token"
+    Given the tui session starts with the environment variable "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS" set to "0"
+    When the user sends the message "hello" in the tui session
+    Then the tui session reports no notice
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+
+  Scenario: Applying a config that declares a private GitHub marketplace in pi's print mode adds nothing and leaves no staged clone, and print mode shows nothing, a documented Pi gap (MODE-04, JDOC-02)
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given a config in scope project and layer base, with these marketplaces:
+      | name  | source     | autoupdate |
+      | tools | acme/tools | false      |
+    When the user runs "/claude:plugin apply --scope project" in pi's print mode
+    Then pi's print mode exits with code 0 and prints nothing
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source     | autoupdate |
+      | tools | acme/tools | false      |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones
+
+  # AAP-02: a load is a run no command opened, so it never asks the user for
+  # a credential (SG-AUTH-02).
+  Scenario: A reload with autoapply on adds nothing for a private GitHub marketplace with no stored credential and asks for nothing
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given a config in scope project and layer base, with these marketplaces:
+      | name  | source     | autoupdate |
+      | tools | acme/tools | false      |
+    When the user reloads pi
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A marketplace operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons     | marketplace clone note | marketplace clone url             | marketplace clone retries     |
+      | tools            | project           | failed             | authentication required | ssh-not-configured     | https://github.com/acme/tools.git | git@github.com:acme/tools.git |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then pi routes these github requests:
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+    Then the project scope holds no marketplace record

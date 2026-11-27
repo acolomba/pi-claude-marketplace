@@ -15,8 +15,9 @@
  * connection, so no harness git reaches a real host. It appends one line per
  * CONNECT or plain request, synchronously, to the GitHub redirect's log, in the
  * redirect's own line format, so `Then pi routes these github requests:` reads
- * the tunnels beside Pi's own requests. It binds `127.0.0.1` on port 0, and
- * `close()` ends every open tunnel before it resolves.
+ * the tunnels beside Pi's own requests. It binds `127.0.0.1` on port 0
+ * through `listenOnLoopback`, which the other loopback stand-ins of the
+ * redirect use too, and `close()` ends every open tunnel before it resolves.
  */
 
 import { once } from "node:events";
@@ -26,11 +27,21 @@ import { createServer } from "node:http";
 import { connect } from "node:net";
 import path from "node:path";
 
-import { listenOnLoopback } from "./server.ts";
-
 import type { RedirectLogLine } from "./extension.ts";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
-import type { Socket } from "node:net";
+import type { Server as NetServer, Socket } from "node:net";
+
+/** Listens on `127.0.0.1` at a port the system picks, and returns that port. */
+export async function listenOnLoopback(server: NetServer): Promise<number> {
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("a loopback stand-in has no TCP address");
+  }
+
+  return address.port;
+}
 
 // The one CONNECT target the proxy tunnels: git's request host and port for an https GitHub URL.
 const GITHUB_TUNNEL_TARGET = "github.com:443";

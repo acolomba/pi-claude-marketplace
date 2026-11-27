@@ -38,3 +38,27 @@ Feature: Plugin credentials
     Then the user's git credential store holds these credentials:
       | protocol | host       | user           | password              |
       | https    | github.com | x-access-token | stand-in-access-token |
+
+  Scenario: Installing a pinned GitHub plugin whose clone is already cached makes no request
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the plugin "ghp"
+    Given the user's ssh is denied for "github.com"
+    Given pi runs with github's requests routed to the git host
+    Given the marketplace "gits" is added to the project scope
+    Given the user has stored a credential for github.com with the user "x-access-token" and the password "stand-in-access-token"
+    Given the user has run "/claude:plugin fetch ghp@gits --scope project"
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+    Then the git host receives no request
