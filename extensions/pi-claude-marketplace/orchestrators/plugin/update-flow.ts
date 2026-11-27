@@ -337,9 +337,9 @@ async function syncMarketplaceBySwap(args: {
  * answer is framed as `marketplace update` frames it (`refreshFramed`).
  *
  * AUTH-02: the check and the clone carry the same host-keyed auth bundle as
- * `marketplace update`, so a private marketplace reaches the credential
- * helper and, on a miss, the Device Flow. The bundle is built inside the git
- * arms, so a path-only run never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL
+ * `marketplace update`, so git asks the user's own credential helpers for a
+ * private marketplace, and a miss fails as `authentication required`
+ * (D-1-02). The bundle is built inside the git arms, so a path-only run never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL
  * (GHB-02).
  *
  * D-SG-22: each sync records its re-clone's note into a collector of its own,
@@ -1028,8 +1028,7 @@ async function updateSinglePluginWith(
 
 /**
  * D-26: the `PluginConvergeFn` impl `apply` drives for one catalog move. The
- * cascade mode builds stored credentials only and starts no Device Flow
- * (D-3-04), and the converge policy lists no tag (D-23), so no tag memo is
+ * cascade mode gives git stored credentials only (D-3-04), and the converge policy lists no tag (D-23), so no tag memo is
  * allocated. The scope's locations come from the target's own `cwd`.
  *
  * D-SG-19: the move clones over the target's transport context, the one of

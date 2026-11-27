@@ -151,7 +151,7 @@ type GitFailureClassification = ReturnType<typeof classifyGitFailure>;
  *   - `git-missing` -> `git missing` (D-SG-07);
  *   - the HTTPS and SSH auth kinds and both host-key kinds ->
  *     `authentication required`; the answer reads the kind, so both
- *     `https-auth` details (D-SG-14, GAUTH-04) and both `ssh-auth` details
+ *     `https-auth` details (D-1-02, GAUTH-04) and both `ssh-auth` details
  *     give the same reason;
  *   - `timeout` -> `network unreachable`;
  *   - `remote-error` -> `network error`: the host answered and refused;

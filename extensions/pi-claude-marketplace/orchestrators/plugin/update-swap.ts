@@ -277,10 +277,10 @@ export interface ThreePhaseArgsBase {
    */
   readonly onStagingWarnings?: (warnings: readonly StagingWarning[]) => void;
   /**
-   * UPD-DEP-D1: the command's context for a cascade-mode run's credential
-   * prompts. A dependency move runs in cascade mode, so its rows return to the
-   * command; on an interactive command it still authenticates as the command
-   * does (Device Flow included).
+   * UPD-DEP-D1: the command's notification context for a cascade-mode run's
+   * preflight. A dependency move runs in cascade mode, so its rows return to
+   * the command, and with this context its tag queries run as the command's
+   * do, with git asking the user's own credential helpers (D-SG-05).
    */
   readonly preflightNotification?: PreparePluginUpdateOptions["notification"];
   /** UPD-DEP-D1: the plugins a dependency move is made for (`PreparePluginUpdateOptions`). */

@@ -1278,7 +1278,7 @@ export class PluginMirrorInUseError extends Error {
  *
  * `git-missing` records how the lookup failed (D-SG-04): no git on PATH, the
  * macOS xcrun shim in its place, or only a batch launcher. `https-auth`
- * records which authentication failure git reported (D-SG-14, GAUTH-04), and
+ * records which authentication failure git reported (D-1-02, GAUTH-04), and
  * `ssh-auth` whether ssh confirmed a key refusal.
  */
 export type GitFailure =
@@ -1292,9 +1292,9 @@ export type GitFailure =
   | {
       readonly kind: "https-auth";
       /**
-       * Whether git found no credential to send (`no-credential`, which the
-       * D-SG-14 Device Flow retry reads) or the host refused the one a helper
-       * gave (`rejected`, which GAUTH-04 reads). Only git's `Authentication
+       * Whether git found no credential to send (`no-credential`, which gets
+       * the D-1-02 hint where the verb adds it) or the host refused the one a
+       * helper gave (`rejected`, which is GAUTH-04's error). Only git's `Authentication
        * failed for` line is `rejected`: a bare 401 or 403 status line does not
        * show that a credential was sent, so it is `no-credential`.
        */

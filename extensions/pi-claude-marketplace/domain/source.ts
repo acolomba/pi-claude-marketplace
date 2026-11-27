@@ -234,8 +234,9 @@ function unknownObjectSource(obj: Record<string, unknown>, reason: string): Unkn
  * `url`'s (T-2-10).
  *
  * D-76-02: the gate's first arm sends a github.com url through the github
- * parser, so it normalizes to `github` kind (one canonical identity per repo;
- * Device Flow auth stays applicable) and a github url the parser rejects is
+ * parser, so it normalizes to `github` kind (one canonical identity per repo,
+ * so the GitHub transport and tag-read rules apply, D-SG-18, D-SG-20) and a
+ * github url the parser rejects is
  * rejected here rather than falling through to a clonable `url` source.
  */
 function gatedUrlField(
@@ -510,7 +511,8 @@ function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSou
  *
  * D-76-02: the github-host check MUST run BEFORE the generic-https arm so
  * github.com always normalizes to the `github` kind -- one canonical identity
- * per repo, and Device Flow auth stays applicable. The check folds the host the
+ * per repo, so the GitHub transport and tag-read rules apply (D-SG-18,
+ * D-SG-20). The check folds the host the
  * way Claude Code recognizes github.com (`gitHubUrlPath`), so
  * `https://GitHub.com/o/r`, `https://www.github.com/o/r` and
  * `https://github.com:443/o/r` name the same repo as `https://github.com/o/r`.

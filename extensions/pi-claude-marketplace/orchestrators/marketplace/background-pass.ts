@@ -9,8 +9,8 @@
 //
 // D-PL8-06 / D-PL8-12: the pass reports through a print-mode context whose
 // text goes to the debug log, and through a load-origin run whose entry sink
-// drops entries. Nothing reaches the session, and a load origin gives git
-// access stored credentials only, with no Device Flow.
+// drops entries. Nothing reaches the session, and git gets stored
+// credentials only.
 //
 // D-PL8-04: each marketplace refresh, plugin update, and dependency settlement
 // is one gate step, so a `/claude:plugin` command waits for at most one of them. A command can

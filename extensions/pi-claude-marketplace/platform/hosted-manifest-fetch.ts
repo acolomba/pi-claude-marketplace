@@ -2,8 +2,7 @@
 //
 // D-PL5-07: downloads a hosted marketplace catalog, one `marketplace.json`
 // served at an https URL, with the limits and the redirect policy Claude Code
-// applies to the same download. Besides the Device Flow, this is the only
-// module that calls `fetch`.
+// applies to the same download. This is the only module that calls `fetch`.
 //
 // It sends no credential and no header of its own, because Claude Code's add
 // sends none. The Node network modules are banned in the extension, so the

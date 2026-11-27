@@ -153,7 +153,7 @@ export type { GitAuthBundle };
  *
  * `clone`, `fetchCommit`, and `resolveRemoteRef` each accept an optional
  * `auth` bundle. When provided, `DEFAULT_GIT_OPS` forwards it to
- * `platform/git.ts`, which maps an auth failure of the git run by it (D-SG-14,
+ * `platform/git.ts`, which maps an auth failure of the git run by it (D-1-02,
  * GAUTH-04). When omitted, each behaves identically to the public-only path
  * (NFR-5 surfaces untouched).
  */

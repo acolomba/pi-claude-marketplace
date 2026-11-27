@@ -15,7 +15,7 @@
 //   the commit rows come before the remote-error row.
 // - A proxy refusal also prints a 403, so its row comes before the HTTPS
 //   authentication rows.
-// - D-SG-14, GAUTH-04: git prints `Authentication failed for` after a helper
+// - D-1-02, GAUTH-04: git prints `Authentication failed for` after a helper
 //   answered and the host refused it, even when a prompt line came first, so
 //   the `rejected` row comes before the `no-credential` row.
 //
