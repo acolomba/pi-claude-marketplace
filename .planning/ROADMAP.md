@@ -407,11 +407,11 @@ Plans:
   1. A user whose machine holds an SSH key or agent, or a git credential helper such as gh's or Git Credential Manager, adds a private marketplace and installs from it with no prompt from the extension; with only `GITHUB_TOKEN` or `GH_TOKEN` set and no helper, the private clone fails as an auth failure, and the token appears in no URL, header, or argument (SG-AUTH-01).
   2. Device Flow is gone, with no device-code prompt on any command, or it remains in the form discuss chose (Q2); either way a load with `autoapply` on and the background autoupdate pass never wait for user input, and PROJECT.md restates the AAP, autoapply, and D-PL8-12 rules for the outcome (SG-AUTH-02).
   3. A user who stored a token through Device Flow before the upgrade still clones and updates over HTTPS with no action, the extension deletes no stored credential, and the one-time notice, if discuss chose one (Q5), appears once; cucumber scenarios pin each (SG-AUTH-03).
-**Plans**: 13 plans in 13 sequential waves (each plan depends on the one before it)
+**Plans**: 1/13 plans executed in 13 sequential waves (each plan depends on the one before it)
 
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md — Pins first: the git host records request headers, token variables reach a routed Pi, the credential features pin every SG-AUTH behavior that holds today, the scenarios that need no sign-in leave `device-flow.feature`, and an architecture scan keeps token variable names out of the extension (wave 1)
+- [x] 05-01-PLAN.md — Pins first: the git host records request headers, token variables reach a routed Pi, the credential features pin every SG-AUTH behavior that holds today, the scenarios that need no sign-in leave `device-flow.feature`, and an architecture scan keeps token variable names out of the extension (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 05-02-PLAN.md — `marketplace add` and `update` stop threading the injectable credential surface, the Device Flow transport, and the sign-in memo (wave 2)
@@ -499,7 +499,7 @@ Plans:
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
 | 4. SSH Sources and Transport Selection | 26/26 | Complete    | 2026-11-27 |
-| 5. Credential Surface | 0/TBD | Not started | - |
+| 5. Credential Surface | 1/13 | In Progress | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |
 | 8. Close | 0/TBD | Not started | - |
