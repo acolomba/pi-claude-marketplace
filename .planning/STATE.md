@@ -4,12 +4,12 @@ milestone: system-git
 milestone_name: System Git
 current_phase: 6
 current_phase_name: Failure-Message Parity
-status: ready_to_execute
+status: executing
 stopped_at: Phase 6 planned (12 plans, 10 waves)
-last_updated: "2026-11-28T16:11:09.026Z"
+last_updated: "2026-11-28T16:12:45.119Z"
 last_activity: 2026-11-28
-last_activity_desc: Phase 6 planned, 12 plans in 10 waves
-state_head: c81a51ab9d2a60936920d5fa78aa1127fb3966dc
+last_activity_desc: Phase 6 execution started
+state_head: cc8e0736330e3b8bd2356c9016399dbc2a5db673
 progress:
   total_phases: 8
   completed_phases: 5
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-24 after system-git Phase 1 and the
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 04 — SSH Sources and Transport Selection
+**Current focus:** Phase 6 — Failure-Message Parity
 
 ## Current Position
 
-Phase: 6 (Failure-Message Parity) — READY TO EXECUTE
-Plan: Not started
-Status: Ready to execute Phase 6
-Last activity: 2026-11-28 — Phase 6 planned, 12 plans in 10 waves
+Phase: 6 (Failure-Message Parity) — EXECUTING
+Plan: 1 of 12
+Status: Executing Phase 6
+Last activity: 2026-11-28 — Phase 6 execution started
 
 Progress: [██████░░░░] 63%
 
