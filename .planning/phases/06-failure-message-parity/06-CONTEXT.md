@@ -89,6 +89,16 @@ This phase adds no new failure kinds and no new transports. It changes no retry 
   - `GitCommandError.message` keeps stderr out. The stderr is redacted when the error is built and again when the cause chain is serialized.
   - git's output still never reaches stdout or stderr directly (`platform/process-run.ts` pipes it).
 
+### Follow-up decisions after research (2026-11-28)
+
+- **Remedies on every surface (maintainer).** The remedy sentences show on every surface, plugin install, update, and reinstall rows included, with the apply, import, and autoupdate cascades. Upstream shows them only on marketplace clones. This extends D-SG-31.
+- **Claude's calls (logged in the decisions record):**
+  - The plugin both-transports remedy's last sentence `Then install again.` becomes `Then run the command again.`. The rest of that wrapper stays verbatim.
+  - The 500-character stderr bound keeps the **end** of git's output, because git's reason is its last line (`platform/git-process.ts:685`). `boundedNote` keeps the start for package installs, so the shared leaf takes the side as a parameter.
+  - The empty-stderr remedy points to `PI_CLAUDE_MARKETPLACE_DEBUG=1`. Pi therefore adds one redacted `[git]` debug line for each failed git run, naming the git subcommand and its exit code, so the remedy is true.
+  - Central path redaction in `hookDebugLog` goes ahead; the unit tests that capture debug output and check absolute paths are updated in the same commits.
+  - The amended D-79-03 bare-auth-row rule and IMP-09 are amended so that the auth rows keep their cause and remedy (06-RESEARCH).
+
 ### Claude's Discretion
 
 - Where the kind-to-remedy mapping lives: `shared/git-failure-classifiers.ts`, or a sibling module that reason resolution already reads.
