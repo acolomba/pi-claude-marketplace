@@ -52,6 +52,7 @@ created: "2026-11-28"
 | SG-ERR-01 | Network remedy (`ssh: Could not resolve hostname` from an unregistered ssh host) | cucumber | ssh feature files | ✅ stand-in behavior exists |
 | SG-ERR-01 | Stderr-only class (404 `repository … not found` -> `{source missing}` with `git printed:` and no remedy) | cucumber | `features/marketplace/failed-add.feature` or git-source | ✅ arm exists |
 | SG-ERR-01 | Same reason and remedy in `apply`, `import`, and the background pass (debug log) | cucumber | `features/plugin/apply*.feature`, `features/plugin/import*.feature`, `features/marketplace/background-update.feature` | ✅ (extend) |
+| SG-ERR-01 | An `enable` whose re-clone fails reads the reason `install` reads, directly and in `apply` (CONTEXT follow-up: enable re-clone reason) | unit + cucumber | `node --test test/orchestrators/plugin/enable-disable.messaging.test.ts`, `features/plugin/git-source.feature` | ✅ (extend) |
 | SG-ERR-01 | No-stderr remedy | unit (cucumber needs a silent fake git) | `test/shared/git-failure-remedy.test.ts`, `test/platform/git-process.test.ts` | ❌ / ✅ |
 | SG-ERR-02 | Widened patterns, `#ref` kept, query values redacted, `Basic`, `%40`, token table rows | unit | `node --test test/shared/redact-credentials.test.ts` | ✅ (extend) |
 | SG-ERR-02 | URL spellings replaced before credentials | unit | `node --test test/shared/redact-credentials.test.ts`, `test/platform/git-process.test.ts` | ✅ (extend) |
