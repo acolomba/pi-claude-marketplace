@@ -14020,9 +14020,9 @@ test("plugin install authentication: contains a non-Error clone failure without 
   });
 });
 
-test("plugin install authentication: classifies a GitHub clone the host refused as {authentication required} with its https clone note", async () => {
+test("plugin install authentication: classifies a GitHub clone that git found no credential for as {authentication required} with its https clone note", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-cancelled-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-no-credential-"));
     try {
       // arrange
       const fixtureRepoDir = path.join(cwd, "repo-fixture");

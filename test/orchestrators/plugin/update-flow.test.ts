@@ -10981,9 +10981,9 @@ test("GHB-03: the cascade's single-plugin update rethrows an invalid base", asyn
   });
 });
 
-test("NFR-3: a clone the host refused classifies as {authentication required}, not {no longer installable}", async () => {
+test("NFR-3: a clone that git found no credential for classifies as {authentication required}, not {no longer installable}", async () => {
   await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-git-usercanceled-");
+    const cwd = await createCaseDir("update-git-no-credential-");
     try {
       // arrange
       const cloneUrl = "https://example.com/org/repo";

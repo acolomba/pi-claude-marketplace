@@ -2018,7 +2018,7 @@ test("GAUTH-04: a stored credential that a url host rejects renders {authenticat
 test("GAUTH-04: a github refresh whose git found no credential renders {authentication required}, not the lying {network unreachable}", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
+    await seedGithubMarketplace({ cwd, name: "private-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     // GAUTH-04: git found no credential for the github host, so the run
     // fails as https-auth, here with a cause -- NOT a network failure.
@@ -2033,7 +2033,7 @@ test("GAUTH-04: a github refresh whose git found no credential renders {authenti
       completionCache: createCompletionCache(),
       ctx,
       run,
-      name: "declined",
+      name: "private-mp",
       scope: "project",
       cwd,
       gitOps,
@@ -6217,7 +6217,7 @@ test("UPD-12: a non-Error remote rejection on a GitHub update under the override
 test("GAUTH-04 / D-SG-27: a GitHub update without the override that git found no credential for places the github.com stored-credential line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
+    await seedGithubMarketplace({ cwd, name: "private-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const authError = remoteFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps } = createGitOps({ remoteThrows: authError });
@@ -6227,7 +6227,7 @@ test("GAUTH-04 / D-SG-27: a GitHub update without the override that git found no
       completionCache: createCompletionCache(),
       ctx,
       run,
-      name: "declined",
+      name: "private-mp",
       scope: "project",
       cwd,
       gitOps,
@@ -6237,7 +6237,7 @@ test("GAUTH-04 / D-SG-27: a GitHub update without the override that git found no
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ declined [project] (failed)\n  Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace \"declined\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for github.com; store one with: printf 'protocol=https\\nhost=github.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+          "Some operations have failed.\n\n⊘ private-mp [project] (failed)\n  Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git\n  ⊘ private-mp (failed) {authentication required}\n    cause: Failed to update marketplace \"private-mp\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for github.com; store one with: printf 'protocol=https\\nhost=github.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
         severity: "error",
       },
     ]);
