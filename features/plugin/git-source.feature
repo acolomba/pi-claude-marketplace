@@ -284,10 +284,10 @@ Feature: Plugin git source
     Then the session offers no skills
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                                            |
-      | answers 404          | source missing      | 404     | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git |
-      | drops the connection | network unreachable | dropped | git clone --depth failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
-      | answers 503          | network error       | 503     | git clone --depth failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
+      | refusal              | reason              | status  | cause chain                                                                                                                                                                                                                                                                         |
+      | answers 404          | source missing      | 404     | git clone --depth failed: repository-not-found, exit code 128, git printed: Cloning into 'mirror-{clone key}'...; fatal: repository 'https://{git host}/acme/ghp.git/' not found, fetched https://{git host}/acme/ghp.git                                                           |
+      | drops the connection | network unreachable | dropped | git clone --depth failed: network, exit code 128, git printed: Cloning into 'mirror-{clone key}'...; fatal: unable to access 'https://{git host}/acme/ghp.git/': GnuTLS recv error (-110): The TLS connection was non-properly terminated., fetched https://{git host}/acme/ghp.git |
+      | answers 503          | network error       | 503     | git clone --depth failed: network, exit code 128, git printed: Cloning into 'mirror-{clone key}'...; fatal: unable to access 'https://{git host}/acme/ghp.git/': The requested URL returned error: 503, fetched https://{git host}/acme/ghp.git                                     |
 
   Scenario: An install fails as authentication required when the git host asks for a credential the user has not stored
     Given the git repository "ghp" holds these plugins:

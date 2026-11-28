@@ -79,6 +79,10 @@ void ({} satisfies { readonly retired?: typeof FetchOrchestrator.fetchPlugins })
  * the command rather than as its assembly. It is the same pair of reads the
  * production composition binds.
  */
+// D-SG-33: the HTTPS auth remedy of a failure whose error names no remote.
+const HTTPS_AUTH_REMEDY =
+  "HTTPS authentication with this host failed. Make sure that your git credential helper has a valid credential for this host, for example a personal access token. This extension runs git with terminal prompts and askpass programs turned off, and it tells credential helpers not to prompt. So git can only use a credential that it gets without asking you, such as one that a credential helper already holds.";
+
 const fetchPlugins = createFetchPlugins({ makePresenceProbe, resolveListCandidate });
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -1646,8 +1650,7 @@ test("GAUTH-04: a clone the host refused fails the row as authentication require
     // assert
     assert.deepStrictEqual(boundary.notifications, [
       {
-        message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ stale (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128",
+        message: `A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ stale (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
         severity: "error",
       },
     ]);
@@ -2025,7 +2028,7 @@ for (const { title, failure, expectedRow } of [
     failure: { kind: "https-auth", detail: "rejected" },
     expectedRow: [
       "  ⊘ refused (failed) {authentication required}",
-      "    cause: git clone failed: https-auth, exit code 128",
+      `    cause: git clone failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
     ],
   },
 ] satisfies ReadonlyArray<{
@@ -2780,7 +2783,7 @@ test("D-SG-22: a fetch whose github clone fails names each attempt under its fai
           "    HTTPS clone failed, retrying with SSH: git@github.com:acme/ghp.git",
           "    cause: git clone failed: network, exit code 128",
           "The retry over SSH failed too: git clone failed: network, exit code 128",
-          "Check the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again. -> git clone failed: network, exit code 128",
+          "Check the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then run the command again. -> git clone failed: network, exit code 128",
         ].join("\n"),
         severity: "error",
       },

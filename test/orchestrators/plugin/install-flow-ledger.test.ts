@@ -217,6 +217,10 @@ for (const orchestrated of [false, true]) {
   });
 }
 
+// D-SG-33: the HTTPS auth remedy of a failure whose error names no remote.
+const HTTPS_AUTH_REMEDY =
+  "HTTPS authentication with this host failed. Make sure that your git credential helper has a valid credential for this host, for example a personal access token. This extension runs git with terminal prompts and askpass programs turned off, and it tells credential helpers not to prompt. So git can only use a credential that it gets without asking you, such as one that a credential helper already holds.";
+
 const filesystemPromises = createRequire(import.meta.url)(
   "node:fs/promises",
 ) as typeof import("node:fs/promises");
@@ -13892,8 +13896,7 @@ test("plugin install authentication: classifies a providerless 401 without a cau
 
       // assert
       assert.deepStrictEqual(outcome, {
-        cause:
-          "git clone failed: https-auth, exit code 128\n\ncause: git clone failed: https-auth, exit code 128",
+        cause: `git clone failed: https-auth, exit code 128\n\ncause: git clone failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
         error: cloneError,
         status: "failed",
       });
@@ -14056,8 +14059,7 @@ test("plugin install authentication: classifies a GitHub clone that git found no
 
       // assert
       assert.deepStrictEqual(outcome, {
-        cause:
-          "git clone failed: https-auth, exit code 128\n\ncause: git clone failed: https-auth, exit code 128",
+        cause: `git clone failed: https-auth, exit code 128\n\ncause: git clone failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
         error: cloneError,
         status: "failed",
       });

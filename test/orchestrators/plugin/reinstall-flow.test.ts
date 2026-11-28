@@ -4924,7 +4924,7 @@ test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source 
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    Cloning via HTTPS: https://github.com/org/repo.git\n    cause: 404 on https://github.com/org/repo.git -> git clone --depth failed: repository-not-found, exit code 128",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    Cloning via HTTPS: https://github.com/org/repo.git\n    cause: 404 on https://github.com/org/repo.git -> git clone --depth failed: repository-not-found, exit code 128 -> git printed: fatal: repository 'https://github.com/org/repo.git/' not found",
           severity: "error",
         },
       ]);

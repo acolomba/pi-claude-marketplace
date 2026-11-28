@@ -338,7 +338,7 @@ Feature: Plugin git source update
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                                                                                |
-      | answers 404          | source missing      | 404     | 404 on https://{git host}/acme/ghp.git, git ls-remote failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git |
-      | drops the connection | network unreachable | dropped | git ls-remote failed: network, exit code 128, fetched https://{git host}/acme/ghp.git                                                      |
-      | answers 503          | network error       | 503     | 503 on https://{git host}/acme/ghp.git, git ls-remote failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
+      | refusal              | reason              | status  | cause chain                                                                                                                                                                                                                                   |
+      | answers 404          | source missing      | 404     | 404 on https://{git host}/acme/ghp.git, git ls-remote failed: repository-not-found, exit code 128, git printed: fatal: repository 'https://{git host}/acme/ghp.git/' not found, fetched https://{git host}/acme/ghp.git                       |
+      | drops the connection | network unreachable | dropped | git ls-remote failed: network, exit code 128, git printed: fatal: unable to access 'https://{git host}/acme/ghp.git/': GnuTLS recv error (-110): The TLS connection was non-properly terminated., fetched https://{git host}/acme/ghp.git     |
+      | answers 503          | network error       | 503     | 503 on https://{git host}/acme/ghp.git, git ls-remote failed: network, exit code 128, git printed: fatal: unable to access 'https://{git host}/acme/ghp.git/': The requested URL returned error: 503, fetched https://{git host}/acme/ghp.git |

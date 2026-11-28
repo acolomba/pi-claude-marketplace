@@ -19,19 +19,19 @@ Feature: Plugin url marketplace update
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id          | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                | cause truncated |
-      | tools            | project           | tools@tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git ls-remote failed: <kind>, exit code 128 | false           |
+      | marketplace name | marketplace scope | id          | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                                           | cause truncated |
+      | tools            | project           | tools@tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git ls-remote failed: <kind>, exit code 128, git printed: <git output> | false           |
     Then the git host receives these requests:
       | method | path                                              | status   |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
 
     Examples:
-      | status | kind                 |
-      | 500    | network              |
-      | 502    | network              |
-      | 503    | network              |
-      | 404    | repository-not-found |
+      | status | kind                 | git output                                                                                          |
+      | 500    | network              | fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: 500 |
+      | 502    | network              | fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: 502 |
+      | 503    | network              | fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: 503 |
+      | 404    | repository-not-found | fatal: repository 'https://{git host}/acme/tools.git/' not found                                    |
 
   Scenario: Updating a plugin while another process holds the state lock fails as lock held and does not refresh its url marketplace
     Given the marketplace "tools" is published as a url source

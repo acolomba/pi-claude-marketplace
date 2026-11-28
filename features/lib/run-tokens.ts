@@ -70,6 +70,9 @@ const SCENARIO_TIME_TOKEN = "{scenario time}";
 const UUID_TOKEN = "{uuid}";
 // A lowercase RFC 4122 UUID, as a clone's staging folder is named.
 const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gu;
+const CLONE_KEY_TOKEN = "{clone key}";
+// The staging folder of a plugin mirror, `mirror-<12 hex of the clone URL's hash>`.
+const MIRROR_FOLDER_PATTERN = /\bmirror-[0-9a-f]{12}\b/gu;
 
 /**
  * The error token of a skill file that a read-only skill directory keeps from
@@ -184,8 +187,10 @@ export function expandTokens(text: string, tokens: RunTokens): string {
  * occurrence of the git host's address becomes `{git host}`, every
  * occurrence of a revision's commit becomes its commit token, and every
  * remaining occurrence of a revision's 12 digits becomes its revision token.
- * Last, in a `causeChain` entry every lowercase UUID becomes `{uuid}`: git's
- * output can name the staging folder of a clone, whose name is random.
+ * Last, in a `causeChain` entry every lowercase UUID becomes `{uuid}`, and the
+ * key of every `mirror-<key>` folder becomes `{clone key}`: git's output can
+ * name the staging folder of a clone, whose name is random, or of a plugin
+ * mirror, whose key hashes a URL that holds the git host's port.
  */
 export function projectTokens(key: string, value: string, tokens: RunTokens): string {
   if (key === "lastUpdatedAt" && isScenarioTime(value, tokens.scenarioStartedAt)) {
@@ -208,5 +213,9 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
     projected = projected.replaceAll(standsFor, token);
   }
 
-  return key === "causeChain" ? projected.replaceAll(UUID_PATTERN, UUID_TOKEN) : projected;
+  return key === "causeChain"
+    ? projected
+        .replaceAll(UUID_PATTERN, UUID_TOKEN)
+        .replaceAll(MIRROR_FOLDER_PATTERN, `mirror-${CLONE_KEY_TOKEN}`)
+    : projected;
 }

@@ -122,6 +122,10 @@ function updatePlugins(options: UpdatePluginsOptions): Promise<void> {
   return createUpdateOperations().updatePlugins(options);
 }
 
+// D-SG-33: the HTTPS auth remedy of a failure whose error names no remote.
+const HTTPS_AUTH_REMEDY =
+  "HTTPS authentication with this host failed. Make sure that your git credential helper has a valid credential for this host, for example a personal access token. This extension runs git with terminal prompts and askpass programs turned off, and it tells credential helpers not to prompt. So git can only use a credential that it gets without asking you, such as one that a credential helper already holds.";
+
 const updateSinglePlugin: PluginUpdateFn = (plugin, marketplace, scope) =>
   createUpdateOperations().beginPluginUpdateRun(commandNotification())(plugin, marketplace, scope);
 
@@ -1729,8 +1733,7 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message:
-            "A plugin operation has failed.\n\n● official [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ official (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
+          message: `A plugin operation has failed.\n\n● official [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ official (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}\n\nPlugin update: 1 failure`,
           severity: "error",
         },
       ]);
@@ -1925,8 +1928,7 @@ test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier t
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message:
-            "A plugin operation has failed.\n\n● zzz [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ zzz (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
+          message: `A plugin operation has failed.\n\n● zzz [project]\n  Cloning via HTTPS: https://github.com/test/repo.git\n  ⊘ zzz (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}\n\nPlugin update: 1 failure`,
           severity: "error",
         },
         {
@@ -2132,8 +2134,7 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync fails as 
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
+          message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}\n\nPlugin update: 1 failure`,
           severity: "error",
         },
       ]);

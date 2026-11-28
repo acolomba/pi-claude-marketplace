@@ -676,13 +676,15 @@ test("D-18-04 / NFR-5 / SRC-01: a cold git source is a cache miss, so reinstall 
   await reinstallHandler("far@mp", ctx, runWithNothingLoaded());
 
   // assert
-  assert.deepStrictEqual(notifications, [
-    {
-      message:
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ far v1.0.0 (failed) {network unreachable}\n    cause: git clone --depth failed: network, exit code 128",
-      severity: "error",
-    },
-  ]);
+  // curl names the milliseconds it waited, so that number alone may vary.
+  assert.deepStrictEqual(
+    notifications.map(({ severity }) => severity),
+    ["error"],
+  );
+  assert.match(
+    notifications[0]?.message ?? "",
+    /^A plugin operation has failed\.\n\n● mp \[project\]\n {2}⊘ far v1\.0\.0 \(failed\) \{network unreachable\}\n {4}cause: git clone --depth failed: network, exit code 128 -> git printed: Cloning into 'mirror-691e110704a7'\.\.\.; fatal: unable to access 'https:\/\/127\.0\.0\.1:9\/far\.git\/': Failed to connect to 127\.0\.0\.1 port 9 after \d+ ms: Couldn't connect to server$/u,
+  );
   assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
   assert.strictEqual(workspace.transportCalls(), 0);
   verifyBoundary();
