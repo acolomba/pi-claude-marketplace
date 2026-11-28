@@ -1309,9 +1309,9 @@ test("D-CF6-02: logs each file skip on the mcp debug channel", async (testContex
 
   // assert
   assert.deepStrictEqual(diagnostics, [
-    '[mcp] .mcp.json of /plugins/alpha: skipped the server "broken": unknown type "bogus"',
-    "[mcp] ./servers.json of /plugins/alpha: skipped the file: denied",
-    "[mcp] ./list.json of /plugins/alpha: skipped the file: it holds no server map",
+    '[mcp] .mcp.json of alpha: skipped the server "broken": unknown type "bogus"',
+    "[mcp] ./servers.json of alpha: skipped the file: denied",
+    "[mcp] ./list.json of alpha: skipped the file: it holds no server map",
   ]);
 });
 

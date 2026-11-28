@@ -3556,8 +3556,8 @@ test("GLK-03 / D-PL7-05: a held scope lock leaves the last referencer's clone an
       ]);
       assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["keySolo"]);
       assert.deepStrictEqual(logged, [
-        `[hooks] uninstall: package removal failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
-        `[hooks] uninstall: clone GC failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
+        `[hooks] uninstall: package removal failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${path.basename(locations.stateLockFile)}). Retry after it completes.`,
+        `[hooks] uninstall: clone GC failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${path.basename(locations.stateLockFile)}). Retry after it completes.`,
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -8080,7 +8080,7 @@ test("WLIF-01: an uninstall succeeds unchanged when the staging sweep throws", a
       );
       assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
       assert.deepStrictEqual(logged, [
-        `[hooks] uninstall: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${locations.workflowsStagingDir}'`,
+        "[hooks] uninstall: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir 'workflows-staging'",
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -8125,7 +8125,7 @@ test("WLIF-01: uninstall debug-logs a leak when the staging sweep cannot remove 
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "warning");
       assert.deepStrictEqual(logged, [
-        `[hooks] uninstall: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir '${abandoned}'`,
+        "[hooks] uninstall: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir 'abandoned'",
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });

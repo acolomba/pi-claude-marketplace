@@ -1041,7 +1041,7 @@ test("skips a scope whose install state cannot be read", async (t) => {
   assert.deepStrictEqual(updatedTargets(calls), ["gamma [user]"]);
   assert.deepStrictEqual(lines, [
     "[autoupdate] background update skipped the project scope: " +
-      `state.json at ${path.join(projectRoot, "state.json")} has an unsupported schema version`,
+      "state.json at state.json has an unsupported schema version",
   ]);
 });
 

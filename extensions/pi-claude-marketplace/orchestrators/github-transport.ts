@@ -111,7 +111,11 @@ export interface GitHubCloneRun<T> {
   /** Clears what a failed attempt left, before the next attempt runs. */
   readonly beforeRetry?: (() => Promise<void>) | undefined;
   readonly notes: GitHubCloneNotes;
-  /** The subject of the row that reports the clone. */
+  /**
+   * The subject of the row that reports the clone, and the key of its note,
+   * which stays raw so the row finds it (D-SG-22). A url source's subject can
+   * hold a credential, so a debug line shows it redacted (D-SG-35).
+   */
   readonly subject: string;
   /** The surface whose words a failure of both transports uses. */
   readonly surface: GitHubTransportsFailedError["surface"];
@@ -228,14 +232,14 @@ async function runAfter<T>(
     }
 
     hookDebugLog(
-      `${label} clone fallback also failed for ${run.surface} ${run.subject}: ${debugMessage(failed.error)}`,
+      `${label} clone fallback also failed for ${run.surface} ${redactCredentials(run.subject)}: ${debugMessage(failed.error)}`,
       "git",
     );
     throw bothFailedError(run.surface, [attemptFailure(earlier), attemptFailure(failed)]);
   }
 
   hookDebugLog(
-    `${label} clone failed for ${run.surface} ${run.subject} (${debugMessage(failed.error)}), falling back to ${GITHUB_TRANSPORT_LABELS[next.transport]}`,
+    `${label} clone failed for ${run.surface} ${redactCredentials(run.subject)} (${debugMessage(failed.error)}), falling back to ${GITHUB_TRANSPORT_LABELS[next.transport]}`,
     "git",
   );
   await clearBeforeRetry(run, failed, next);
@@ -264,7 +268,7 @@ export async function cloneOverGitHubTransports<T>(run: GitHubCloneRun<T>): Prom
   recordNote(run, []);
   const line = plan.note === undefined ? undefined : CHOICE_LINES[plan.note];
   if (line !== undefined) {
-    hookDebugLog(`${line} ${subject}`, "git");
+    hookDebugLog(`${line} ${redactCredentials(subject)}`, "git");
   }
 
   try {

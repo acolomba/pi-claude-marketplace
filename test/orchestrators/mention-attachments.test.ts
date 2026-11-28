@@ -206,7 +206,7 @@ describe("appendMentionedFiles", () => {
     // assert
     assert.strictEqual(text, 'Both\n\n<file name="/work/ok.md">\nOk.\n</file>');
     assert.deepStrictEqual(logged, [
-      "[mentions] a file mention skips /work/missing.md: no file /work/missing.md",
+      "[mentions] a file mention skips missing.md: no file missing.md",
     ]);
   });
 
@@ -231,7 +231,7 @@ describe("appendMentionedFiles", () => {
     // assert
     assert.strictEqual(text, 'Both\n\n<file name="/work/ok.md">\nOk.\n</file>');
     assert.deepStrictEqual(logged, [
-      "[mentions] a file mention skips /work/locked.md: EACCES: permission denied",
+      "[mentions] a file mention skips locked.md: EACCES: permission denied",
     ]);
   });
 
@@ -257,7 +257,7 @@ describe("appendMentionedFiles", () => {
     assert.strictEqual(text, "Big");
     assert.deepStrictEqual(files.asked, ["stat /work/big.md", "read /work/big.md 262145"]);
     assert.deepStrictEqual(logged, [
-      "[mentions] a file mention skips /work/big.md: it is larger than 262144 bytes or holds a NUL byte",
+      "[mentions] a file mention skips big.md: it is larger than 262144 bytes or holds a NUL byte",
     ]);
   });
 
@@ -277,7 +277,7 @@ describe("appendMentionedFiles", () => {
     // assert
     assert.strictEqual(text, `Both\n\n<file name="${cwd}/ok.md">\nOk.\n</file>`);
     assert.deepStrictEqual(logged, [
-      `[mentions] a file mention skips ${cwd}/dir: it is not a regular file`,
+      "[mentions] a file mention skips dir: it is not a regular file",
     ]);
   });
 
@@ -299,7 +299,7 @@ describe("appendMentionedFiles", () => {
     assert.strictEqual(text, `Both\n\n<file name="${cwd}/ok.md">\nOk.\n</file>`);
     assert.deepStrictEqual(reads, [`${cwd}/ok.md`]);
     assert.deepStrictEqual(logged, [
-      `[mentions] a file mention skips ${cwd}/big.md: it is larger than 262144 bytes`,
+      "[mentions] a file mention skips big.md: it is larger than 262144 bytes",
     ]);
   });
 
@@ -319,7 +319,7 @@ describe("appendMentionedFiles", () => {
     // assert
     assert.strictEqual(text, `Both\n\n<file name="${cwd}/ok.md">\nOk.\n</file>`);
     assert.deepStrictEqual(logged, [
-      `[mentions] a file mention skips ${cwd}/bin.dat: it is larger than 262144 bytes or holds a NUL byte`,
+      "[mentions] a file mention skips bin.dat: it is larger than 262144 bytes or holds a NUL byte",
     ]);
   });
 
@@ -355,7 +355,7 @@ describe("appendMentionedFiles", () => {
     // assert
     assert.strictEqual(text, "Linked");
     assert.deepStrictEqual(logged, [
-      `[mentions] a file mention skips ${cwd}/link: it is not a regular file`,
+      "[mentions] a file mention skips link: it is not a regular file",
     ]);
   });
 
@@ -375,7 +375,9 @@ describe("appendMentionedFiles", () => {
 
     // assert
     assert.strictEqual(text, "Linked");
-    assert.deepStrictEqual(logged, [`[mentions] a file mention skips ${link}: ${cause}`]);
+    assert.deepStrictEqual(logged, [
+      `[mentions] a file mention skips link.md: ${cause.replaceAll(link, "link.md")}`,
+    ]);
   });
 });
 

@@ -319,7 +319,7 @@ test(
         count: diagnostics.length,
         category: diagnostic.includes("pid-table read failed"),
         errorCode: diagnostic.includes("ENOTDIR"),
-        path: diagnostic.includes(expectedTablePath),
+        path: diagnostic.includes(path.basename(expectedTablePath)),
       },
       { count: 1, category: true, errorCode: true, path: true },
     );
@@ -381,7 +381,9 @@ test(
         count: diagnostics.length,
         category: diagnostic.includes("pid-table write failed"),
         errorCode: /EEXIST|ENOTDIR/.test(diagnostic),
-        path: diagnostic.includes(expectedTablePath) || diagnostic.includes(sharedPath),
+        path:
+          diagnostic.includes(path.basename(expectedTablePath)) ||
+          diagnostic.includes(path.basename(sharedPath)),
       },
       { count: 1, category: true, errorCode: true, path: true },
     );
@@ -413,7 +415,7 @@ test(
         count: diagnostics.length,
         category: diagnostic.includes("pid-table unlink failed"),
         errorCode: diagnostic.includes("ENOTDIR"),
-        path: diagnostic.includes(expectedTablePath),
+        path: diagnostic.includes(path.basename(expectedTablePath)),
       },
       { count: 1, category: true, errorCode: true, path: true },
     );

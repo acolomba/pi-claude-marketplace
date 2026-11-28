@@ -414,6 +414,36 @@ describe("cloneOverGitHubTransports", () => {
     ]);
   });
 
+  test("D-SG-35, D-SG-22: logs a subject's credential redacted and keeps the note under the raw subject", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const notes = createGitHubCloneNotes();
+    const subject = "https://alice:pw-word@example.test/acme/tools.git";
+
+    // act
+    const pending = cloneOverGitHubTransports({
+      plan: planOf(SSH_ATTEMPT, "via-ssh", HTTPS_ATTEMPT),
+      notes,
+      subject,
+      surface: "marketplace",
+      attempt: (attempt) => Promise.reject(new Error(`${attempt.transport} refused`)),
+    });
+
+    // assert
+    await assert.rejects(pending);
+    assert.deepStrictEqual(
+      [logged, notes.noteFor(subject)?.note],
+      [
+        [
+          "[git] SSH configured for GitHub, using SSH for https://***@example.test/acme/tools.git",
+          "[git] SSH clone failed for marketplace https://***@example.test/acme/tools.git (ssh refused), falling back to HTTPS",
+          "[git] HTTPS clone fallback also failed for marketplace https://***@example.test/acme/tools.git: https refused",
+        ],
+        "via-ssh",
+      ],
+    );
+  });
+
   test("SG-SSH-02: clones over ssh after the https attempt fails", async () => {
     // arrange
     const notes = createGitHubCloneNotes();

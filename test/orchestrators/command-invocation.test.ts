@@ -1033,7 +1033,7 @@ describe("listModelCommands", () => {
 
     // assert
     assert.deepStrictEqual(diagnostics, [
-      `[commands] a command listing skips ${file}: unexpected read of ${file}`,
+      `[commands] a command listing skips ${path.basename(file)}: unexpected read of ${path.basename(file)}`,
     ]);
   });
 });

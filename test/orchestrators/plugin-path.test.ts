@@ -682,7 +682,7 @@ describe("recomputePluginPath", () => {
         // assert
         assert.deepStrictEqual(outcome, {
           ledger: undefined,
-          logs: [`[env] plugin PATH: dropped ${path.join(pluginRoot, "bin")}: ${cause}`],
+          logs: [`[env] plugin PATH: dropped bin: ${cause}`],
         });
       } finally {
         restorePathEnvironment(environmentBefore);
@@ -690,7 +690,16 @@ describe("recomputePluginPath", () => {
     });
   }
 
-  for (const character of ['"', "'", "$", "`", "\\", "\n", "\r"]) {
+  // D-SG-35: the debug line shows each path as the redaction pass leaves it.
+  for (const { character, shown } of [
+    { character: '"', shown: 'plug"in/bin' },
+    { character: "'", shown: "plug'in/bin" },
+    { character: "$", shown: "plug$in/bin" },
+    { character: "`", shown: "plug`in/bin" },
+    { character: "\\", shown: "bin" },
+    { character: "\n", shown: "plug\nin/bin" },
+    { character: "\r", shown: "plug\rin/bin" },
+  ]) {
     test(`D-PG10-22: drops an existing bin whose path holds ${JSON.stringify(character)}`, async (t) => {
       // arrange
       const environmentBefore = snapshotPathEnvironment();
@@ -705,9 +714,7 @@ describe("recomputePluginPath", () => {
         // assert
         assert.deepStrictEqual(outcome, {
           ledger: undefined,
-          logs: [
-            `[env] plugin PATH: dropped ${path.join(pluginRoot, "bin")}: holds a shell metacharacter`,
-          ],
+          logs: [`[env] plugin PATH: dropped ${shown}: holds a shell metacharacter`],
         });
       } finally {
         restorePathEnvironment(environmentBefore);
@@ -730,7 +737,7 @@ describe("recomputePluginPath", () => {
       assert.deepStrictEqual(outcome, {
         ledger: undefined,
         logs: [
-          `[env] plugin PATH: dropped invalid resolvedSource for catalog/plugin: AbsolutePluginRoot: contains PATH delimiter: ${pluginRoot}`,
+          `[env] plugin PATH: dropped invalid resolvedSource for catalog/plugin: AbsolutePluginRoot: contains PATH delimiter: ${path.basename(pluginRoot)}`,
         ],
       });
     } finally {
@@ -763,7 +770,9 @@ describe("recomputePluginPath", () => {
       // assert
       assert.deepStrictEqual(outcome, {
         ledger: binDir,
-        logs: [`[env] plugin PATH: kept ${binDir} despite a stat error: ${statError}`],
+        logs: [
+          `[env] plugin PATH: kept bin despite a stat error: ${statError.replaceAll(binDir, "bin")}`,
+        ],
       });
     } finally {
       restorePathEnvironment(environmentBefore);

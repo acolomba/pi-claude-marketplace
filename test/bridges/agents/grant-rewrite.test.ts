@@ -161,7 +161,7 @@ describe("needsAgentGrantRewrite", () => {
     // assert
     assert.strictEqual(needed, false);
     assert.deepStrictEqual(debugLines, [
-      `[mcp] agent ${NAME}: grant rewrite check skipped: agent target ${renamed} is not named ${NAME}.md`,
+      `[mcp] agent ${NAME}: grant rewrite check skipped: agent target ${path.basename(renamed)} is not named ${NAME}.md`,
     ]);
   });
 

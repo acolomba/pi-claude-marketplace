@@ -1125,23 +1125,21 @@ describe("fillSkillRead", () => {
       overrides: { text: "Args [$ARGUMENTS]." },
       files: {},
       expectedLog: new RegExp(
-        String.raw`^\[skills\] a skill read fill could not read ${PROJECT_SKILL}: unexpected read of `,
+        String.raw`^\[skills\] a skill read fill could not read SKILL\.md: unexpected read of `,
       ),
     },
     {
       title: "a staged file whose frontmatter does not parse",
       overrides: { text: "Args [$ARGUMENTS]." },
       files: { [PROJECT_SKILL]: "---\nname: [unclosed\n---\n\nArgs [$ARGUMENTS]." },
-      expectedLog: new RegExp(
-        String.raw`^\[skills\] a skill read fill could not read ${PROJECT_SKILL}: `,
-      ),
+      expectedLog: new RegExp(String.raw`^\[skills\] a skill read fill could not read SKILL\.md: `),
     },
     {
       title: "a fill past Claude Code's size limit",
       overrides: { text: "${CLAUDE_SESSION_ID} [$ARGUMENTS]", sessionId: "s".repeat(4_000_001) },
       files: { [PROJECT_SKILL]: "${CLAUDE_SESSION_ID} [$ARGUMENTS]" },
       expectedLog: new RegExp(
-        String.raw`^\[skills\] a skill read fill could not substitute ${PROJECT_SKILL}: `,
+        String.raw`^\[skills\] a skill read fill could not substitute SKILL\.md: `,
       ),
     },
   ]) {

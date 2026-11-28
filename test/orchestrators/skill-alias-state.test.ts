@@ -450,7 +450,7 @@ test("D-CF2-02: logs the scope root whose state cannot be read", async (t) => {
 
   // assert
   assert.deepStrictEqual(diagnostics, [
-    `[skills] skill aliases skip the state under ${AGENT_DIR}: no state under ${path.join(AGENT_DIR, "pi-claude-marketplace")}`,
+    `[skills] skill aliases skip the state under ${AGENT_DIR}: no state under pi-claude-marketplace`,
   ]);
   verify(pi);
 });
@@ -471,8 +471,8 @@ test("D-CF2-02: logs the staged file that cannot be read", async (t) => {
 
   // assert
   assert.deepStrictEqual(diagnostics, [
-    `[skills] skill aliases skip the state under ${AGENT_DIR}: no state under ${path.join(AGENT_DIR, "pi-claude-marketplace")}`,
-    `[skills] skill aliases skip ${file}: unreadable ${file}`,
+    `[skills] skill aliases skip the state under ${AGENT_DIR}: no state under pi-claude-marketplace`,
+    `[skills] skill aliases skip ${path.basename(file)}: unreadable ${path.basename(file)}`,
   ]);
   verify(pi);
 });

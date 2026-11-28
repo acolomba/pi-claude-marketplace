@@ -2798,7 +2798,7 @@ test(
     assert.deepStrictEqual(messages, []);
     assert.strictEqual(registrations.length, 15);
     assert.deepStrictEqual(diagnostics, [
-      `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
+      `[hooks] hydrate: loadState failed for scope=project extensionRoot=${path.basename(factoryProjectLocations.extensionRoot)}: factory project state refused`,
     ]);
     assert.deepStrictEqual(readRoots, [
       userLocations.extensionRoot,

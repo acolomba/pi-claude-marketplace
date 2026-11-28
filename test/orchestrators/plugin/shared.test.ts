@@ -3686,7 +3686,7 @@ describe("sweepWorkflowsStaging", () => {
 
     // assert
     assert.deepStrictEqual(logged, [
-      `[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${staging}'`,
+      "[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir 'staging'",
     ]);
   });
 });

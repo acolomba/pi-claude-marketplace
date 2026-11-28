@@ -362,7 +362,7 @@ async function listRemoteHead(
     }
 
     hookDebugLog(
-      `Marketplace refresh failed with ${GITHUB_TRANSPORT_LABELS[attempt.transport]} for ${args.subject ?? plan.first.url} (${debugMessage(err)}), falling back to ${GITHUB_TRANSPORT_LABELS[next.transport]}`,
+      `Marketplace refresh failed with ${GITHUB_TRANSPORT_LABELS[attempt.transport]} for ${redactCredentials(args.subject ?? plan.first.url)} (${debugMessage(err)}), falling back to ${GITHUB_TRANSPORT_LABELS[next.transport]}`,
       "git",
     );
     return listRemoteHead(args, plan, next, refused);
@@ -479,6 +479,7 @@ async function cloneIntoStaging(args: CloneSwapArgs, freshness: Freshness): Prom
         }),
       beforeRetry: () => removalOps.rm(stagingDir, { recursive: true, force: true }),
       notes: args.notes ?? createGitHubCloneNotes(),
+      // The notes key, kept raw (D-SG-22); each debug line redacts it (D-SG-35).
       subject: args.subject ?? plan.first.url,
       surface: args.surface,
     });

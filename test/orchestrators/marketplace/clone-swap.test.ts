@@ -1470,28 +1470,40 @@ test("GAUTH-04: a refresh whose check met a refused stored credential throws tha
   );
 });
 
-test("SG-SSH-02: a freshness check logs Claude Code's line when it falls back to the other transport", async (t) => {
-  // arrange
-  const logged = captureDebugLog(t);
-  const swap = await swapRoot(t);
-  await writeCheckout(swap.liveDir, MANIFEST_A);
-  const git = gitOverBoth({
-    localHead: COMMIT_A,
-    remoteHead: COMMIT_A,
-    cloneFrom: await remoteTree(t, MANIFEST_B),
-    failing: { lsRemote: [SSH_URL] },
+for (const { label, subject, shown } of [
+  {
+    label:
+      "SG-SSH-02: a freshness check logs Claude Code's line when it falls back to the other transport",
+    subject: "tools",
+    shown: "tools",
+  },
+  {
+    label: "D-SG-35: a freshness check's fallback line shows the subject's credential redacted",
+    subject: "https://alice:pw-word@example.test/acme/tools.git",
+    shown: "https://***@example.test/acme/tools.git",
+  },
+]) {
+  test(label, async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const swap = await swapRoot(t);
+    await writeCheckout(swap.liveDir, MANIFEST_A);
+    const git = gitOverBoth({
+      localHead: COMMIT_A,
+      remoteHead: COMMIT_A,
+      cloneFrom: await remoteTree(t, MANIFEST_B),
+      failing: { lsRemote: [SSH_URL] },
+    });
+
+    // act
+    await refreshCloneBySwap(swapArgs(swap, git.gitOps, { ...sshFirstPlans().plans, subject }));
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      `[git] Marketplace refresh failed with SSH for ${shown} (git ls-remote failed: ssh-auth, exit code 128), falling back to HTTPS`,
+    ]);
   });
-
-  // act
-  await refreshCloneBySwap(
-    swapArgs(swap, git.gitOps, { ...sshFirstPlans().plans, subject: "tools" }),
-  );
-
-  // assert
-  assert.deepStrictEqual(logged, [
-    "[git] Marketplace refresh failed with SSH for tools (git ls-remote failed: ssh-auth, exit code 128), falling back to HTTPS",
-  ]);
-});
+}
 
 test("D-SG-15, OQ-4: one freshness attempt that answers stale keeps nothing under the keep variable", async (t) => {
   // arrange

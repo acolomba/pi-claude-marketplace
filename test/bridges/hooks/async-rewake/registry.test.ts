@@ -3181,7 +3181,7 @@ test("D-PG10-10: spawns no shell-form async hook that names a plugin option and 
         "plugin plugin-lifecycle@catalog-lifecycle references ${user_config.*} in a shell-form " +
         "command. The substituted value would be re-parsed by the shell. Use exec form instead " +
         '\u2014 {"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or read ' +
-        "$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: /opt/hooks/scan " +
+        "$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: scan " +
         "${user_config.mode}",
     ]);
   } finally {

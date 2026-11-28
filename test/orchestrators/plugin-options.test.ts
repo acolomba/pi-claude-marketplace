@@ -231,7 +231,7 @@ test("D-PG10-23 / NFR-2: a scope whose state cannot be read keeps its names, is 
   assert.deepStrictEqual(
     consoleError.mock.calls.map(({ arguments: [line] }) => String(line)),
     [
-      `[env] plugin options: kept the user scope's variables: state.json at ${path.join(scope.userRoot, "state.json")} is not valid JSON: ${parseCause}`,
+      `[env] plugin options: kept the user scope's variables: state.json at state.json is not valid JSON: ${parseCause}`,
     ],
   );
 });

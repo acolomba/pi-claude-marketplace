@@ -6660,7 +6660,7 @@ test("WR-07 / LAYER-07: a clone a failure arm cannot remove goes to the debug lo
       // assert
       assert.equal(outcome.status, "failed");
       assert.deepStrictEqual(logged, [
-        `[hooks] install saved no state; failed to clean up marketplace final clone ${cloneDir} at ${cloneDir}: ${await removalFailure(cloneDir)}`,
+        `[hooks] install saved no state; failed to clean up marketplace final clone ${path.basename(cloneDir)} at ${path.basename(cloneDir)}: ${(await removalFailure(cloneDir)).replaceAll(cloneDir, path.basename(cloneDir))}`,
       ]);
     } finally {
       await chmod(lockedDir, 0o755);
@@ -18789,7 +18789,7 @@ test("WLIF-01: an install succeeds unchanged when the staging sweep throws", asy
       ]);
       assert.equal(await readFile(locations.workflowsStagingDir, "utf8"), "not a directory");
       assert.deepStrictEqual(logged, [
-        `[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${locations.workflowsStagingDir}'`,
+        "[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir 'workflows-staging'",
       ]);
     } finally {
       await rm(cwd, { force: true, recursive: true });
@@ -18842,7 +18842,7 @@ test("WLIF-01: install debug-logs a leak when the staging sweep cannot remove an
         { message: "● mp [project]\n  ● hello v0.0.1 (installed)\n\n/reload to pick up changes" },
       ]);
       assert.deepStrictEqual(logged, [
-        `[hooks] install: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir '${abandoned}'`,
+        "[hooks] install: workflows staging GC left 1 tree(s) for hello@mp: abandoned: EACCES: permission denied, rmdir 'abandoned'",
       ]);
     } finally {
       await rm(cwd, { force: true, recursive: true });
