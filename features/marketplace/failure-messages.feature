@@ -21,3 +21,22 @@ Feature: Marketplace failure messages
     Then the git host receives these requests:
       | method | path                                                                       | status |
       | GET    | /acme/tools.git?private_token=token-word/info/refs&service=git-upload-pack | 404    |
+
+  Scenario: With the debug log on, a failed marketplace add logs the git command that failed and no secret of its URL
+    Given the marketplace "tools" is published as a url source
+    Given the git host answers 404 for the marketplace "tools"
+    Given pi runs with the environment variable "PI_CLAUDE_MARKETPLACE_DEBUG" set to "1"
+    When the user runs "/claude:plugin marketplace add https://alice:pw-word@{git host}/acme/tools.git?private_token=token-word --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                                                    | scope   | status | reasons        |
+      | https://***@{git host}/acme/tools.git?private_token=*** | project | failed | source missing |
+    Then pi's debug log holds these git lines:
+      | line                                                                 |
+      | [git] git clone --depth failed (repository-not-found, exit code 128) |
+    Then pi's debug log does not contain "pw-word"
+    Then pi's debug log does not contain "token-word"

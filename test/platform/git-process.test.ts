@@ -1464,6 +1464,50 @@ describe("createGitProcess", () => {
     );
   });
 
+  test("D-SG-33, AUTH-09: logs one line naming the operation, the kind, and the exit code of a failed run, and no operand", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { git, control, started } = createFakeGit();
+
+    // act
+    const pending = git.run({
+      subcommand: "clone",
+      options: ["--depth", "1"],
+      operands: ["https://alice:pw-word@example.test/a.git", "/work/clone"],
+      lane: "local",
+      timeoutMs: 5_000,
+    });
+    await started;
+    control.writeStderr("fatal: transport 'ext' not allowed\n");
+    control.close(128);
+
+    // assert
+    await assert.rejects(pending, GitCommandError);
+    assert.deepStrictEqual(logged, [
+      "[git] git clone --depth failed (protocol-refused, exit code 128)",
+    ]);
+  });
+
+  test("D-SG-33: logs exit code none for a failed run that has no exit code", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const logged = captureDebugLog(t);
+    const { git, started } = createFakeGit();
+
+    // act
+    const pending = git.run({ ...VERSION, timeoutMs: 50 });
+    await started;
+    t.mock.timers.tick(50);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+
+    // assert
+    await assert.rejects(pending, GitCommandError);
+    assert.deepStrictEqual(logged, [
+      "[git] git version --build-options failed (timeout, exit code none)",
+    ]);
+  });
+
   test("D-SG-06: logs the git version once after a git-too-old failure", async (t) => {
     // arrange
     const logged = captureDebugLog(t);
@@ -1488,7 +1532,10 @@ describe("createGitProcess", () => {
         stderr: "error: unknown option `no-such-flag'\n",
       }),
     );
-    assert.deepStrictEqual(logged, ["[git] git version: git version 2.17.1"]);
+    assert.deepStrictEqual(logged, [
+      "[git] git version --build-options failed (git-too-old, exit code 129)",
+      "[git] git version: git version 2.17.1",
+    ]);
     assert.deepStrictEqual(
       launches.all().map(([command, args, options]) => [command, args, options.cwd]),
       [
@@ -1521,7 +1568,10 @@ describe("createGitProcess", () => {
         stderr: "",
       }),
     );
-    assert.deepStrictEqual(logged, ["[git] git version: unreadable"]);
+    assert.deepStrictEqual(logged, [
+      "[git] git version --build-options failed (git-too-old, exit code 129)",
+      "[git] git version: unreadable",
+    ]);
     assert.strictEqual(launches.all().length, 2);
   });
 
@@ -1557,7 +1607,10 @@ describe("createGitProcess", () => {
     assert.deepStrictEqual(
       [logged, signalsAfterCancel],
       [
-        ["[git] git version: unreadable"],
+        [
+          "[git] git version --build-options failed (git-too-old, exit code 129)",
+          "[git] git version: unreadable",
+        ],
         [
           [4243, "SIGTERM"],
           [4243, "SIGKILL"],

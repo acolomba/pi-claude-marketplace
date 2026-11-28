@@ -91,10 +91,14 @@
 // the request's remote URL that carry a secret first, then the credential
 // rules, then the absolute paths, line by line (`redactShownText` in
 // shared/redact-absolute-paths.ts). A network request's error also carries
-// its remote. The error's message never holds stderr. D-SG-06: after a
-// `git-too-old` failure, and only then, the
-// module reads `git version` once and writes it to the debug log. The read
-// stops when the request's signal aborts.
+// its remote. The error's message never holds stderr. D-SG-33: every failed
+// run writes one `[git]` line to the debug log, `git <operation> failed
+// (<kind>, exit code <code or none>)`, which names the subcommand and its
+// first Pi-owned word and never an operand (AUTH-09), so a remedy for a git
+// that printed nothing can point at the debug log. D-SG-06: after a
+// `git-too-old` failure, and only then, the module also reads `git version`
+// once and writes it to the debug log. The read stops when the request's
+// signal aborts.
 //
 // SG-SSH-02: the module also runs the user's own ssh for a closed set of
 // launches, each with a fixed argument list and a fixed limit. ssh is looked
@@ -1266,8 +1270,14 @@ export function createGitProcess(options: GitProcessOptions): SystemGitProcess {
     try {
       return await execute(request, host.now() + request.timeoutMs);
     } catch (error: unknown) {
-      if (error instanceof GitCommandError && error.kind === "git-too-old") {
-        await logGitVersion(request.signal);
+      if (error instanceof GitCommandError) {
+        hookDebugLog(
+          `git ${error.operation} failed (${error.kind}, exit code ${error.exitCode ?? "none"})`,
+          "git",
+        );
+        if (error.kind === "git-too-old") {
+          await logGitVersion(request.signal);
+        }
       }
 
       throw error;

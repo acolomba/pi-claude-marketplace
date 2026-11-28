@@ -90,6 +90,13 @@ export interface RpcGitEnvironment {
    */
   readonly CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE?: string;
   /**
+   * The switch that turns the extension's debug log on, set only for a
+   * scenario's own Pi (OBS-01, D-SG-35). The run's shared Pi never sets it,
+   * so its stderr holds no debug line, and the shell's value never reaches a
+   * child.
+   */
+  readonly PI_CLAUDE_MARKETPLACE_DEBUG?: string;
+  /**
    * Upstream's switch that clones every GitHub address over https with no
    * ssh probe, set only for a scenario's own Pi (D-SG-24). The run's shared
    * Pi never sets it, so its GitHub clones keep the probe's order, and the
@@ -264,6 +271,7 @@ const OPTIONAL_GIT_VARIABLES = [
   "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS",
   "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS",
   "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE",
+  "PI_CLAUDE_MARKETPLACE_DEBUG",
   "CLAUDE_CODE_PLUGIN_PREFER_HTTPS",
   "CLAUDE_CODE_REMOTE",
   "GIT_SSH_COMMAND",

@@ -262,13 +262,14 @@ const SESSION_KEEPING_RESTARTS: ReadonlySet<PiRestart> = new Set([
 ]);
 
 // The variables a scenario's own Pi may add to the run's git environment, one
-// at a time: the background update delay (D-PL8-09) and upstream's git
-// timeout and keep variables (D-SG-13, D-SG-15).
+// at a time: the background update delay (D-PL8-09), upstream's git timeout
+// and keep variables (D-SG-13, D-SG-15), and the debug log switch (OBS-01).
 type ScenarioPiVariables = Pick<
   RpcGitEnvironment,
   | "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS"
   | "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS"
   | "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE"
+  | "PI_CLAUDE_MARKETPLACE_DEBUG"
 >;
 
 /**
@@ -401,12 +402,20 @@ export class ScenarioWorld extends World {
   /**
    * The Pi the steps talk to: the one this scenario started with
    * `usePiWithGitHubBaseUrl()`, `usePiWithBackgroundUpdateDelay()`,
-   * `usePiWithGitTimeout()`, `usePiWithKeptMarketplaceOnFailure()`, or
-   * `usePiWithProfile()`, or else the run's Pi, which the `Before()` hook has
-   * reset for this scenario.
+   * `usePiWithGitTimeout()`, `usePiWithKeptMarketplaceOnFailure()`,
+   * `usePiWithDebugLog()`, or `usePiWithProfile()`, or else the run's Pi,
+   * which the `Before()` hook has reset for this scenario.
    */
   get pi(): PiProcess {
     return this.scenarioPi ?? currentRun().pi;
+  }
+
+  /**
+   * Whether this scenario started a Pi of its own, so a step that reads what
+   * only such a Pi can hold, such as the debug log, can refuse the run's Pi.
+   */
+  get ownPiStarted(): boolean {
+    return this.scenarioPi !== undefined;
   }
 
   /**
@@ -882,6 +891,17 @@ export class ScenarioWorld extends World {
    */
   async usePiWithKeptMarketplaceOnFailure(value: string): Promise<void> {
     await this.usePiWithVariables({ CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: value });
+  }
+
+  /**
+   * Starts a second Pi as `usePiWithBackgroundUpdateDelay()` does, except
+   * that `PI_CLAUDE_MARKETPLACE_DEBUG` is `value`, so the extension writes its
+   * debug log to that Pi's stderr (OBS-01). The run's Pi never sets that
+   * variable, so its stderr holds no debug line, and no other scenario's Pi
+   * sees the value.
+   */
+  async usePiWithDebugLog(value: string): Promise<void> {
+    await this.usePiWithVariables({ PI_CLAUDE_MARKETPLACE_DEBUG: value });
   }
 
   /**

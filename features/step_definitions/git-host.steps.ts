@@ -258,6 +258,17 @@ Given(
   },
 );
 
+// OBS-01, D-SG-35: the variable turns the extension's debug log on, and every
+// line it writes goes through the one redaction pass. A Pi reads its
+// environment when it starts, and the run's Pi never sets the variable, so
+// the scenario gets a Pi of its own.
+Given(
+  'pi runs with the environment variable "PI_CLAUDE_MARKETPLACE_DEBUG" set to {string}',
+  async function (this: ScenarioWorld, value: string): Promise<void> {
+    await this.usePiWithDebugLog(value);
+  },
+);
+
 // SG-PRC-06: the scenario's Pi finds no git on its PATH. Pi itself starts
 // from an absolute Node path, so only the extension's git lookup changes.
 Given("pi runs without git on its path", async function (this: ScenarioWorld): Promise<void> {

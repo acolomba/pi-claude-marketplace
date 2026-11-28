@@ -18,6 +18,8 @@
  * (`tally.success.count` is `tally success count`), and a list joins with
  * commas. A field the result leaves out is a field the table leaves out.
  *
+ * Two steps read the debug log of a Pi the scenario started with it on.
+ *
  * A typed command may carry the run tokens, and result cells carry them too:
  * `{home}` for the sandbox HOME (D-03) and `{scenario time}` for a
  * `last updated at` inside the scenario's window (D-05).
@@ -309,6 +311,39 @@ Then("the command result contains no absolute sandbox path", function (this: Sce
 Then("no result of the command contains {string}", function (this: ScenarioWorld, secret: string) {
   const rendered = JSON.stringify(this.resultsOf("command"));
   assert.strictEqual(rendered.includes(secret), false, `a command result contains ${secret}`);
+});
+
+// D-SG-35, SG-ERR-02: the extension's debug log is the stderr of a Pi this
+// scenario started with the debug log on, which also holds Pi's own lines.
+// The run's shared Pi never has the debug log on, so reading it would prove
+// nothing.
+function ownPiDebugLog(world: ScenarioWorld): string {
+  if (!world.ownPiStarted) {
+    assert.fail("the debug log is read only from a Pi this scenario started");
+  }
+
+  return world.pi.stderrText;
+}
+
+// D-SG-33, D-SG-35: the step states every `[git]` line of the debug log, in
+// the order Pi wrote them, and no line of another tag. It reads Pi's stderr,
+// not a result, so it leaves the results uncompared.
+Then("pi's debug log holds these git lines:", function (this: ScenarioWorld, table: DataTable) {
+  const lines = ownPiDebugLog(this)
+    .split("\n")
+    .filter((line) => line.startsWith("[git] "))
+    .map((line) => [projectTokens("text", line, this.tokens)]);
+  assert.deepStrictEqual([["line"], ...lines], table.raw());
+});
+
+// D-SG-35, SG-ERR-02: a secret appears in no line of the debug log. The step
+// first requires one tagged debug line, so it cannot pass over an empty log
+// (D-07-03).
+Then("pi's debug log does not contain {string}", function (this: ScenarioWorld, secret: string) {
+  const log = ownPiDebugLog(this);
+  const tagged = log.split("\n").filter((line) => /^\[[\w-]+\] /.test(line));
+  assert.notDeepStrictEqual(tagged, [], "the debug log holds no tagged line");
+  assert.strictEqual(log.includes(secret), false, `the debug log contains ${secret}`);
 });
 
 // The notice of the command the terminal ran, read from the current screen
