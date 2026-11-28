@@ -88,6 +88,10 @@ import type { GitFailure } from "../../../extensions/pi-claude-marketplace/share
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
+// D-SG-33: the HTTPS auth remedy of a failure whose error names no remote.
+const HTTPS_AUTH_REMEDY =
+  "HTTPS authentication with this host failed. Make sure that your git credential helper has a valid credential for this host, for example a personal access token. This extension runs git with terminal prompts and askpass programs turned off, and it tells credential helpers not to prompt. So git can only use a credential that it gets without asking you, such as one that a credential helper already holds.";
+
 const VALID_MANIFEST_JSON = JSON.stringify({
   name: "valid-marketplace",
   owner: { name: "Phase 4 Tests" },
@@ -536,8 +540,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          'Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> git ls-remote failed: https-auth, exit code 128',
+        message: `Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> git ls-remote failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
         severity: "error",
       },
     ]);
@@ -1911,8 +1914,7 @@ test("GAUTH-04, D-SG-31: a cancelled credential lookup on a url host renders {au
     assert.deepStrictEqual(state.lsRemoteCalls[0]?.auth, { host: "gitlab.example.com" });
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          'Some operations have failed.\n\n⊘ urlmp-private [project] (failed)\n  ⊘ urlmp-private (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-private". -> git ls-remote failed: https-auth, exit code 128',
+        message: `Some operations have failed.\n\n⊘ urlmp-private [project] (failed)\n  ⊘ urlmp-private (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-private". -> git ls-remote failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
         severity: "error",
       },
     ]);
@@ -1943,8 +1945,7 @@ test("GAUTH-04, D-SG-31: a url host that refused the credential git sent renders
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          'Some operations have failed.\n\n⊘ urlmp-401 [project] (failed)\n  ⊘ urlmp-401 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-401". -> git ls-remote failed: https-auth, exit code 128',
+        message: `Some operations have failed.\n\n⊘ urlmp-401 [project] (failed)\n  ⊘ urlmp-401 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-401". -> git ls-remote failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
         severity: "error",
       },
     ]);
@@ -1976,8 +1977,7 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          'Some operations have failed.\n\n⊘ urlmp-chained [project] (failed)\n  ⊘ urlmp-chained (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-chained". -> git ls-remote failed: https-auth, exit code 128 -> helper exited 128',
+        message: `Some operations have failed.\n\n⊘ urlmp-chained [project] (failed)\n  ⊘ urlmp-chained (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-chained". -> git ls-remote failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY} -> helper exited 128`,
         severity: "error",
       },
     ]);
@@ -2010,8 +2010,7 @@ test("GAUTH-04, D-SG-31: a stored credential that a url host rejects renders {au
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          'Some operations have failed.\n\n⊘ urlmp-rejected [project] (failed)\n  ⊘ urlmp-rejected (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-rejected". -> git ls-remote failed: https-auth, exit code 128',
+        message: `Some operations have failed.\n\n⊘ urlmp-rejected [project] (failed)\n  ⊘ urlmp-rejected (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-rejected". -> git ls-remote failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY}`,
         severity: "error",
       },
     ]);
@@ -6110,7 +6109,7 @@ test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under th
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY} -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);
@@ -6177,7 +6176,7 @@ test("UPD-12 / GHB-01: a stored credential that the override host rejects shows 
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> ${HTTPS_AUTH_REMEDY} -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);

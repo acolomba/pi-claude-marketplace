@@ -16,19 +16,19 @@ Feature: Marketplace url source update
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
-      | tools            | project           | failed             | tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git ls-remote failed: <kind>, exit code 128 | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                                           | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git ls-remote failed: <kind>, exit code 128, git printed: <git output> | false           |
     Then the git host receives these requests:
       | method | path                                              | status   |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
 
     Examples:
-      | status | kind                 |
-      | 500    | network              |
-      | 502    | network              |
-      | 503    | network              |
-      | 404    | repository-not-found |
+      | status | kind                 | git output                                                                                          |
+      | 500    | network              | fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: 500 |
+      | 502    | network              | fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: 502 |
+      | 503    | network              | fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: 503 |
+      | 404    | repository-not-found | fatal: repository 'https://{git host}/acme/tools.git/' not found                                    |
 
   Scenario: A bare update continues past a url marketplace whose connection drops
     Given the marketplace "tools" is published as a url source
@@ -42,9 +42,9 @@ Feature: Marketplace url source update
       | cascade | error    | false        | Some operations have failed. | Marketplace update | 2              | 0              |                     |
       | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                           | cause truncated |
-      | tools            | project           | failed             |                     | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., git ls-remote failed: network, exit code 128 | false           |
-      | extras           | project           | skipped            | up-to-date          |       |       |        |                     |         |       |                  |                                                       |                 |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                               | cause truncated |
+      | tools            | project           | failed             |                     | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., git ls-remote failed: network, exit code 128, git printed: fatal: unable to access 'https://{git host}/acme/tools.git/': GnuTLS recv error (-110): The TLS connection was non-properly terminated. | false           |
+      | extras           | project           | skipped            | up-to-date          |       |       |        |                     |         |       |                  |                                                                                                                                                                                                                                           |                 |
 
   Scenario: Updating a url marketplace an earlier version recorded with a clone url ending in .json still fetches from its git host
     Given the marketplace "tools" is published as a url source
@@ -78,8 +78,8 @@ Feature: Marketplace url source update
       | needs reload | false                           |
       | summary      | Some operations need attention. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id    | name  | status  | reasons             | scope   | leaks | rollback partial | cause chain                                                                                                                                           | cause truncated | marketplace reasons |
-      | tools            | project           | skipped            | tools | tools | skipped | network unreachable | project |       |                  | Marketplace remote unreachable, keeping existing clone (CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE), git ls-remote failed: network, exit code 128 | false           | network unreachable |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status  | reasons             | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                                 | cause truncated | marketplace reasons |
+      | tools            | project           | skipped            | tools | tools | skipped | network unreachable | project |       |                  | Marketplace remote unreachable, keeping existing clone (CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE), git ls-remote failed: network, exit code 128, git printed: fatal: unable to access 'https://{git host}/acme/tools.git/': GnuTLS recv error (-110): The TLS connection was non-properly terminated. | false           | network unreachable |
     Then the git host receives these requests:
       | method | path                                              | status  |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
@@ -141,8 +141,8 @@ Feature: Marketplace url source update
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                                                         | cause truncated |
-      | tools            | project           | failed             | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., git ls-remote failed: network, exit code 128 | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                               | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., git ls-remote failed: network, exit code 128, git printed: fatal: unable to access 'https://{git host}/acme/tools.git/': GnuTLS recv error (-110): The TLS connection was non-properly terminated. | false           |
     Then the git host receives these requests:
       | method | path                                              | status  |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |

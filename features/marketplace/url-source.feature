@@ -248,8 +248,8 @@ Feature: Marketplace url source
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                     | cause truncated |
-      | https://{git host}/acme/tools.git | project           | failed             | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git clone --depth failed: network, exit code 128 | false           |
+      | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                      | cause truncated |
+      | https://{git host}/acme/tools.git | project           | failed             | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git clone --depth failed: network, exit code 128, git printed: Cloning into '{uuid}'...; fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: <status> | false           |
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status   |

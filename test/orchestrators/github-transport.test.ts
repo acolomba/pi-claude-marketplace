@@ -605,7 +605,7 @@ describe("cloneOverGitHubTransports", () => {
         assert.ok(error instanceof GitHubTransportsFailedError);
         assert.strictEqual(
           error.message,
-          "https refused\nThe retry over SSH failed too: ssh denied\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.",
+          "https refused\nThe retry over SSH failed too: ssh denied\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then run the command again.",
         );
         return true;
       },
