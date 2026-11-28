@@ -8,6 +8,7 @@
   - A token that the old sign-in stored keeps working, and the extension never deletes it. To remove it, run `printf 'protocol=https\nhost=github.com\nusername=x-access-token\n\n' | git credential reject`.
   - A GitLab token from the old sign-in expires after about two hours. Set up `glab auth setup-git`, Git Credential Manager, or an ssh key before then.
   - JSON and RPC output no longer has the `device-flow-prompt` kind, and `schemaVersion` stays 1.
+  - The background autoupdate now moves a git dependency with a version range to the newest release tag that the range allows, as `update` does.
 
 - `/claude:plugin reload` now reloads Pi, also over RPC, where Pi has no `/reload`, and plugin `SessionStart` hooks now behave more like Claude Code. (#332)
 
