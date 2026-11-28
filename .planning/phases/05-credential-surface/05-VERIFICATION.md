@@ -1,10 +1,19 @@
 ---
 phase: 05-credential-surface
-verified: 2026-11-28T00:00:00Z
-status: human_needed
+verified: 2026-11-28T04:07:13Z
+status: passed
 score: 9/9 must-haves verified
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: human_needed
+  previous_score: 9/9
+  previous_head: d5506af
+  reason: "ef91ed9 and eeb15e7 removed the constraint gate's tag-listing skip (D-SG-30) after the first verification"
+  gaps_closed:
+    - "Open question 05-REVIEW-FIX A IN-01 (the constraint gate skipped a git-source dependency's tag listing with no notification context) is settled by D-SG-30: the skip is removed"
+  gaps_remaining: []
+  regressions: []
 decision_coverage:
   honored: 3
   total: 3
@@ -105,6 +114,7 @@ covered_files:
   - "features/lib/pi-rpc.ts"
   - "features/lib/pi-tui.ts"
   - "features/lib/user-git-programs.ts"
+  - "features/marketplace/background-update.feature"
   - "features/marketplace/credentials.feature"
   - "features/marketplace/github-transport.feature"
   - "features/plugin/credentials.feature"
@@ -170,10 +180,12 @@ covered_files:
   - "test/orchestrators/plugin/install-outcome.test.ts"
   - "test/orchestrators/plugin/install.messaging.test.ts"
   - "test/orchestrators/plugin/marketplace-tag-probe.test.ts"
+  - "test/orchestrators/plugin/materialize-latest.test.ts"
   - "test/orchestrators/plugin/reinstall-flow.test.ts"
   - "test/orchestrators/plugin/update-constraint-gate.test.ts"
   - "test/orchestrators/plugin/update-flow.test.ts"
   - "test/orchestrators/plugin/update-preflight.test.ts"
+  - "test/orchestrators/plugin/update-swap.test.ts"
   - "test/platform/git-failure-kind.test.ts"
   - "test/platform/git-ops-fake.test.ts"
   - "test/platform/git-process.test.ts"
@@ -186,72 +198,88 @@ covered_files:
   - "test/shared/notification-resolve.test.ts"
   - "test/shared/notification-types.test.ts"
   - "test/shared/notification-wire.test.ts"
-covered_digest: "v4:sha256:868c010a2a303c267ed6097b77958c3bc3ddb0800637fe0cc1eddf742ecc3f8c"
+covered_digest: "v4:sha256:68ea55b1740750098840755bb6fdb97878445687922545bf3352ad31a325a3e5"
 ---
 
 # Phase 5: Credential Surface Verification Report
 
 **Phase Goal:** Git authenticates only through what the machine already holds, the extension keeps no git token of its own, Device Flow is removed or kept in the form discuss chose, and a user who stored a token through Device Flow keeps working with no action.
-**Verified:** 2026-11-28 (HEAD d5506af, branch features/system-git)
-**Status:** human_needed
-**Re-verification:** No. This is the first verification.
+**Verified:** 2026-11-28T04:07:13Z (HEAD eeb15e7 for the code; a8bd0cb, a REQUIREMENTS.md-only commit, landed during the run)
+**Status:** passed
+**Re-verification:** Yes. The first report (d29fa7c, HEAD d5506af, `human_needed`, 9/9) went stale when ef91ed9 and eeb15e7 removed the constraint gate's tag-listing skip at the user's request (D-SG-30).
 
-Discuss chose removal (D-SG-27), no runtime notice (D-SG-28), and documentation only for GitLab token expiry (D-SG-29). The code matches these choices.
+Discuss chose removal (D-SG-27), no runtime notice (D-SG-28), and documentation only for GitLab token expiry (D-SG-29). The code still matches these choices.
+
+## What Changed Since the First Verification
+
+| Commit | Files | Effect |
+| ------ | ----- | ------ |
+| ef91ed9 | 6 sources in `orchestrators/plugin/`, 6 unit tests, `features/marketplace/background-update.feature` | `UpdateConstraintOptions.listsSourceTags` is gone, so `probeGitStageOne` always calls `seam.probeDependencyTags`. The notification context that `materialize-latest.ts` (`preflightNotification`), `update-swap.ts` (`ThreePhaseArgsBase.preflightNotification`), `dependency-move.ts` (`DependencyMoveContext.notification`), `dependency-bindings.ts` (`callerFields`), and `update-preflight.ts` (`PreparePluginUpdateOptions.notification`) threaded only to set the flag is gone. `grep -rn "listsSourceTags\|preflightNotification" extensions test features` finds nothing. |
+| eeb15e7 | `.planning/PROJECT.md`, `CHANGELOG.md` | D-SG-30 row (line 2629) and one `[Unreleased]` sub-bullet |
+
+The only run whose behavior changes is a cascade-mode preflight whose caller gave no notification context, which is the autoupdate cascade (foreground `marketplace update` cascade and the background pass). Before ef91ed9 it admitted the range unpinned and took the branch head. Now it lists the dependency's tags as the foreground `update` does. Dependency moves always carried the context (`callerFields` set it unconditionally), so they listed tags before and still do.
+
+`apply` is unaffected. Its tag-free behavior (D-23) comes from the materialization policy, not from the notification context: `RECONCILE_MOVE_MATERIALIZATION` and the converge policy in `update-flow.ts:1674` set `searchReleaseTags: false`, and `selectConstraintGate` (`update-preflight.ts:1199-1206`) then picks the tag-free `evaluateCatalogConstraint`. So `apply` still takes what `pending` previewed.
 
 ## Goal Achievement
 
 ### Observable Truths
 
+Re-verification focus: truths 1, 2, and 3 touch the changed path (SG-AUTH-01 auth binding of the new listing, SG-AUTH-02 background pass with no input, SG-AUTH-03 the stored credential in background update). Truths 4 to 9 got a regression check: their files are unchanged since d29fa7c (`git diff --stat d29fa7c HEAD -- eslint.config.js rule-packs .fallowrc.json extensions/pi-claude-marketplace/platform extensions/pi-claude-marketplace/orchestrators/auth-host.ts README.md README.es.md` is empty) and the deleted files are still absent.
+
 | # | Truth | Status | Evidence |
 | - | ----- | ------ | -------- |
-| 1 | SC1 / SG-AUTH-01: a machine with an ssh key or agent, or a git credential helper, adds a private marketplace and installs from it with no prompt. With only `GITHUB_TOKEN`/`GH_TOKEN` set and no helper, the private clone fails as an auth failure, and the token is in no URL, header, or argument. | VERIFIED | `features/marketplace/credentials.feature`: the stored-credential add and update scenarios, and two token-variable scenarios (url and github source) that check the results, the git host's request paths and headers, the ssh launches, and `pi routes no github request`. `features/plugin/credentials.feature`: stored-credential install and update, and a token-variable install. The ssh half: `features/marketplace/github-transport.feature:6` and `ssh-source.feature`. `test/architecture/no-token-variable-read.test.ts`: no extension module names the three token variables, and the scan visits modules that read `process.env`. The token-variable Given asserts that Pi received the variables (B WR-02). |
-| 2 | SC2 / SG-AUTH-02: Device Flow is gone and no command shows a device code. An autoapply load and the background autoupdate pass never wait for input. PROJECT.md restates the AAP, autoapply, and D-PL8-12 rules. | VERIFIED | The modules are deleted (see truth 4). The no-credential add and install fail as `authentication required` with one `cascade` result. The autoapply reload scenario and two background-update scenarios finish with no notice and no prompt. The `tui session reports no notice` oracle now sees error and warning notices (CR-01, with a discrimination check). PROJECT.md: AAP-D1 (line 2098), D-PL8-12 (line 2237), and NFR-5 (line 1958) carry the 2026-11-27 D-SG-27 amendments. |
-| 3 | SC3 / SG-AUTH-03: a token stored through Device Flow keeps working over HTTPS with no action, and the extension deletes no stored credential. The notice follows Q5 (none, D-SG-28). Cucumber pins each. | VERIFIED | `x-access-token` store entries work for marketplace add, marketplace update, the background update, plugin install, and plugin update. Each scenario then checks that the store still holds the entry. "A failed add that never sends the stored GitHub credential leaves it in the credential store." "...leaves the erase to git (SG-AUTH-03)" checks that the recording helper sees exactly `get` then `erase`. A planted `git credential reject` failed it (05-REVIEW-FIX B WR-01). `GitSubcommand` has no `credential` member (`platform/git-process.ts:137-147`). No runtime notice exists, as D-SG-28 decided. |
-| 4 | The D-SG-27 deletion list is gone: `domain/github-auth.ts`, `domain/auth-registry.ts`, `platform/git-credential.ts`, `platform/git-one-shot-credential.ts`, the `credentialOps`/`deviceFlowHttp`/`authMemo` threading, `features/marketplace/device-flow.feature`, and `features/lib/github-device-flow/` | VERIFIED | `ls` finds none of these files. `git grep -i "device.flow\|deviceflow\|device_code\|user_code"` outside `.planning` and CHANGELOG finds only historical rows in the cucumber skill's layout record and one sentence in `docs/json-output.md`. `grep` finds no `authMemo`, `credentialOps`, or `deviceFlowHttp` under `extensions/`. |
-| 5 | The gate config shrinks with the deletions: `fetch-chokepoint` exempts only `platform/hosted-manifest-fetch.ts`, `GIT_PROCESS_IMPORTERS` is `platform/git.ts` alone, and `NETWORK_SEAMS` has 16 entries without auth-host | VERIFIED | `rule-packs/architecture.json` fetch-chokepoint `exclude` has one file. `eslint.config.js:43` lists one importer. The `NETWORK_SEAMS` array lists 16 files, and `auth-host` appears in none of `eslint.config.js`, `.fallowrc.json`, or the rule pack. |
-| 6 | The `device-flow-prompt` kind leaves the types, wire, and schema, and `schemaVersion` stays 1 | VERIFIED | No match in `extensions/` or `schema/claude-plugin.schema.json`. `test/architecture/wire-schema.test.ts` passes. `docs/json-output.md:166` states the version rule. |
-| 7 | git runs non-interactively and once: D-SG-05's environment is unchanged, there is no sign-in retry, and a refused credential maps to `StoredCredentialRejectedError` for the bundle's host only | VERIFIED | `platform/git-process.ts:323,668-670` (`credential.interactive=false`, `GIT_TERMINAL_PROMPT=0`, empty `GIT_ASKPASS`, `GCM_INTERACTIVE=never`). `platform/git.ts:349-370` `runWithAuthBundle` runs the request once. `test/platform/git.test.ts`, `test/platform/git-process.test.ts`, and `test/architecture/hermetic-git-environment.test.ts` pass. |
-| 8 | `orchestrators/auth-host.ts` is one pure host binding, `authBundleFor`, plus `NO_STORED_CREDENTIAL_CAUSE`. The bundle is `{ host }`. The module stays in the credential-leak scan. | VERIFIED | Read in full: it does no I/O and has no `platform/git*` import. `test/orchestrators/auth-host.test.ts` and `test/architecture/no-credential-leak.test.ts` pass (auth-host and update-flow were added back to `CREDENTIAL_LEAK_TARGETS`, A WR-02). |
-| 9 | The records and docs: PROJECT.md has D-SG-27..29 and dated amendments (D-SG-14, D-BG-1101/1102, D-PL9-11, D-1-01, D-79-03, D-UTR-05, AUTH-D02 and others). README.md and README.es.md match. CHANGELOG has one `[Unreleased]` entry. | VERIFIED | `.planning/PROJECT.md:2626-2628` and the amendment lines. `README.md:42-70` and `README.es.md:42-70` have the same structure and commands (`gh auth setup-git`, GCM, `glab auth setup-git`, `git credential reject` with `username=x-access-token` / `oauth2`). CHANGELOG.md line 5 has one entry with four sub-bullets. |
+| 1 | SC1 / SG-AUTH-01: a machine with an ssh key or agent, or a git credential helper, adds a private marketplace and installs from it with no prompt. With only `GITHUB_TOKEN`/`GH_TOKEN` set and no helper, the private clone fails as an auth failure, and the token is in no URL, header, or argument. | VERIFIED | Unchanged scenarios pass on HEAD: `features/marketplace/credentials.feature` and `features/plugin/credentials.feature` (19 scenarios, in the run below). The tag listing that the background pass now runs goes through `probeDependencyTags` (`dependency-tag-probe.ts:180-195`), which binds `authBundleFor(cloneUrl, source.kind)` and calls `listRemoteTags`, which runs `runRemote` (`platform/git.ts:666-679`). That is the same host-bound path as every other remote read. No second credential path exists. `no-token-variable-read.test.ts` and `no-credential-leak.test.ts` pass. |
+| 2 | SC2 / SG-AUTH-02: Device Flow is gone and no command shows a device code. An autoapply load and the background autoupdate pass never wait for input. PROJECT.md restates the AAP, autoapply, and D-PL8-12 rules. | VERIFIED | The new background listing runs through `platform/git-process.ts`, which sets `credential.interactive=false` (line 323), `GIT_TERMINAL_PROMPT=0`, an empty `GIT_ASKPASS`, and `GCM_INTERACTIVE=never` (lines 668-670) on every git command. All 11 scenarios of `features/marketplace/background-update.feature` pass, including the two with no notice and no prompt and the new D-SG-30 scenario. AAP-D1, D-PL8-12, and NFR-5 (`PROJECT.md:1958`) keep their D-SG-27 amendments; eeb15e7 changed only line 2629 there. |
+| 3 | SC3 / SG-AUTH-03: a token stored through Device Flow keeps working over HTTPS with no action, and the extension deletes no stored credential. The notice follows Q5 (none, D-SG-28). Cucumber pins each. | VERIFIED | The `x-access-token` store scenarios (add, update, background update, plugin install, plugin update) and the "leaves the erase to git" scenario pass on HEAD. `GitSubcommand` still has no `credential` member, and ef91ed9 touched no `platform/` file. |
+| 4 | The D-SG-27 deletion list is gone: `domain/github-auth.ts`, `domain/auth-registry.ts`, `platform/git-credential.ts`, `platform/git-one-shot-credential.ts`, the `credentialOps`/`deviceFlowHttp`/`authMemo` threading, `features/marketplace/device-flow.feature`, and `features/lib/github-device-flow/` | VERIFIED | Regression check: `ls` finds none of the six paths, and `grep -rn "authMemo\|credentialOps\|deviceFlowHttp\|device-flow-prompt"` over `extensions/` and `schema/` finds nothing. |
+| 5 | The gate config shrinks with the deletions: `fetch-chokepoint` exempts only `platform/hosted-manifest-fetch.ts`, `GIT_PROCESS_IMPORTERS` is `platform/git.ts` alone, and `NETWORK_SEAMS` has 16 entries without auth-host | VERIFIED | Regression check: `eslint.config.js`, `.fallowrc.json`, and `rule-packs/` are unchanged since d29fa7c. `update-constraint-gate.ts` still reaches git only through the injected seam, and the orchestrator's static gate passed on eeb15e7. |
+| 6 | The `device-flow-prompt` kind leaves the types, wire, and schema, and `schemaVersion` stays 1 | VERIFIED | Regression check: no match in `extensions/` or `schema/`. No `shared/` or `schema/` file changed since d29fa7c. |
+| 7 | git runs non-interactively and once: D-SG-05's environment is unchanged, there is no sign-in retry, and a refused credential maps to `StoredCredentialRejectedError` for the bundle's host only | VERIFIED | Regression check: `platform/` is unchanged since d29fa7c. The env lines are as cited under truth 2. |
+| 8 | `orchestrators/auth-host.ts` is one pure host binding, `authBundleFor`, plus `NO_STORED_CREDENTIAL_CAUSE`. The bundle is `{ host }`. The module stays in the credential-leak scan. | VERIFIED | Regression check: the file is unchanged since d29fa7c. `test/orchestrators/auth-host.test.ts` and `test/architecture/no-credential-leak.test.ts` pass on HEAD. |
+| 9 | The records and docs: PROJECT.md has D-SG-27..29 and dated amendments. README.md and README.es.md match. CHANGELOG has one `[Unreleased]` entry. | VERIFIED | D-SG-27..29 are unchanged at `PROJECT.md:2626-2628`, and D-SG-30 follows at line 2629. The READMEs are unchanged. CHANGELOG still has one `[Unreleased]` entry for this change set: eeb15e7 added a fifth sub-bullet to it and made no second entry. |
 
 **Score:** 9/9 truths verified. None is present but behavior-unverified.
+
+### NFR-5 as Amended
+
+The background pass now lists a constrained git-source dependency's tags. NFR-5 (`PROJECT.md:1958`) allows this on three grounds. (1) D-03-03: "Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network." (2) D-PL8-01: "The background autoupdate pass runs `marketplace update`'s code ... so it may use the network as that command does, and git runs non-interactively with what the machine holds (D-PL8-01, D-PL8-12, D-SG-27)." (3) UPD-DEP-D1 says the autoupdate cascade runs install's cascade with its "constraint resolution, tag reads". The path arm already ran `ls-remote --tags` of the marketplace remote in the same run (D-SG-09). The read-only verbs (`list`, `info`, `uninstall`, `marketplace remove`, and a load without autoapply) do not reach `preparePluginUpdate`, so the change adds no network to them. `apply` stays tag-free through its policy, as shown above. D-SG-30 records the decision with an ID, as the upstream-parity constraint requires. It is a move toward parity: Claude Code and the foreground `update` list the tags in every run.
 
 ### Required Artifacts
 
 | Artifact | Expected | Status | Details |
 | -------- | -------- | ------ | ------- |
-| `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` | Pure host binding | VERIFIED | 38 references to `authBundleFor` across the extension |
-| `extensions/pi-claude-marketplace/platform/git.ts` | Single-run auth mapping | VERIFIED | `runWithAuthBundle` |
-| `features/marketplace/credentials.feature` | SG-AUTH-01/02/03 pins | VERIFIED | 14 scenarios, all pass |
-| `features/plugin/credentials.feature` | SG-AUTH-01/03 pins for plugins | VERIFIED | 5 scenarios, all pass |
-| `test/architecture/no-token-variable-read.test.ts` | Token-variable scan | VERIFIED | 2 cases pass |
-| `features/lib/github-redirect/` | Renamed harness, one route | VERIFIED | Used by every routed credentials scenario |
-| Deleted modules (4 source, the feature, and the stand-in) | Absent | VERIFIED | Missing as intended |
+| `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` | Pure host binding | VERIFIED | Unchanged. The new listing uses it through `probeDependencyTags`. |
+| `extensions/pi-claude-marketplace/platform/git.ts` | Single-run auth mapping | VERIFIED | Unchanged. `listRemoteTags` goes through `runRemote`. |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts` | Git stage one lists tags in every run (D-SG-30) | VERIFIED | `probeGitStageOne` has no early return. The header comment cites D-SG-09 and D-SG-30. |
+| `features/marketplace/background-update.feature` | D-SG-30 behavioral pin | VERIFIED | New scenario at line 90. It passes on HEAD and fails on the pre-fix source (see spot-checks). |
+| `features/marketplace/credentials.feature` | SG-AUTH-01/02/03 pins | VERIFIED | 14 scenarios pass |
+| `features/plugin/credentials.feature` | SG-AUTH-01/03 pins for plugins | VERIFIED | 5 scenarios pass |
+| `test/architecture/no-token-variable-read.test.ts` | Token-variable scan | VERIFIED | Passes |
+| Deleted modules (4 source, the feature, and the stand-in) | Absent | VERIFIED | Still missing |
 
 ### Key Link Verification
 
 | From | To | Via | Status | Details |
 | ---- | -- | --- | ------ | ------- |
-| marketplace add/update, PUP-2 sync, plugin probes, tag probes | `authBundleFor` | `canonicalCloneUrl(source)` | WIRED | Per 05-REVIEW part A, confirmed by grep |
-| `platform/git.ts` | `platform/git-process.ts` | sole importer | WIRED | `GIT_PROCESS_IMPORTERS` |
-| github-redirect harness | git host | CONNECT github.com:443 | WIRED | Each scenario's `pi routes these github requests` table |
+| marketplace add/update, PUP-2 sync, plugin probes, tag probes | `authBundleFor` | `canonicalCloneUrl(source)` | WIRED | Unchanged. `dependency-tag-probe.ts:186` |
+| `update-constraint-gate.ts` `probeGitStageOne` | `dependency-tag-probe.ts` `probeDependencyTags` | `UpdateConstraintSeam.probeDependencyTags` | WIRED | Now unconditional. The unit case "D-SG-30: a run with no notification context lists the git source's tags" asserts that the probe is called once with the folded range. |
+| `update-preflight.ts` `selectConstraintGate` | `evaluateUpdateConstraint` / `evaluateCatalogConstraint` | `policy.searchReleaseTags` | WIRED | Keeps `apply` tag-free (D-23) without the removed context |
+| `platform/git.ts` | `platform/git-process.ts` | sole importer | WIRED | `GIT_PROCESS_IMPORTERS` is unchanged |
 
 ### Data-Flow Trace (Level 4)
 
-Not applicable. The phase renders no dynamic UI data. The auth bundle is derived from the clone address with no I/O.
+Not applicable. The phase renders no dynamic UI data. The auth bundle comes from the clone address with no I/O.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | -------- | ------- | ------ | ------ |
-| Credentials pins on HEAD (adapter) | `node scripts/cucumber.mjs --profile adapter features/marketplace/credentials.feature features/plugin/credentials.feature` | 19 scenarios, 311 steps passed | PASS |
-| Review-fix scenarios (WR-01 refresh hint, CR-01 oracle) | `node scripts/cucumber.mjs --profile adapter features/marketplace/github-refresh.feature features/marketplace/background-update.feature` | 16 scenarios, 230 steps passed | PASS |
-| Token scan, leak scan, auth-host, marketplace shared, hermetic git env, git, git-process | `node --import scripts/isolated-pi-home.mjs --test <7 files>` (`GIT_CONFIG_*` unset) | 613/613 pass | PASS |
-| Wire schema, tui-notices oracle, https git host, constraint gate, marketplace tag probe | `node --import scripts/isolated-pi-home.mjs --test <5 files>` | 83/83 pass | PASS |
+| Credentials and background-update pins on HEAD (adapter) | `node scripts/cucumber.mjs --profile adapter features/marketplace/background-update.feature features/marketplace/credentials.feature features/plugin/credentials.feature` (`node_modules/.bin` on PATH) | 30 scenarios, 481 steps passed | PASS |
+| The new D-SG-30 scenario fails without the fix | A scratch worktree at HEAD with `orchestrators/plugin/` checked out from `ef91ed9^`: `node scripts/cucumber.mjs --profile adapter features/marketplace/background-update.feature:90` | 16 steps: 14 passed, 1 failed (`Then the tui session reports the notice "Plugin updated: lib ..."`), 1 skipped. Worktree removed afterwards. | PASS (fails as intended) |
+| Changed units, plus the auth, leak, token, and tag-probe tests | `node --import "$PWD/scripts/isolated-pi-home.mjs" --test` over update-constraint-gate, update-preflight, materialize-latest, update-swap, dependency-move, dependency-bindings, no-token-variable-read, no-credential-leak, auth-host, dependency-tag-probe (`GIT_CONFIG_COUNT` unset, `/opt/pi-claude-marketplace/bin` on PATH) | 751/751 pass | PASS |
 
-The first unit run left out `--import scripts/isolated-pi-home.mjs`. Two D-SG-18/SG-SSH-05 cases in `shared.test.ts` then failed, because the refusing ssh stand-in was not on PATH. The sandbox has no `ssh` binary, so no real ssh ran. With the import, as the npm scripts run them, they pass.
-
-The orchestrator's gate on 465d1c2 is recorded and was not re-run here: static, unpaired, integration, and direct coverage passed; adapter 2418/2423, where the 5 failures are the known `fd` Glob baseline in `features/hook/tool-use.feature`; builtin 261/261.
+The orchestrator ran the gate on eeb15e7, and this run did not repeat it. Static, unpaired, integration, and direct coverage passed. The adapter profile passed 2422/2427 scenarios. The 5 failures are the known `fd` Glob baseline in `features/hook/tool-use.feature:296,355,443,1696,1834`, and no Phase 5 or D-SG-30 file touches them. The builtin profile passed 261/261.
 
 ### Probe Execution
 
@@ -261,30 +289,35 @@ Not applicable. The phase declares no `scripts/*/tests/probe-*.sh`.
 
 | Requirement | Source Plan | Description | Status | Evidence |
 | ----------- | ----------- | ----------- | ------ | -------- |
-| SG-AUTH-01 | 05-01, 05-06, 05-08..05-11 | git auth only through what the machine holds, and no token variable is read | SATISFIED | Truths 1, 4, 7, 8 |
-| SG-AUTH-02 | 05-01..05-07, 05-13 | Device Flow removed, and the AAP/autoapply/D-PL8-12 rules restated | SATISFIED | Truths 2, 4, 5, 6, 9 |
+| SG-AUTH-01 | 05-01, 05-06, 05-08..05-11 | git auth only through what the machine holds, and no token variable is read | SATISFIED | Truths 1, 4, 7, 8. The new listing binds the same host bundle. |
+| SG-AUTH-02 | 05-01..05-07, 05-13 | Device Flow removed, and the AAP/autoapply/D-PL8-12 rules restated | SATISFIED | Truths 2, 4, 5, 6, 9. The new listing in the background pass runs non-interactively. |
 | SG-AUTH-03 | 05-01, 05-10, 05-11, 05-13 | Stored token keeps working, nothing is deleted, notice per Q5 | SATISFIED | Truths 3, 7, 9 |
 
-No orphaned requirements. REQUIREMENTS.md still shows them as Pending. Updating that is the orchestrator's job.
+No orphaned requirements. a8bd0cb marked them complete in REQUIREMENTS.md during this run.
 
 ### Decision Coverage
 
-All trackable CONTEXT.md decisions are honored by shipped artifacts (3/3: D-SG-27, D-SG-28, D-SG-29).
+All trackable CONTEXT.md decisions are honored by shipped artifacts (3/3: D-SG-27, D-SG-28, D-SG-29). D-SG-30 is a later quick-task decision. It is not in `05-CONTEXT.md`, and it is checked above under "What Changed" and "NFR-5 as Amended".
+
+### Advisory (New Scope, Unevidenced)
+
+None.
 
 ### Anti-Patterns Found
 
-The phase diff (`9debd0d..HEAD`, 80 commits, 184 files) adds no `TBD`, `FIXME`, `XXX`, `TODO`, `HACK`, placeholder text, or skipped tests.
+The ef91ed9..eeb15e7 diff (15 files) adds no `TBD`, `FIXME`, `XXX`, `TODO`, `HACK`, placeholder text, or skipped tests.
 
 | File | Line | Pattern | Severity | Impact |
 | ---- | ---- | ------- | -------- | ------ |
-| `platform/process-run.ts` | - | `ProcessRequest.input` / stdin pipe is unused in production (review A IN-02, skipped) | Info | Dead path, no behavior |
-| `features/lib/github-redirect/connect-proxy.ts` | - | The CONNECT proxy does not record `Proxy-Authorization` (B IN-06, half skipped) | Info | Covered at code level: no extension module names a token variable, and git reads none |
-| `orchestrators/plugin/{materialize-latest,update-swap,dependency-move}.ts` | - | The notification context is threaded only for the `listsSourceTags` boolean (A WR-03 residual) | Info | Refactor left for later |
-| `orchestrators/plugin/update-constraint-gate.ts` | - | 05-09's truth said the marketplace tag listing runs "with no bundle". WR-03 now always passes `authBundleFor(...)`. | Info | The bundle does no I/O, and which runs list tags is unchanged, so the NFR-5 intent of the truth holds |
+| `platform/process-run.ts` | - | `ProcessRequest.input` / stdin pipe is unused in production (review A IN-02, skipped) | Info | Carried from the first report. Dead path, no behavior. |
+| `features/lib/github-redirect/connect-proxy.ts` | - | The CONNECT proxy does not record `Proxy-Authorization` (B IN-06, half skipped) | Info | Carried. Covered at code level. |
+| `orchestrators/plugin/update-constraint-gate.ts` | - | 05-09's truth said the marketplace tag listing runs "with no bundle". WR-03 now always passes `authBundleFor(...)`. | Info | Carried. The bundle does no I/O. |
 
-### Open Question (user decision, not a gap)
+The first report's "notification context threaded only for `listsSourceTags`" row (A WR-03 residual) is resolved: ef91ed9 removed that threading.
 
-05-REVIEW-FIX A IN-01: the constraint gate skips the tag listing of a git-source dependency when there is no notification context (the autoupdate cascade). The path arm still lists its marketplace's tags in the same run (D-SG-09). No recorded decision keeps the skip since D-SG-27. Two options: record it as a divergence with a decision ID, or remove it for parity. No phase-5 must-have depends on the answer.
+### Open Question
+
+None. The first report's open question (05-REVIEW-FIX A IN-01: keep the skip as a recorded divergence or remove it) is settled. The maintainer chose removal, D-SG-30 records it, and ef91ed9 implements it.
 
 ### Human Verification Required
 
@@ -298,7 +331,7 @@ The phase diff (`9debd0d..HEAD`, 80 commits, 184 files) adds no `TBD`, `FIXME`, 
 
 **Test:** On Windows, add a private GitHub marketplace and install a git-source plugin, with ssh configured and with ssh not configured.
 **Expected:** Claude Code's Windows transport order, with no wait for input.
-**Why human:** Linux-only CI and sandbox. The Windows path is unit-tested with fakes.
+**Why human:** CI and the sandbox run Linux only. The Windows path is unit-tested with fakes.
 
 ### 3. Real ssh against github.com
 
@@ -306,11 +339,15 @@ The phase diff (`9debd0d..HEAD`, 80 commits, 184 files) adds no `TBD`, `FIXME`, 
 **Expected:** The probe reports configured, the clone goes over ssh, and Pi asks for nothing.
 **Why human:** Tests never run real ssh.
 
+### Human Validation (2026-11-28)
+
+The maintainer chose to run the three checks above by hand on the pull request, as in Phase 4 (see "Human Validation" in `.planning/phases/04-ssh-sources-and-transport-selection/04-VERIFICATION.md`). They do not block the phase. The items stay in `human_verification` so the pull request carries them, and the status is `passed`.
+
 ### Gaps Summary
 
-None. Every roadmap success criterion and every merged plan truth is backed by code and passing tests on HEAD d5506af. The status is `human_needed` only because of the three deferred environment checks above.
+None. Every roadmap success criterion and every merged plan truth is backed by code and passing tests on HEAD eeb15e7. The D-SG-30 change keeps SG-AUTH-01..03: the new background tag listing uses the same host-bound bundle, git's non-interactive environment, and no credential write. It stays inside NFR-5 as amended by D-03-03, D-PL8-01, and D-SG-09. `apply` stays tag-free (D-23) through its policy. The three environment checks are left for the pull request by the maintainer's choice.
 
 ---
 
-_Verified: 2026-11-28_
+_Verified: 2026-11-28T04:07:13Z_
 _Verifier: Claude (gsd-verifier)_
