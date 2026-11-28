@@ -1278,17 +1278,19 @@ describe("createGitProcess", () => {
     assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git"]);
   });
 
-  for (const { label, code, stderr, failure } of [
+  for (const { label, code, stderr, shownStderr, failure } of [
     {
       label: "an exit 127",
       code: 127,
       stderr: "",
+      shownStderr: "",
       failure: { kind: "git-missing", detail: "not-found" },
     },
     {
       label: "an xcrun error",
       code: 1,
       stderr: "xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools)\n",
+      shownStderr: "xcrun: error: invalid active developer path (CommandLineTools)\n",
       failure: { kind: "git-missing", detail: "macos-shim" },
     },
   ] as const) {
@@ -1301,7 +1303,12 @@ describe("createGitProcess", () => {
       control.close(code);
       await assert.rejects(
         pending,
-        gitFailure({ failure, operation: "version --build-options", exitCode: code, stderr }),
+        gitFailure({
+          failure,
+          operation: "version --build-options",
+          exitCode: code,
+          stderr: shownStderr,
+        }),
       );
 
       // act
@@ -3347,7 +3354,7 @@ describe("createGitProcess ssh", () => {
         failure: { kind: "failed" },
         operation: "config --get-regexp",
         exitCode: 128,
-        stderr: "fatal: bad config line 1 in file /home/user/.gitconfig\n",
+        stderr: "fatal: bad config line 1 in file .gitconfig\n",
       }),
     );
     assert.strictEqual(launches.all().length, 1);
@@ -4123,6 +4130,119 @@ describe("createGitProcess ssh launches", () => {
         },
       ],
     ]);
+  });
+});
+
+// D-SG-35: a failed run's error holds git's stderr redacted in Claude Code's
+// order, and a network request's error holds its remote.
+describe("createGitProcess failure redaction", () => {
+  const remoteUrl = "https://alice:pw@example.test/acme/tools.git?private_token=tok";
+  const printed =
+    "Cloning into '/home/u/.pi/agent/pi-claude-marketplace/sources-staging/9b2f0c1e'...\n" +
+    "fatal: repository 'https://example.test/acme/tools.git?private_token=tok/' not found\n";
+
+  for (const { label, remote, expectedStderr, expectedRemote } of [
+    {
+      label: "replaces the remote URL's spellings first and keeps the remote with its URL redacted",
+      remote: { url: remoteUrl, gitHub: false },
+      expectedStderr:
+        "Cloning into '9b2f0c1e'...\n" +
+        "fatal: repository 'https://example.test/acme/tools.git/' not found\n",
+      expectedRemote: {
+        url: "https://***@example.test/acme/tools.git?private_token=***",
+        gitHub: false,
+      },
+    },
+    {
+      label: "runs the credential and path rules for a request with no remote",
+      remote: undefined,
+      expectedStderr:
+        "Cloning into '9b2f0c1e'...\n" +
+        "fatal: repository 'https://example.test/acme/tools.git?private_token=***' not found\n",
+      expectedRemote: undefined,
+    },
+  ]) {
+    test(`D-SG-35: ${label}`, async () => {
+      // arrange
+      const { git, launches } = createSequencedGit();
+
+      // act
+      const pending = git.run({
+        subcommand: "ls-remote",
+        lane: "network",
+        operands: [remoteUrl],
+        timeoutMs: 5_000,
+        ...(remote !== undefined && { remote }),
+      });
+      (await launches.at(0)).close(NO_SSH_CONFIG.code);
+      const listing = await launches.at(1);
+      listing.writeStderr(printed);
+      listing.close(128);
+
+      // assert
+      await assert.rejects(pending, (error: unknown) => {
+        assert.ok(error instanceof GitCommandError);
+        assert.deepStrictEqual(
+          {
+            kind: error.kind,
+            stderr: error.stderr,
+            remote: error.remote,
+            message: error.message,
+          },
+          {
+            kind: "repository-not-found",
+            stderr: expectedStderr,
+            remote: expectedRemote,
+            message: "git ls-remote failed: repository-not-found, exit code 128",
+          },
+        );
+        return true;
+      });
+    });
+  }
+
+  test("D-SG-35: real git's refused ls-remote shows neither secret nor an absolute path", async (t) => {
+    // arrange
+    const home = await caseDirectory(t);
+    const git = createGitProcess({
+      spawn: NODE_SPAWN,
+      host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(home) },
+      env: hermeticGitEnvironment(home),
+      killGraceMs: KILL_GRACE_MS,
+    });
+    const url = "https://alice:pw-word@127.0.0.1:1/acme/tools.git?private_token=token-word";
+
+    // act
+    const pending = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [url],
+      timeoutMs: 10_000,
+      remote: { url, gitHub: false },
+    });
+
+    // assert
+    await assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        {
+          kind: error.kind,
+          namesSafeUrl: error.stderr.includes("'https://127.0.0.1:1/acme/tools.git/'"),
+          shows: ["pw-word", "token-word", home].filter((text) => error.stderr.includes(text)),
+          remote: error.remote,
+        },
+        {
+          kind: "network",
+          namesSafeUrl: true,
+          shows: [],
+          remote: {
+            url: "https://***@127.0.0.1:1/acme/tools.git?private_token=***",
+            gitHub: false,
+          },
+        },
+      );
+      return true;
+    });
   });
 });
 

@@ -647,9 +647,45 @@ describe("clone", () => {
         config: [],
         timeoutMs: 4321,
         signal,
+        remote: { url: REMOTE_URL, gitHub: false },
       },
     ]);
   });
+
+  for (const { label, base, expectedRemote } of [
+    {
+      label: "names a github.com remote as a GitHub address while the base is unset",
+      base: undefined,
+      expectedRemote: { url: GITHUB_TOOLS_URL, gitHub: true },
+    },
+    {
+      label: "names the base URL git sends as a remote that is not GitHub",
+      base: "https://127.0.0.1:4443/base/",
+      expectedRemote: { url: "https://127.0.0.1:4443/base/acme/tools.git", gitHub: false },
+    },
+  ]) {
+    test(`D-SG-35, D-SG-23: the request ${label}`, async (t) => {
+      // arrange
+      setGitHubBaseUrl(t, base);
+      const requests: GitRequest[] = [];
+      const stubGit: GitProcess = {
+        locate: () => Promise.resolve("/usr/bin/git"),
+        run: (request) => {
+          requests.push(request);
+          return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+        },
+      };
+
+      // act
+      await clone({ dir: "/staging", url: GITHUB_TOOLS_URL }, stubGit);
+
+      // assert
+      assert.deepStrictEqual(
+        requests.map((request) => request.remote),
+        [expectedRemote],
+      );
+    });
+  }
 
   test("D-SG-16, GHB-01: clones a github.com URL from the base and records the canonical origin", async (t) => {
     // arrange
@@ -919,6 +955,7 @@ describe("fetchCommit", () => {
         cwd: "/clone",
         timeoutMs: 4321,
         signal,
+        remote: { url: REMOTE_URL, gitHub: false },
       },
       {
         subcommand: "rev-parse",
@@ -936,6 +973,7 @@ describe("fetchCommit", () => {
         cwd: "/clone",
         timeoutMs: 4321,
         signal,
+        remote: { url: REMOTE_URL, gitHub: false },
       },
     ]);
   });
@@ -1170,6 +1208,7 @@ describe("resolveRemoteRef", () => {
         config: [],
         timeoutMs: 4321,
         signal,
+        remote: { url: remote.url, gitHub: false },
       },
     ]);
   });
@@ -1714,6 +1753,7 @@ describe("listRemoteTags", () => {
         config: [],
         timeoutMs: 4321,
         signal,
+        remote: { url: remote.url, gitHub: false },
       },
     ]);
   });

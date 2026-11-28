@@ -3,12 +3,14 @@ import { describe, test } from "node:test";
 
 import {
   causeChainTrailer,
+  GitCommandError,
   ManualRecoveryError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   redactAbsolutePaths,
   redactCauseChain,
   redactedRollbackPartials,
+  redactShownText,
   splitDependencyPartials,
 } from "../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 
@@ -1046,6 +1048,118 @@ describe("redactCauseChain", () => {
     // assert
     assert.deepStrictEqual(rebuilt, new ManualRecoveryError("undo failed at alpha", ["alpha"]));
   });
+
+  test("D-SG-31 keeps a git link a GitCommandError with its facts and its stderr redacted", () => {
+    // arrange
+    const remote = { url: "https://127.0.0.1:1/acme/tools.git", gitHub: false };
+    const error = new Error("add failed at /srv/state.json", {
+      cause: new GitCommandError(
+        { kind: "repository-not-found" },
+        {
+          operation: "clone --depth",
+          exitCode: 128,
+          stderr: "Cloning into '/srv/staging/9b2f0c1e'...",
+          remote,
+        },
+      ),
+    });
+
+    // act
+    const rebuilt = redactCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(
+      rebuilt,
+      new Error("add failed at state.json", {
+        cause: new GitCommandError(
+          { kind: "repository-not-found" },
+          {
+            operation: "clone --depth",
+            exitCode: 128,
+            stderr: "Cloning into '9b2f0c1e'...",
+            remote,
+          },
+        ),
+      }),
+    );
+  });
+
+  test("D-SG-31 keeps a git link with no exit code and no remote", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "timeout", timeoutMs: 120000 },
+      { operation: "clone --depth" },
+    );
+
+    // act
+    const rebuilt = redactCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(
+      rebuilt,
+      new GitCommandError({ kind: "timeout", timeoutMs: 120000 }, { operation: "clone --depth" }),
+    );
+  });
+});
+
+describe("redactShownText", () => {
+  test("D-SG-35 keeps each line of git's output when a quoted path precedes a URL line", () => {
+    // arrange
+    const stderr =
+      "Cloning into '/home/u/.pi/agent/pi-claude-marketplace/sources-staging/9b2f0c1e'...\n" +
+      "fatal: repository 'https://127.0.0.1:4443/acme/tools.git/' not found";
+
+    // act
+    const shown = redactShownText(stderr);
+
+    // assert
+    assert.strictEqual(
+      shown,
+      "Cloning into '9b2f0c1e'...\n" +
+        "fatal: repository 'https://127.0.0.1:4443/acme/tools.git/' not found",
+    );
+  });
+
+  test("D-SG-35 replaces a spelling of the request URL before the credential rules run", () => {
+    // arrange
+    const stderr =
+      "fatal: repository 'https://127.0.0.1:1/acme/tools.git?private_token=tok/' not found";
+
+    // act
+    const shown = redactShownText(stderr, [
+      "https://alice:pw@127.0.0.1:1/acme/tools.git?private_token=tok",
+    ]);
+
+    // assert
+    assert.strictEqual(shown, "fatal: repository 'https://127.0.0.1:1/acme/tools.git/' not found");
+  });
+
+  test("D-SG-35 runs the credential rules when no request URL is given", () => {
+    // arrange
+    const stderr = "fatal: unable to access 'https://alice:pw@host/x.git/': 403";
+
+    // act
+    const shown = redactShownText(stderr);
+
+    // assert
+    assert.strictEqual(shown, "fatal: unable to access 'https://***@host/x.git/': 403");
+  });
+
+  for (const { name, text } of [
+    { name: "an empty text", text: "" },
+    { name: "a credential-free text", text: "fatal: not a git repository" },
+  ]) {
+    test(`D-SG-35 empty edge: ${name} passes through unchanged`, () => {
+      // arrange
+      const stderr = text;
+
+      // act
+      const shown = redactShownText(stderr, ["https://alice:pw@host/x.git"]);
+
+      // assert
+      assert.strictEqual(shown, text);
+    });
+  }
 });
 
 describe("redactedRollbackPartials", () => {

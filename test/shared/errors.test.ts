@@ -875,6 +875,38 @@ describe("GitCommandError", () => {
     );
   });
 
+  test("D-SG-35: holds the remote with its URL credentials redacted and keeps it out of the message", () => {
+    // act
+    const error = new GitCommandError(
+      { kind: "repository-not-found" },
+      {
+        operation: "ls-remote",
+        exitCode: 128,
+        remote: {
+          url: "https://alice:pw-word@127.0.0.1:1/acme/tools.git?private_token=token-word",
+          gitHub: false,
+        },
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { remote: error.remote, message: error.message },
+      {
+        remote: { url: "https://***@127.0.0.1:1/acme/tools.git?private_token=***", gitHub: false },
+        message: "git ls-remote failed: repository-not-found, exit code 128",
+      },
+    );
+  });
+
+  test("D-SG-35: holds no remote when the command reached none", () => {
+    // act
+    const error = new GitCommandError({ kind: "failed" }, { operation: "rev-parse" });
+
+    // assert
+    assert.strictEqual(error.remote, undefined);
+  });
+
   test("keeps the cause passed in its options", () => {
     // arrange
     const cause = new Error("spawn git ENOENT");

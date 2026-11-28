@@ -1332,14 +1332,27 @@ export type GitFailure =
     };
 
 /**
+ * D-SG-35: the remote a network git request reached. `url` is the URL git
+ * sent, after the D-SG-16 base rewrite, and `gitHub` says whether
+ * `gitHubAddressOf` reads it as a GitHub address (D-SG-23). D-SG-33 reads it
+ * to name the host in a remedy.
+ */
+export interface GitRemote {
+  readonly url: string;
+  readonly gitHub: boolean;
+}
+
+/**
  * SG-PRC-05: one git command failed. Callers narrow with `instanceof
  * GitCommandError` and then read `kind` (or `failure` for the fields of a
  * kind), never the error's name or message.
  *
- * `stderr` is git's stderr with its credentials redacted (PMOD-04). The
- * message holds the operation, the kind, a timeout's limit, and the exit code
- * only, never stderr, an operand, or stdin, because a cause chain is shown to
- * the user and the wording of each kind is decided later.
+ * The error holds facts, and the wording is chosen when it is shown. `stderr`
+ * is git's stderr with its credentials redacted (PMOD-04, D-SG-35), and
+ * `remote`, when the command reached one, is that remote with its URL's
+ * credentials redacted. The message holds the operation, the kind, a
+ * timeout's limit, and the exit code only, never stderr, an operand, or
+ * stdin, because a cause chain is shown to the user.
  *
  * A `git-missing` message names the requirement in Claude Code's words
  * (D-SG-01): its macOS text for the xcrun shim, and otherwise its
@@ -1352,10 +1365,16 @@ export class GitCommandError extends Error {
   readonly operation: string;
   readonly exitCode: number | null;
   readonly stderr: string;
+  readonly remote?: GitRemote;
 
   constructor(
     failure: GitFailure,
-    details: { readonly operation: string; readonly exitCode?: number; readonly stderr?: string },
+    details: Readonly<{
+      operation: string;
+      exitCode?: number;
+      stderr?: string;
+      remote?: GitRemote;
+    }>,
     options?: ErrorOptions,
   ) {
     const exitCode = details.exitCode ?? null;
@@ -1366,6 +1385,9 @@ export class GitCommandError extends Error {
     this.operation = details.operation;
     this.exitCode = exitCode;
     this.stderr = redactCredentials(details.stderr ?? "");
+    if (details.remote !== undefined) {
+      this.remote = { url: redactCredentials(details.remote.url), gitHub: details.remote.gitHub };
+    }
   }
 }
 

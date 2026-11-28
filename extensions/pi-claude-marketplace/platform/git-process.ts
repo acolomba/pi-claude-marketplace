@@ -86,7 +86,13 @@
 //
 // SG-PRC-05: a run that exits with a code its request does not allow rejects
 // with the kind platform/git-failure-kind.ts reads from the exit code and the
-// C-locale stderr. D-SG-06: after a `git-too-old` failure, and only then, the
+// C-locale stderr. D-SG-35: the kind is read from git's raw stderr, and the
+// error holds that stderr redacted in Claude Code's order: the spellings of
+// the request's remote URL that carry a secret first, then the credential
+// rules, then the absolute paths, line by line (`redactShownText` in
+// shared/redact-absolute-paths.ts). A network request's error also carries
+// its remote. The error's message never holds stderr. D-SG-06: after a
+// `git-too-old` failure, and only then, the
 // module reads `git version` once and writes it to the debug log. The read
 // stops when the request's signal aborts.
 //
@@ -116,13 +122,14 @@ import { performance } from "node:perf_hooks";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { GitCommandError } from "../shared/errors.ts";
 import { GITHUB_HOST } from "../shared/github-base-url.ts";
+import { redactShownText } from "../shared/redact-absolute-paths.ts";
 
 import { classifyGitExit } from "./git-failure-kind.ts";
 import { createNeutralDirectory } from "./git-neutral-directory.ts";
 import { getAgentDir } from "./pi-api.ts";
 import { findOnWindowsPath, NODE_PROCESS_HOST, runProcess } from "./process-run.ts";
 
-import type { GitFailure } from "../shared/errors.ts";
+import type { GitFailure, GitRemote } from "../shared/errors.ts";
 import type { OutputCapture, ProcessHost, ProcessRun, ProcessSpawn } from "./process-run.ts";
 
 /**
@@ -183,6 +190,13 @@ export interface GitRequest {
    * that asks for it is refused before anything starts.
    */
   readonly sshTail?: "print-config";
+  /**
+   * D-SG-35: the remote a network request reaches, with the raw URL it sends.
+   * `settleRun` replaces that URL's credential-bearing spellings in git's
+   * stderr before anything else reads the stderr, and the failure carries the
+   * remote with its URL redacted.
+   */
+  readonly remote?: GitRemote;
 }
 
 /** A run that exited with 0 or with an allowed code. */
@@ -1041,7 +1055,11 @@ function settleRun(
   request: GitRequest,
   operation: string,
 ): GitResult | GitCommandError {
-  const details = { operation, stderr: run.stderr };
+  const details = {
+    operation,
+    stderr: redactShownText(run.stderr, request.remote === undefined ? [] : [request.remote.url]),
+    ...(request.remote !== undefined && { remote: request.remote }),
+  };
   if (request.signal?.aborted === true) {
     return new GitCommandError({ kind: "aborted" }, details, { cause: request.signal.reason });
   }

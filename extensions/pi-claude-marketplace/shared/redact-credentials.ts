@@ -150,6 +150,114 @@ export function redactCredentials(text: string): string {
 }
 
 /**
+ * D-SG-35, a port of Claude Code's `mn` and `i3e`: replaces in `text` each
+ * spelling of each URL in `urls` that can carry a secret with that URL's safe
+ * form, so a URL git prints without its userinfo still loses its query.
+ *
+ * A URL with a `scheme://` and with userinfo, a query, or a fragment has three
+ * spellings: the URL itself, the URL less its userinfo up to the first `@`,
+ * and the URL less its userinfo up to the last `@` before the authority's
+ * first `/`. They are replaced longest first. Any other URL, an scp address
+ * (`git@host:path`) included, has none. The safe form is the WHATWG reading
+ * of the URL with its username, password, query, and fragment cleared, or
+ * `[redacted URL]` when the URL does not parse.
+ */
+export function redactUrlSpellings(text: string, urls: readonly string[]): string {
+  let redacted = text;
+  for (const url of urls) {
+    const spellings = secretSpellings(url);
+    if (spellings.length > 0) {
+      redacted = replaceSpellings(redacted, spellings, safeUrlForm(url));
+    }
+  }
+
+  return redacted;
+}
+
+/**
+ * D-SG-35: replaces each occurrence of any of `spellings` (longest first) in
+ * one left-to-right pass, so a shorter spelling never matches inside the safe
+ * form a longer one was just replaced with.
+ */
+function replaceSpellings(text: string, spellings: readonly string[], safe: string): string {
+  let replaced = "";
+  let from = 0;
+  let next = nextSpelling(text, spellings, from);
+  while (next !== undefined) {
+    replaced += text.slice(from, next.at) + safe;
+    from = next.at + next.length;
+    next = nextSpelling(text, spellings, from);
+  }
+
+  return replaced + text.slice(from);
+}
+
+/**
+ * The first occurrence at or after `from` of any of `spellings`; at one
+ * position, the earliest spelling in the list wins.
+ */
+function nextSpelling(
+  text: string,
+  spellings: readonly string[],
+  from: number,
+): { readonly at: number; readonly length: number } | undefined {
+  let next: { readonly at: number; readonly length: number } | undefined;
+  for (const spelling of spellings) {
+    const at = text.indexOf(spelling, from);
+    if (at !== -1 && (next === undefined || at < next.at)) {
+      next = { at, length: spelling.length };
+    }
+  }
+
+  return next;
+}
+
+/** D-SG-35: the scheme of a URL that `redactUrlSpellings` reads, `://` included. */
+const URL_SCHEME = /^[a-z][a-z0-9+.-]*:\/\//i;
+
+/**
+ * D-SG-35: the spellings of `url` that can carry its secret, longest first,
+ * or none when `url` has no `scheme://` or holds no userinfo, query, or
+ * fragment.
+ */
+function secretSpellings(url: string): string[] {
+  const scheme = URL_SCHEME.exec(url)?.[0];
+  if (scheme === undefined) {
+    return [];
+  }
+
+  const rest = url.slice(scheme.length);
+  const slash = rest.indexOf("/");
+  const authority = slash === -1 ? rest : rest.slice(0, slash);
+  if (!authority.includes("@") && !/[?#]/.test(url)) {
+    return [];
+  }
+
+  const spellings = new Set([url]);
+  for (const at of [authority.indexOf("@"), authority.lastIndexOf("@")]) {
+    if (at !== -1) {
+      spellings.add(scheme + rest.slice(at + 1));
+    }
+  }
+
+  return [...spellings].sort((left, right) => right.length - left.length);
+}
+
+/** D-SG-35: `url` with its userinfo, query, and fragment cleared. */
+function safeUrlForm(url: string): string {
+  if (!URL.canParse(url)) {
+    return "[redacted URL]";
+  }
+
+  const parsed = new URL(url);
+  parsed.username = "";
+  parsed.password = "";
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.href;
+}
+
+/**
  * D-SG-35: replaces the value of each query or fragment pair of one
  * `scheme://` token. The pairs start at the first `?` or `#`, so a path
  * segment that holds `=` stays.

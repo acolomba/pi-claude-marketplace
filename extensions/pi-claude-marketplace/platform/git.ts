@@ -9,7 +9,12 @@ import {
   GitCommandError,
   StoredCredentialRejectedError,
 } from "../shared/errors.ts";
-import { GITHUB_HOST, gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
+import {
+  GITHUB_HOST,
+  gitHubAddressOf,
+  gitHubInsteadOfPairs,
+  gitHubWireUrl,
+} from "../shared/github-base-url.ts";
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 
 import { configValues, NODE_GIT_PROCESS, SSH_CONFIG_READ } from "./git-process.ts";
@@ -299,10 +304,17 @@ interface RemoteRequest {
  * before anything starts. An auth failure goes to `runWithAuthBundle`. A
  * failure of a request the base rewrote gains the `FetchedUrlCause` of the URL
  * git fetched (GHB-01).
+ *
+ * The request carries the remote git sends to: the wire URL after the
+ * D-SG-16 rewrite, and whether `gitHubAddressOf` reads it as a GitHub address
+ * (D-SG-23). The git process module removes that URL's spellings that carry a
+ * secret from git's stderr (D-SG-35), and a remedy names the host from it
+ * (D-SG-33).
  */
 async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise<GitResult> {
   const config = gitHubInsteadOfPairs(remote.url);
   const signal = gitAbortScope.getStore();
+  const wireUrl = gitHubWireUrl(remote.url);
   const request: RemoteGitRequest = {
     subcommand: remote.subcommand,
     lane: "network",
@@ -312,8 +324,8 @@ async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise
     ...(remote.cwd !== undefined && { cwd: remote.cwd }),
     timeoutMs: gitTimeoutMs(),
     ...(signal !== undefined && { signal }),
+    remote: { url: wireUrl, gitHub: gitHubAddressOf(wireUrl) !== undefined },
   };
-  const wireUrl = gitHubWireUrl(remote.url);
   return withFetchedUrlCause(wireUrl, remote.url, () =>
     runWithAuthBundle(request, wireUrl, remote.auth, gitProcess),
   );

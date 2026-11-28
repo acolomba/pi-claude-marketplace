@@ -1,11 +1,33 @@
 import {
   CAUSE_CHAIN_MAX_DEPTH,
+  GitCommandError,
   hasOnwardCause,
   linkMessage,
   ManualRecoveryError,
 } from "./errors.ts";
+import { redactCredentials, redactUrlSpellings } from "./redact-credentials.ts";
 
 const REDACTED_PATH = "[redacted path]";
+
+/**
+ * D-SG-35: the one redaction pass for a text that git or another child
+ * printed, in Claude Code's `rRe` order: each credential-bearing spelling of
+ * `urls` becomes its safe form, then `redactCredentials`, then
+ * `redactAbsolutePaths`. Once `redactCredentials` has run, a raw spelling no
+ * longer matches, which is why the spellings go first.
+ *
+ * The pass runs on each line alone and joins the lines with `\n` again.
+ * `redactAbsolutePaths` cuts the whole rest of a text after a quoted absolute
+ * path when a later line holds a slash, so git's `Cloning into '<path>'...`
+ * line would otherwise erase the `fatal:` line that says why the clone
+ * failed.
+ */
+export function redactShownText(text: string, urls: readonly string[] = []): string {
+  return text
+    .split("\n")
+    .map((line) => redactAbsolutePaths(redactCredentials(redactUrlSpellings(line, urls))))
+    .join("\n");
+}
 
 /**
  * Collapses absolute paths in diagnostic text to their basenames.
@@ -154,7 +176,11 @@ function* causeChainLinks(error: unknown): Generator {
  * Rebuilds an `Error.cause` chain as plain `Error`s whose messages are
  * `redactAbsolutePaths`-redacted. A `ManualRecoveryError` link stays one, with
  * each leaked path redacted the same way, so a redacted row still names what
- * the user must clean up (AS-7, D-PL6-20). The walk goes exactly as deep as
+ * the user must clean up (AS-7, D-PL6-20). A `GitCommandError` link stays one
+ * too, with its failure, operation, exit code, and remote, and its stderr run
+ * through `redactShownText` again, so the cause serializer can still expand a
+ * git link of an apply, import, update, fetch, or cascade row (D-SG-31). The
+ * walk goes exactly as deep as
  * `causeChainTrailer` (`shared/errors.ts`) does. The two bounds are the same
  * constant on purpose: when the source chain continues past it, the last
  * rebuilt link keeps a real onward cause that the trailer never renders, so a
@@ -188,17 +214,40 @@ export function redactCauseChain(error: unknown): Error | undefined {
   for (const link of links) {
     const message = redactAbsolutePaths(linkMessage(link));
     const options = chain === undefined ? undefined : { cause: chain };
-    chain =
-      link instanceof ManualRecoveryError
-        ? new ManualRecoveryError(
-            message,
-            link.leaks.map((leak) => redactedLeak(leak)),
-            options,
-          )
-        : new Error(message, options);
+    chain = rebuiltLink(link, message, options);
   }
 
   return chain;
+}
+
+/**
+ * One link of `redactCauseChain`'s rebuilt chain: a `GitCommandError` or a
+ * `ManualRecoveryError` keeps its class, and any other link becomes a plain
+ * `Error` with the redacted `message`.
+ */
+function rebuiltLink(link: unknown, message: string, options: ErrorOptions | undefined): Error {
+  if (link instanceof GitCommandError) {
+    return new GitCommandError(
+      link.failure,
+      {
+        operation: link.operation,
+        ...(link.exitCode !== null && { exitCode: link.exitCode }),
+        stderr: redactShownText(link.stderr),
+        ...(link.remote !== undefined && { remote: link.remote }),
+      },
+      options,
+    );
+  }
+
+  if (link instanceof ManualRecoveryError) {
+    return new ManualRecoveryError(
+      message,
+      link.leaks.map((leak) => redactedLeak(leak)),
+      options,
+    );
+  }
+
+  return new Error(message, options);
 }
 
 /**
