@@ -153,7 +153,7 @@ When(
   },
 );
 
-// D-BG-1101: the same command in a one-shot Pi in print mode. Pi gives the
+// MODE-04: the same command in a one-shot Pi in print mode. Pi gives the
 // extension a notify that does nothing there, so the user sees only an error
 // the command throws, which Pi prints on stderr, and Pi exits 0 either way: a
 // documented Pi limitation (JDOC-02).
