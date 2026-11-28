@@ -339,8 +339,8 @@ async function syncMarketplaceBySwap(args: {
  * AUTH-02: the check and the clone carry the same host-keyed auth bundle as
  * `marketplace update`, so git asks the user's own credential helpers for a
  * private marketplace, and a miss fails as `authentication required`
- * (D-1-02). The bundle is built inside the git arms, so a path-only run never reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL
- * (GHB-02).
+ * (D-1-02). The bundle is built inside the git arms, so a path-only run never
+ * reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL (GHB-02).
  *
  * D-SG-22: each sync records its re-clone's note into a collector of its own,
  * under the marketplace's name, as `marketplace update` does, so a same-name

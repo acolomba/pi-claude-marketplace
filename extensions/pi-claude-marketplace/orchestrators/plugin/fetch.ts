@@ -425,8 +425,9 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
  * resolve their pin then clone into the per-sha immutable cache; unpinned
  * sources refresh the single mutable URL-keyed mirror in place. Both arms thread
  * the host-keyed auth bundle. Mirrors install's `makeInstallCloneProbe`
- * structure; fetch reaches the git surface only through the seam. OQ-7: the clone and a mirror refresh get `transport`,
- * so they walk one plan; a pinned source's pin is its sha and sends nothing.
+ * structure; fetch reaches the git surface only through the seam. OQ-7: the
+ * clone and a mirror refresh get `transport`, so they walk one plan; a pinned
+ * source's pin is its sha and sends nothing.
  */
 async function materializeThroughSeam(
   gitSource: GitBackedSource,

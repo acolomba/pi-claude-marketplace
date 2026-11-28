@@ -603,7 +603,8 @@ export async function resolveRef(
  * names it, so the `^{}` name must be one of them. The extra lines a tail
  * match brings, such as `refs/heads/x/<ref>`, never match a name.
  *
- * The optional `opts.auth` bundle maps an auth failure (PROV-03, GAUTH-04). GHB-01: under the base override, a failure names the URL fetched.
+ * The optional `opts.auth` bundle maps an auth failure (PROV-03, GAUTH-04).
+ * GHB-01: under the base override, a failure names the URL fetched.
  */
 export async function resolveRemoteRef(
   opts: ResolveRemoteRefOptions,
