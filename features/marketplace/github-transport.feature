@@ -154,7 +154,7 @@ Feature: Marketplace github transport
     Then the user scope holds no marketplace checkout
     Then the user scope holds no git clones
 
-  Scenario: Adding a private github marketplace in pi's print mode whose clones fail over both transports prints nothing and leaves the scope as it was (MODE-04, JDOC-02)
+  Scenario: Adding a private github marketplace in pi's print mode whose clones fail over both transports prints nothing and records no marketplace (MODE-04, JDOC-02)
     Given the marketplace "tools" is published as a github source
     Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
     Given the user's ssh authenticates to "github.com" as "acme" without access to its repositories
