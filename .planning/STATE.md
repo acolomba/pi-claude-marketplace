@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 6 (Failure-Message Parity) — EXECUTING
-Plan: 1 of 12
+Plan: 2 of 12
 Status: Executing Phase 6
-Last activity: 2026-11-28 — Phase 6 execution started
+Last activity: 2026-11-28 — Phase 6 wave 1 (06-01) merged and gated
 
 Progress: [██████░░░░] 63%
 

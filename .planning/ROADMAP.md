@@ -461,11 +461,11 @@ Plans:
   1. For each failure class that discuss kept (Q4), such as auth, SSH auth, not found, network, timeout, ref missing, both transports failed, and git missing, `marketplace add`, `marketplace update`, and a git-source plugin install report Claude Code's message, adapted only where Pi has no equivalent; a cucumber scenario pins each class (SG-ERR-01).
   2. The same failure gives the same reason wherever it is reported (the command's own notice, the `apply` and `import` cascades, and the background autoupdate pass), because each reason comes from the typed failure kind (SG-ERR-01).
   3. A failure whose URL carries userinfo, or whose git stderr carries a token or a password, shows neither in the notice, the JSON-mode output, or the debug log, and git's own output never reaches stdout or stderr directly (SG-ERR-02).
-**Plans**: 12 plans in 10 waves
+**Plans**: 1/12 plans executed in 10 waves
 
 Plans:
 **Wave 1**
-- [ ] 06-01-PLAN.md — Redaction first: wider credential redaction, the URL-spelling pass, `GitRemote` on `GitCommandError`, a class-keeping `redactCauseChain`, the shared output-bounding leaf (wave 1)
+- [x] 06-01-PLAN.md — Redaction first: wider credential redaction, the URL-spelling pass, `GitRemote` on `GitCommandError`, a class-keeping `redactCauseChain`, the shared output-bounding leaf (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 06-02-PLAN.md — One redacted `[git]` debug line for each failed git run, and central redaction in `hookDebugLog` (wave 2)
@@ -533,7 +533,7 @@ Plans:
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
 | 4. SSH Sources and Transport Selection | 26/26 | Complete    | 2026-11-27 |
 | 5. Credential Surface | 13/13 | Complete    | 2026-11-28 |
-| 6. Failure-Message Parity | 0/TBD | Not started | - |
+| 6. Failure-Message Parity | 1/12 | In Progress | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |
 | 8. Close | 0/TBD | Not started | - |
 
