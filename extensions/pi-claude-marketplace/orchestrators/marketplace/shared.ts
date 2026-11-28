@@ -13,9 +13,6 @@
 //     settings a plugin clone checks; defaultPluginTransportContext binds a
 //     command's plugin transport context to that port.
 //
-//   - lacksStoredCredential (GAUTH-04): whether an auth failure gains the
-//     line that names how to store a credential.
-//
 //   - cascadeUnstagePlugin (D-02, D-03): per-plugin hand-rolled
 //     try/catch envelope that composes the 6 bridge unstage*
 //     primitives in PU-1 order (skills → commands → agents → hooks
@@ -57,10 +54,7 @@ import {
   MarketplaceInBaseLayerOnlyError,
   MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
-  GitCommandError,
-  GitHubTransportsFailedError,
   PluginShapeError,
-  withoutCleanupLeaks,
 } from "../../shared/errors.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -285,34 +279,6 @@ export function defaultPluginTransportContext(
  * background pass without naming `platform/git.ts`.
  */
 export { runWithGitAbortSignal } from "../../platform/git.ts";
-
-/**
- * GAUTH-04: an auth failure that a stored credential could answer, so the
- * failure gains the `NO_STORED_CREDENTIAL_CAUSE` line. Only git's `https-auth`
- * failure with the `no-credential` detail qualifies: no helper gave git a
- * credential. A refused credential (`StoredCredentialRejectedError`) does not
- * qualify, because a helper produced it and the host was sent it. An SSH
- * failure does not qualify either, because the line names an HTTPS helper. A
- * GitHub failure over both transports qualifies when one of its two attempts
- * does (D-SG-22). Each caller places the line.
- */
-export function lacksStoredCredential(err: unknown): err is Error {
-  const failure = withoutCleanupLeaks(err);
-  const attempts =
-    failure instanceof GitHubTransportsFailedError
-      ? failure.attempts.map((attempt) => attempt.error)
-      : [failure];
-  return err instanceof Error && attempts.some(isNoCredentialFailure);
-}
-
-function isNoCredentialFailure(err: unknown): boolean {
-  const failure = withoutCleanupLeaks(err);
-  return (
-    failure instanceof GitCommandError &&
-    failure.failure.kind === "https-auth" &&
-    failure.failure.detail === "no-credential"
-  );
-}
 
 /**
  * D-02, D-03: result of one plugin's cascade through the 6 bridges.

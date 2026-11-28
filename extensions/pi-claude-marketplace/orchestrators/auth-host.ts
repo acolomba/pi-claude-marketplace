@@ -12,8 +12,7 @@
  * The bundle depends only on the address, so no verb passes a notification
  * context to get one. A GitHub address binds the override host while
  * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set and github.com otherwise
- * (GHB-02). `NO_STORED_CREDENTIAL_CAUSE` is the GAUTH-04 hint line for a host
- * that gave git no credential.
+ * (GHB-02).
  *
  * Gate discipline: this module imports no `platform/git*` module and names no
  * git surface, so BLOCK F in `eslint.config.js` lints it like any other
@@ -70,26 +69,6 @@ function scpHost(address: string): string {
   const end = afterUser.startsWith("[") ? afterUser.indexOf("]") + 1 : afterUser.indexOf(":");
   return end <= 0 ? afterUser : afterUser.slice(0, end);
 }
-
-/**
- * The cause line for a host whose only auth path is the user's git credential
- * helper (D-1-01, GAUTH-04). git consulted the helpers and got no usable
- * credential, so the line names the host and the command that stores one.
- * AUTH-09: it interpolates the host and nothing else.
- *
- * The remedy is the whole pipeline because `git credential approve` reads the
- * git-credential wire format from stdin: run bare it waits for input and stores
- * nothing. It feeds `protocol=https` + `host=` + `username=` + `password=` and
- * NO `path=` line, the attributes git's own lookup for an https request to the
- * host uses, so the entry the user stores is the one git finds next time.
- *
- * It says "obtained" rather than "stored" because git reports a helper miss,
- * a helper that failed or timed out, and a helper that printed no
- * username/password pair the same way. A user whose credential IS stored
- * behind a slow helper must not be told it is not there.
- */
-export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
-  String.raw`no credential was obtained for ${host}; store one with: printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
 
 /**
  * The auth bundle of a clone address: the bundle bound to the host

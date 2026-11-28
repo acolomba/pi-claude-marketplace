@@ -2105,7 +2105,7 @@ test("PUP-2 / GAUTH-03: two plugins in one url marketplace -> one sync check car
   });
 });
 
-test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the missing credential", async () => {
+test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync fails as authentication required with the typed clone line", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-url-sync-401-");
     try {
@@ -2133,7 +2133,7 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> no credential was obtained for example.com; store one with: printf 'protocol=https\\nhost=example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve\n\nPlugin update: 1 failure",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
           severity: "error",
         },
       ]);

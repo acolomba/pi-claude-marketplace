@@ -537,7 +537,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-403\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+          'Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-403". -> git ls-remote failed: https-auth, exit code 128',
         severity: "error",
       },
     ]);
@@ -1886,7 +1886,7 @@ test("MURL-03: an unpinned url source asks the remote for its HEAD and clones it
   });
 });
 
-test("GAUTH-04: a cancelled credential lookup on a url host renders {authentication required} plus the stored-credential cause line", async () => {
+test("GAUTH-04, D-SG-31: a cancelled credential lookup on a url host renders {authentication required} with the typed ls-remote line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-private", ref: "main" });
@@ -1912,20 +1912,20 @@ test("GAUTH-04: a cancelled credential lookup on a url host renders {authenticat
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-private [project] (failed)\n  ⊘ urlmp-private (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-private\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+          'Some operations have failed.\n\n⊘ urlmp-private [project] (failed)\n  ⊘ urlmp-private (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-private". -> git ls-remote failed: https-auth, exit code 128',
         severity: "error",
       },
     ]);
   });
 });
 
-test("GAUTH-04: a url host that refused the credential git sent gains no stored-credential cause line", async () => {
+test("GAUTH-04, D-SG-31: a url host that refused the credential git sent renders the same typed ls-remote line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-401", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     // git's `Authentication failed for` line shows that a helper gave a
-    // credential, so no line about storing one applies.
+    // credential; the row reads as for a missing one (D-SG-31).
     const httpErr = remoteFailure({ kind: "https-auth", detail: "rejected" });
     const { gitOps } = createGitOps({ remoteThrows: httpErr });
 
@@ -6084,7 +6084,7 @@ test("GHB-02: updating a GitHub marketplace under the override clones with the o
 
 const OVERRIDE_WIRE_URL = "https://mirror.example:8443/git/anthropics/claude-plugins-official.git";
 
-test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under the override names git credential approve before the fetched URL", async (t) => {
+test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under the override shows the typed ls-remote line and the URL git fetched", async (t) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
@@ -6110,14 +6110,14 @@ test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under th
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for mirror.example:8443; store one with: printf 'protocol=https\\nhost=mirror.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);
   });
 });
 
-test("UPD-12 / GHB-01: a GitHub update under the override that the host answers with 500 keeps its chain without the stored-credential line", async (t) => {
+test("UPD-12 / GHB-01: a GitHub update under the override that the host answers with 500 frames the status and the URL git fetched", async (t) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
@@ -6214,36 +6214,6 @@ test("UPD-12: a non-Error remote rejection on a GitHub update under the override
       {
         message:
           'Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed)\n    cause: Failed to update marketplace "mirror-mp". -> socket closed',
-        severity: "error",
-      },
-    ]);
-  });
-});
-
-test("GAUTH-04 / D-SG-27: a GitHub update without the override that git found no credential for places the github.com stored-credential line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    await seedGithubMarketplace({ cwd, name: "private-mp", ref: "main" });
-    const { ctx, run, notifications } = makeCtx();
-    const authError = remoteFailure({ kind: "https-auth", detail: "no-credential" });
-    const { gitOps } = createGitOps({ remoteThrows: authError });
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "private-mp",
-      scope: "project",
-      cwd,
-      gitOps,
-    });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some operations have failed.\n\n⊘ private-mp [project] (failed)\n  Cloning via HTTPS: https://github.com/anthropics/claude-plugins-official.git\n  ⊘ private-mp (failed) {authentication required}\n    cause: Failed to update marketplace \"private-mp\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for github.com; store one with: printf 'protocol=https\\nhost=github.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
         severity: "error",
       },
     ]);

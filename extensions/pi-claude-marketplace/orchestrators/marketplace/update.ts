@@ -149,7 +149,7 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { NO_STORED_CREDENTIAL_CAUSE, authBundleFor } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { createGitHubCloneNotes, type GitHubCloneNotes } from "../github-transport.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
@@ -172,7 +172,6 @@ import {
 import {
   DEFAULT_GIT_OPS,
   DEFAULT_GITHUB_SSH_OPS,
-  lacksStoredCredential,
   recordedManifestPath,
   resolveScopeOrNotifyNotAdded,
   type GitAuthBundle,
@@ -491,29 +490,6 @@ function refreshAuthFor(source: GitHubSource | UrlSource): GitAuthBundle {
 }
 
 /**
- * UPD-12 / GAUTH-04 / GHB-01 / D-1-02: an auth failure on a host whose only
- * auth path is a stored credential gains the line that names how to store one.
- * For github the line goes before the fetched-URL link, which stays the last
- * link; for url it is the chain's tail, and only when the failure carries no
- * cause of its own. The code-bearing error stays at depth 0.
- */
-function attachStoredCredentialCause(
-  err: unknown,
-  source: GitHubSource | UrlSource,
-  auth: GitAuthBundle,
-): void {
-  if (!lacksStoredCredential(err)) {
-    return;
-  }
-
-  if (source.kind === "github") {
-    err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host), { cause: err.cause });
-  } else if (err.cause === undefined) {
-    err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host));
-  }
-}
-
-/**
  * D-SG-10: refresh a github or url checkout by `ls-remote`, re-clone, and swap,
  * inside the caller's state lock (Q13). SG-SSH-02: the check and the re-clone
  * each plan their transports from the declared source, not from the
@@ -531,30 +507,25 @@ async function refreshGitSource(
   const { name, locations, gitOps } = args;
   const auth = refreshAuthFor(source);
   const liveDir = await locations.sourceCloneDir(name);
-  try {
-    return await refreshCloneBySwap({
-      liveDir,
-      backupDir: await locations.sourceBackupDir(name),
-      stagingDir: await locations.sourceSwapStagingDir(name),
-      ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
-      notes: args.cloneNotes,
-      subject: name,
-      surface: "marketplace",
-      ...(source.ref !== undefined && { ref: source.ref }),
-      gitOps,
-      auth,
-      liveMarker: MARKETPLACE_MANIFEST_MARKER,
-      keepOnUnreachable: args.keepOnFailure,
-      ownershipMarker: true,
-      carryOver: installedRootsInside(liveDir, marketplaces),
-      onReplaced,
-      removalOps: args.removalOps,
-      renameOps: args.renameOps,
-    });
-  } catch (err) {
-    attachStoredCredentialCause(err, source, auth);
-    throw err;
-  }
+  return refreshCloneBySwap({
+    liveDir,
+    backupDir: await locations.sourceBackupDir(name),
+    stagingDir: await locations.sourceSwapStagingDir(name),
+    ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
+    notes: args.cloneNotes,
+    subject: name,
+    surface: "marketplace",
+    ...(source.ref !== undefined && { ref: source.ref }),
+    gitOps,
+    auth,
+    liveMarker: MARKETPLACE_MANIFEST_MARKER,
+    keepOnUnreachable: args.keepOnFailure,
+    ownershipMarker: true,
+    carryOver: installedRootsInside(liveDir, marketplaces),
+    onReplaced,
+    removalOps: args.removalOps,
+    renameOps: args.renameOps,
+  });
 }
 
 /**

@@ -97,7 +97,7 @@ import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/not
 import { ownValue } from "../../shared/own-key.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
-import { NO_STORED_CREDENTIAL_CAUSE, authBundleFor } from "../auth-host.ts";
+import { authBundleFor } from "../auth-host.ts";
 import { cloneNoteOf, createGitHubCloneNotes, withOwnCloneNotes } from "../github-transport.ts";
 import {
   DEFAULT_RENAME_OPS,
@@ -114,7 +114,6 @@ import {
   DEFAULT_GIT_OPS,
   DEFAULT_GITHUB_SSH_OPS,
   defaultPluginTransportContext,
-  lacksStoredCredential,
 } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
@@ -274,9 +273,8 @@ function syncAuthFor(source: GitHubSource | UrlSource): GitAuthBundle {
  * re-clone and swap, as `marketplace update` does, with the same plans from
  * the declared source (SG-SSH-02, CONTEXT [Identity]). It runs under the
  * scope lock, and it reads the plugins whose packages the swap carries from
- * the state inside that lock (D-PL9-10). GAUTH-04: a url source's
- * auth failure that a stored credential could answer gains the
- * `NO_STORED_CREDENTIAL_CAUSE` line as the chain's tail.
+ * the state inside that lock (D-PL9-10). A failure propagates unchanged, so
+ * an HTTPS auth failure shows the same typed line as in `marketplace update`.
  */
 async function syncMarketplaceBySwap(args: {
   readonly source: GitHubSource | UrlSource;
@@ -292,36 +290,28 @@ async function syncMarketplaceBySwap(args: {
 }): Promise<void> {
   const { source, mpName, locations, gitOps, auth } = args;
   const liveDir = await locations.sourceCloneDir(mpName);
-  try {
-    // D-PL9-10: the caller holds the scope lock, so this read sees every
-    // plugin installed into the checkout before the swap carries packages.
-    const { marketplaces } = await loadState(locations.extensionRoot);
-    const swapped = await refreshCloneBySwap({
-      liveDir,
-      backupDir: await locations.sourceBackupDir(mpName),
-      stagingDir: await locations.sourceSwapStagingDir(mpName),
-      ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
-      surface: "marketplace",
-      ...(source.ref !== undefined && { ref: source.ref }),
-      gitOps,
-      auth,
-      notes: args.notes,
-      subject: mpName,
-      liveMarker: MARKETPLACE_MANIFEST_MARKER,
-      keepOnUnreachable: args.keepOnUnreachable,
-      ownershipMarker: true,
-      carryOver: installedRootsInside(liveDir, marketplaces),
-      removalOps: createRemovalOps(),
-      renameOps: args.renameOps,
-    });
-    logKeptSync(mpName, swapped);
-  } catch (err) {
-    if (source.kind === "url" && lacksStoredCredential(err) && err.cause === undefined) {
-      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host));
-    }
-
-    throw err;
-  }
+  // D-PL9-10: the caller holds the scope lock, so this read sees every
+  // plugin installed into the checkout before the swap carries packages.
+  const { marketplaces } = await loadState(locations.extensionRoot);
+  const swapped = await refreshCloneBySwap({
+    liveDir,
+    backupDir: await locations.sourceBackupDir(mpName),
+    stagingDir: await locations.sourceSwapStagingDir(mpName),
+    ...marketplaceRefreshPlans(source, args.gitHubSsh, { liveDir, gitOps }),
+    surface: "marketplace",
+    ...(source.ref !== undefined && { ref: source.ref }),
+    gitOps,
+    auth,
+    notes: args.notes,
+    subject: mpName,
+    liveMarker: MARKETPLACE_MANIFEST_MARKER,
+    keepOnUnreachable: args.keepOnUnreachable,
+    ownershipMarker: true,
+    carryOver: installedRootsInside(liveDir, marketplaces),
+    removalOps: createRemovalOps(),
+    renameOps: args.renameOps,
+  });
+  logKeptSync(mpName, swapped);
 }
 
 /**

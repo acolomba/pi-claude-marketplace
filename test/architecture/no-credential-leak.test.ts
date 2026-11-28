@@ -365,29 +365,6 @@ test("AUTH-09: the credential-capturing orchestrators never interpolate a creden
   );
 });
 
-test("AUTH-09 / GAUTH-04: the stored-credential hint in orchestrators/auth-host.ts interpolates the host and nothing else", async () => {
-  // The hint is a String.raw literal, not an Error or notify literal, so the
-  // scan above never reads it. Its `password=<token>` text is a placeholder,
-  // so this scan pins the interpolations instead of the field names.
-  const stripped = stripComments(await readFile(path.join(REPO_ROOT, AUTH_HOST_FILE), "utf8"));
-  const hints = fullTemplateLiteralsAfter(
-    stripped,
-    /NO_STORED_CREDENTIAL_CAUSE\b[^=]*=[^`]*String\.raw\s*(`(?:[^`\\]|\\.)*`)/g,
-  );
-  assert.strictEqual(
-    hints.length,
-    1,
-    `D-07-03: ${AUTH_HOST_FILE} must define NO_STORED_CREDENTIAL_CAUSE as one String.raw literal, or this scan passes over nothing. Re-aim it at the module that now builds the hint.`,
-  );
-
-  const interpolations = [...(hints[0] ?? "").matchAll(/\$\{([^}]*)\}/g)].map((m) => m[1]);
-  assert.deepStrictEqual(
-    interpolations,
-    ["host", "host"],
-    `AUTH-09 violation: the stored-credential hint in ${AUTH_HOST_FILE} interpolates more than the host`,
-  );
-});
-
 /**
  * AUTH-09 / PMOD-04 (D-07): the JSON path. Each row plants one credential at
  * one site that can carry a thrown message and reads three strings back: the

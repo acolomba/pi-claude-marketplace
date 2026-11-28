@@ -17,7 +17,6 @@ import {
   crossScopeFlag,
   foldUnstageNotices,
   fsErrnoReason,
-  lacksStoredCredential,
   marketplaceFailureRows,
   marketplaceInOtherScope,
   marketplaceNotAddedMessage,
@@ -33,15 +32,11 @@ import * as defaultGit from "../../../extensions/pi-claude-marketplace/platform/
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
-  CleanupLeakError,
-  GitCommandError,
-  GitHubTransportsFailedError,
   InvalidMarketplaceManifestError,
   MarketplaceInBaseLayerOnlyError,
   MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
-  StoredCredentialRejectedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
@@ -481,138 +476,6 @@ test("WorkflowsUnstageFailureError freezes a defensive copy of its typed failure
   ]);
   assert.strictEqual(Object.isFrozen(error.failedWorkflows), true);
 });
-
-function noCredential(): GitCommandError {
-  return new GitCommandError(
-    { kind: "https-auth", detail: "no-credential" },
-    { operation: "ls-remote", exitCode: 128 },
-  );
-}
-
-function sshPublicKeyDenied(): GitCommandError {
-  return new GitCommandError(
-    { kind: "ssh-auth", detail: "publickey" },
-    { operation: "clone", exitCode: 128 },
-  );
-}
-
-function bothTransportsFailed(
-  first: { readonly transport: "ssh" | "https"; readonly error: Error },
-  last: { readonly transport: "ssh" | "https"; readonly error: Error },
-): GitHubTransportsFailedError {
-  const urls = { ssh: "git@github.com:acme/tools.git", https: "https://github.com/acme/tools.git" };
-  return new GitHubTransportsFailedError("marketplace", [
-    { ...first, url: urls[first.transport] },
-    { ...last, url: urls[last.transport] },
-  ]);
-}
-
-for (const { title, makeError, lacks } of [
-  {
-    title: "GAUTH-04: reports a no-credential failure",
-    makeError: (): unknown => noCredential(),
-    lacks: true,
-  },
-  {
-    title: "GAUTH-04: reports a no-credential failure behind a cleanup leak",
-    makeError: (): unknown => new CleanupLeakError(noCredential(), "left /scope/staging behind"),
-    lacks: true,
-  },
-  {
-    title: "GAUTH-04: does not report a stored credential the host rejected",
-    makeError: (): unknown =>
-      new StoredCredentialRejectedError(
-        "gitlab.example.com",
-        new GitCommandError(
-          { kind: "https-auth", detail: "rejected" },
-          { operation: "ls-remote", exitCode: 128 },
-        ),
-      ),
-    lacks: false,
-  },
-  {
-    title: "GAUTH-04: does not report a git failure that shows the credential was sent",
-    makeError: (): unknown =>
-      new GitCommandError(
-        { kind: "https-auth", detail: "rejected" },
-        { operation: "ls-remote", exitCode: 128 },
-      ),
-    lacks: false,
-  },
-  {
-    title: "does not report an SSH key the host refused",
-    makeError: (): unknown => sshPublicKeyDenied(),
-    lacks: false,
-  },
-  {
-    title: "D-SG-22: reports a GitHub failure whose HTTPS attempt found no credential",
-    makeError: (): unknown =>
-      bothTransportsFailed(
-        { transport: "https", error: noCredential() },
-        { transport: "ssh", error: sshPublicKeyDenied() },
-      ),
-    lacks: true,
-  },
-  {
-    title:
-      "D-SG-22: does not report a GitHub failure whose HTTPS attempt sent a refused credential",
-    makeError: (): unknown =>
-      bothTransportsFailed(
-        { transport: "ssh", error: sshPublicKeyDenied() },
-        {
-          transport: "https",
-          error: new StoredCredentialRejectedError(
-            "github.com",
-            new GitCommandError(
-              { kind: "https-auth", detail: "rejected" },
-              { operation: "clone", exitCode: 128 },
-            ),
-          ),
-        },
-      ),
-    lacks: false,
-  },
-  {
-    title: "D-SG-22: does not report a GitHub HTTPS network failure followed by an SSH refusal",
-    makeError: (): unknown =>
-      bothTransportsFailed(
-        {
-          transport: "https",
-          error: new GitCommandError(
-            { kind: "network", curlCode: 7 },
-            { operation: "clone", exitCode: 128 },
-          ),
-        },
-        { transport: "ssh", error: sshPublicKeyDenied() },
-      ),
-    lacks: false,
-  },
-  {
-    title: "does not report a network failure",
-    makeError: (): unknown =>
-      new GitCommandError(
-        { kind: "network", curlCode: 6 },
-        { operation: "ls-remote", exitCode: 128 },
-      ),
-    lacks: false,
-  },
-  {
-    title: "does not report a non-Error rejection",
-    makeError: (): unknown => "socket closed",
-    lacks: false,
-  },
-]) {
-  test(`lacksStoredCredential ${title}`, () => {
-    // arrange
-    const failure = makeError();
-
-    // act
-    const reported = lacksStoredCredential(failure);
-
-    // assert
-    assert.strictEqual(reported, lacks);
-  });
-}
 
 test("cascadeUnstagePlugin returns every removed resource in six-kind order", async (t) => {
   // arrange

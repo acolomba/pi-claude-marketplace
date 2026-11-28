@@ -1275,11 +1275,13 @@ export type GitFailure =
   | {
       readonly kind: "https-auth";
       /**
-       * Whether git found no credential to send (`no-credential`, which gets
-       * the D-1-02 hint where the verb adds it) or the host refused the one a
-       * helper gave (`rejected`, which is GAUTH-04's error). Only git's `Authentication
-       * failed for` line is `rejected`: a bare 401 or 403 status line does not
-       * show that a credential was sent, so it is `no-credential`.
+       * Whether git found no credential to send (`no-credential`) or the host
+       * refused the one a helper gave (`rejected`, which is GAUTH-04's error).
+       * Only git's `Authentication failed for` line is `rejected`: a bare 401
+       * or 403 status line does not show that a credential was sent, so it is
+       * `no-credential`. The detail stays internal: both read as the same
+       * HTTPS auth failure (D-SG-31), and `platform/git.ts` maps `rejected`
+       * to the class D-SG-26 reads.
        */
       readonly detail: "no-credential" | "rejected";
     }

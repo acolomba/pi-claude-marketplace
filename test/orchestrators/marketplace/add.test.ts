@@ -20,7 +20,6 @@ import test, { type TestContext } from "node:test";
 import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
-import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import {
   addMarketplace as addMarketplaceWithCache,
   addMarketplaceToState,
@@ -6627,9 +6626,8 @@ test("D-79-03: a url add that 401s renders the bare (failed) {authentication req
     // arrange
     const { ctx, run, notifications } = makeCtx();
     // D-79-03 (amended): a url add that the GitHub base override did not
-    // rewrite renders no child row (D-01/D-10, GHB-04), so the stored-credential
-    // cause line renders ONLY on the update path's cause-carrying child row --
-    // the add row stays the bare closed-set token.
+    // rewrite renders no child row (D-01/D-10, GHB-04), so the add row stays
+    // the bare closed-set token.
     const httpErr = httpError(401);
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
@@ -6653,10 +6651,8 @@ test("D-79-03: a url add that 401s renders the bare (failed) {authentication req
       note.message.includes("(failed) {authentication required}"),
       `expected authentication-required row, got: ${note.message}`,
     );
-    // NO cause trailer and NO stored-credential line on the add surface. The
-    // live constant is imported rather than spelled as a second literal, so
-    // this assertion cannot outlive the text it polices.
-    assert.equal(note.message.includes(NO_STORED_CREDENTIAL_CAUSE("gitlab.example.com")), false);
+    // NO cause trailer and no git credential command on the add surface.
+    assert.equal(note.message.includes("git credential"), false);
     assert.equal(note.message.includes("cause:"), false);
   });
 });
