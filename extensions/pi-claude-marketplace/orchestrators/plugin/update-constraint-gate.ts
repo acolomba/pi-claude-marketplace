@@ -77,12 +77,6 @@ export interface UpdateConstraintOptions {
   readonly requesters?: readonly ConstraintRequester[];
   /** WR-1: the versions a dependency plan ruled out for the move. */
   readonly excludedVersions?: readonly string[] | undefined;
-  /**
-   * Set when stage one lists a git-backed entry source's own tags. The
-   * caller sets it when it runs with a notification context; a path entry
-   * source lists its marketplace's tags either way (see `probeGitStageOne`).
-   */
-  readonly listsSourceTags?: true;
 }
 
 // D-PL2-06: the holders are read from their installed copies, so an update is
@@ -177,17 +171,9 @@ function decodeTagProbe(
  * release tags through the auth bundle of the source's address, the one the
  * clone probe binds (`authBundleFor`) -- no second credential acquisition
  * path (AUTH-09). D-03-03 lets an update read those tags, and D-PL8-01 lets
- * the background pass use the network as that command does.
- *
- * A run without `listsSourceTags` skips the query, and the fold admits the
- * range unpinned, leaving the outcome to a later stage -- the same "cannot
- * decide, defer" shape D-10-16 gives an unreadable local listing. The
- * caller leaves it unset when it has no notification context: a cascade run
- * that its caller gives no context, such as the autoupdate cascade through
- * `materialize-latest.ts`. The skip dates from the sign-in that needed that
- * context and no recorded decision keeps it today (D-SG-27 removed the
- * sign-in); the path arm below lists its marketplace's tags in the same run
- * (D-SG-09).
+ * the background pass use the network as that command does, so every run
+ * lists them, with or without a notification context, as the path arm below
+ * lists its marketplace's tags (D-SG-09, D-SG-30).
  */
 async function probeGitStageOne(
   options: UpdateConstraintOptions,
@@ -196,10 +182,6 @@ async function probeGitStageOne(
   range: string,
   holders: readonly ConstraintHolder[],
 ): Promise<UpdateConstraintVerdict> {
-  if (options.listsSourceTags !== true) {
-    return admitsRange(range, holders);
-  }
-
   const probed = await seam.probeDependencyTags({
     pluginName: options.plugin,
     source,
@@ -212,8 +194,7 @@ async function probeGitStageOne(
 /**
  * Stage one on a `path` entry source: probes the marketplace repository's
  * release tags, from the marketplace remote for a git marketplace and from
- * the checkout for a directory marketplace (TAGS-01, D-SG-09), whether or not
- * the run sets `listsSourceTags`.
+ * the checkout for a directory marketplace (TAGS-01, D-SG-09).
  */
 async function probePathStageOne(
   options: UpdateConstraintOptions,

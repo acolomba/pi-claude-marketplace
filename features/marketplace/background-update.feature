@@ -87,6 +87,34 @@ Feature: Marketplace background update
       | extras           | user              | true                           | beta@extras | beta  | installed |         | user    | 1.10.0  |
       | tools            | project           | true                           | alpha@tools | alpha | installed |         | project | 1.10.0  |
 
+  Scenario: The TUI background update moves a git-source dependency to the newest release tag its range admits
+    Given pi runs with the background update delay "0"
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the git repository "lib" has a revision only the tag "lib--v2.1.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.1.0   |      |
+    When the user sends the message "hello" in the tui session
+    Then the tui session reports the notice "Plugin updated: lib · Run /reload to apply"
+    Then the installation record of the project scope holds these plugins:
+      | id        | version                | enabled |
+      | app@tools | 1.0.0                  | true    |
+      | lib@tools | 2.1.0-{lib revision 3} | true    |
+
   Scenario: A foreground command cancels a held background git update before dependency settlement
     Given pi runs with the background update delay "0"
     Given the git repository "ghp" holds these plugins:

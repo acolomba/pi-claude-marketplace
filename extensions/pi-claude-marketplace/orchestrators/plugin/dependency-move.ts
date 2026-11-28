@@ -72,11 +72,6 @@ export interface DependencyMoveContext {
   /** The command's `--partial` and `--map-model`, cascade-wide as on an install. */
   readonly partial?: boolean;
   readonly mapModel?: boolean;
-  /**
-   * The command's notification context, so a move's constraint gate lists a
-   * git source's tags as the command's does (`listsSourceTags`).
-   */
-  readonly notification?: PreparePluginUpdateOptions["notification"];
   /** D-SG-19: the operation's GitHub transport context, so a move clones as the command does. */
   readonly transportContext?: NonNullable<PreparePluginUpdateOptions["transportContext"]>;
   readonly cloneCacheSeam?: PreparePluginUpdateOptions["cloneCacheSeam"];
@@ -181,7 +176,6 @@ function moveArgs(
     excludedVersions: request.excludedVersions,
     ...(context.partial !== undefined && { partial: context.partial }),
     ...(context.mapModel !== undefined && { mapModel: context.mapModel }),
-    ...(context.notification !== undefined && { preflightNotification: context.notification }),
     ...(context.transportContext !== undefined && { transportContext: context.transportContext }),
     ...(context.cloneCacheSeam !== undefined && { cloneCacheSeam: context.cloneCacheSeam }),
     ...(context.constraintGate !== undefined && { constraintGate: context.constraintGate }),
@@ -235,7 +229,6 @@ export async function judgeDependencyMove(
       ...args,
       policy: context.policy,
       judgeOnly: true,
-      ...(context.notification !== undefined && { notification: context.notification }),
     });
     if (isUpdatePreflightOutcome(prepared)) {
       return { ok: false, cause: refusalCause(prepared) };

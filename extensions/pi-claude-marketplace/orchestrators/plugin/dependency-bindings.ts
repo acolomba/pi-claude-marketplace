@@ -75,9 +75,8 @@ export interface DependencyMoveOwners {
 /** The caller fields a dependency move reads, spread only when set. */
 function callerFields(
   caller: DependencyCaller,
-): Pick<DependencyMoveContext, "mapModel" | "notification" | "partial" | "transportContext"> {
+): Pick<DependencyMoveContext, "mapModel" | "partial" | "transportContext"> {
   return {
-    notification: { ctx: caller.ctx, run: caller.run },
     ...(caller.partial !== undefined && { partial: caller.partial }),
     ...(caller.mapModel !== undefined && { mapModel: caller.mapModel }),
     ...(caller.transportContext !== undefined && { transportContext: caller.transportContext }),

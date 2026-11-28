@@ -26,7 +26,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
-import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -40,7 +39,6 @@ import type {
   UpdateCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { TestContext } from "node:test";
 
@@ -187,7 +185,6 @@ async function prepare(
     readonly constraintTagMemo?: PreparePluginUpdateOptions["constraintTagMemo"];
     readonly constraintMarketplaceTagMemo?: PreparePluginUpdateOptions["constraintMarketplaceTagMemo"];
     readonly cleanupClones?: () => Promise<void>;
-    readonly notification?: PreparePluginUpdateOptions["notification"];
     readonly transport?: Pick<PreparePluginUpdateOptions, "transportContext">;
     readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
     readonly move?: Pick<PreparePluginUpdateOptions, "expectVersion" | "requesters">;
@@ -215,7 +212,6 @@ async function prepare(
     ...(options.constraintMarketplaceTagMemo !== undefined && {
       constraintMarketplaceTagMemo: options.constraintMarketplaceTagMemo,
     }),
-    ...(options.notification !== undefined && { notification: options.notification }),
     ...options.transport,
     ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
     ...options.move,
@@ -2654,64 +2650,9 @@ test("WR-05: sweeps clones when a disabled refresh clears the record's resolvedS
   assert.strictEqual(cleanupCalls, 1);
 });
 
-test("passes authenticated clone context and refs through both clone arms", async (t) => {
+test("D-3-04: passes the address's auth bundle and refs through both clone arms", async (t) => {
   // arrange
   const sha = "4444444444444444444444444444444444444444";
-  const pinned = await seedUpdate({
-    installed: pluginRecord("sha-000000000000"),
-    source: { source: "github", repo: "org/repo", ref: "stable", sha },
-  });
-  const unpinned = await seedUpdate({
-    installed: pluginRecord("sha-000000000000"),
-    source: { source: "github", repo: "org/repo", ref: "next" },
-  });
-  t.after(() =>
-    Promise.all([pinned.cwd, unpinned.cwd].map((cwd) => rm(cwd, { force: true, recursive: true }))),
-  );
-  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: () => undefined } };
-  const pinnedSeam: UpdateCloneCacheSeam = {
-    resolvePluginPin: () =>
-      Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
-    materializePluginClone: (options) => {
-      assert.strictEqual(options.resolveAuth().host, "github.com");
-      assert.strictEqual(options.ref, "stable");
-      return Promise.resolve(pinned.pluginRoot);
-    },
-    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
-    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
-  };
-  const unpinnedSeam: UpdateCloneCacheSeam = {
-    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
-    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
-    materializeOrRefreshPluginMirror: (options) => {
-      assert.strictEqual(options.auth?.host, "github.com");
-      assert.strictEqual(options.ref, "next");
-      return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
-    },
-    materializePluginCommitCopy: (options) => {
-      assert.strictEqual(options.resolveAuth().host, "github.com");
-      assert.strictEqual(options.sha, sha);
-      return Promise.resolve(unpinned.pluginRoot);
-    },
-  };
-
-  // act
-  const notification = { ctx, run: runWithNothingLoaded() };
-  const pinnedPrepared = await prepare(pinned, { cloneCacheSeam: pinnedSeam, notification });
-  const unpinnedPrepared = await prepare(unpinned, { cloneCacheSeam: unpinnedSeam, notification });
-
-  // assert
-  assert.ok(!("partition" in pinnedPrepared));
-  assert.strictEqual(pinnedPrepared.resolvedSha, sha);
-  assert.ok(!("partition" in unpinnedPrepared));
-  assert.strictEqual(unpinnedPrepared.resolvedSha, sha);
-});
-
-test("D-3-04: gives the autoupdate cascade the github.com bundle when it has no notification context", async (t) => {
-  // arrange
-  // The cascade shape: prepare() with `ctx` omitted, mirroring
-  // update-flow.ts's PluginUpdateFn, which never threads one through.
-  const sha = "9999999999999999999999999999999999999999";
   const pinned = await seedUpdate({
     installed: pluginRecord("sha-000000000000"),
     source: { source: "github", repo: "org/repo", ref: "stable", sha },
@@ -2728,6 +2669,7 @@ test("D-3-04: gives the autoupdate cascade the github.com bundle when it has no 
       Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" }),
     materializePluginClone: (options) => {
       assert.deepStrictEqual(options.resolveAuth(), { host: "github.com" });
+      assert.strictEqual(options.ref, "stable");
       return Promise.resolve(pinned.pluginRoot);
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
@@ -2738,9 +2680,14 @@ test("D-3-04: gives the autoupdate cascade the github.com bundle when it has no 
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
     materializeOrRefreshPluginMirror: (options) => {
       assert.deepStrictEqual(options.auth, { host: "github.com" });
+      assert.strictEqual(options.ref, "next");
       return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
     },
-    materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),
+    materializePluginCommitCopy: (options) => {
+      assert.deepStrictEqual(options.resolveAuth(), { host: "github.com" });
+      assert.strictEqual(options.sha, sha);
+      return Promise.resolve(unpinned.pluginRoot);
+    },
   };
 
   // act

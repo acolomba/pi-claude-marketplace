@@ -524,26 +524,6 @@ test("UPD-DEP-D1: a swap that fails after the settle changed the scope reports t
   assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, recordedPlugin("1.0.0", pluginRoot));
 });
 
-test("UPD-DEP-D1: a cascade run authenticates in the command's context when it carries one", async (t) => {
-  // arrange
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
-  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
-  const ctx: NotificationContext = {
-    mode: "tui",
-    hasUI: true,
-    ui: { notify: () => assert.fail("a path source prompts for nothing") },
-  };
-
-  // act
-  const outcome = await materializeLatestVersion(
-    { ...base, cascade: true, preflightNotification: { ctx, run: runWithNothingLoaded() } },
-    UPDATE_POLICY,
-  );
-
-  // assert
-  assert.strictEqual(outcome.partition, "updated");
-});
-
 test("D-PL1-14: a swap that fails after the settle carries the warnings it reported and forwards them", async (t) => {
   // arrange
   const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });

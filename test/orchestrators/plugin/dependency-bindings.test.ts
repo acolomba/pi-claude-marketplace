@@ -149,7 +149,6 @@ describe("dependencyMoveContext", () => {
       ...owners,
       policy: INSTALL_MOVE_MATERIALIZATION,
       softDeps: run.softDeps,
-      notification: { ctx: CTX, run },
       partial: true,
       mapModel: false,
       transportContext: commandTransport,
@@ -192,7 +191,6 @@ describe("dependencyMoveContext", () => {
       ...owners,
       policy: { ...INSTALL_MOVE_MATERIALIZATION, searchReleaseTags: false },
       softDeps: run.softDeps,
-      notification: { ctx: CTX, run },
       ...memos,
       cloneCandidates,
     });

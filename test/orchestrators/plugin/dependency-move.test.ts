@@ -537,25 +537,19 @@ describe("judgeDependencyMove", () => {
     assert.strictEqual(judgement.ok, false);
   });
 
-  test("judges with the operation's flags and the command's context", async (t) => {
+  test("judges with the operation's flags", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
-    const notified: string[] = [];
 
     // act
     const judgement = await judgeDependencyMove(request(), {
       ...context,
       partial: true,
       mapModel: true,
-      notification: {
-        ctx: { mode: "tui", hasUI: true, ui: { notify: (message) => notified.push(message) } },
-        run: runWithNothingLoaded(),
-      },
     });
 
     // assert
     assert.strictEqual(judgement.ok, true);
-    assert.deepStrictEqual(notified, []);
   });
 });
 

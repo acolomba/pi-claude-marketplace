@@ -18,11 +18,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { PluginUpdateFailedOutcome, RevisionMove } from "../types.ts";
 import type { PackageInstallOps } from "./package-install.ts";
-import type {
-  MaterializationPolicy,
-  PreparedPluginUpdate,
-  PreparePluginUpdateOptions,
-} from "./update-preflight.ts";
+import type { MaterializationPolicy, PreparedPluginUpdate } from "./update-preflight.ts";
 import type {
   ThreePhaseArgs,
   ThreePhaseArgsBase,
@@ -102,11 +98,7 @@ export async function materializeLatestVersion(
   policy: MaterializationPolicy,
   packageInstallOps: PackageInstallOps = DEFAULT_PACKAGE_INSTALL_OPS,
 ): Promise<UpdateRunOutcome> {
-  const preflight = await preparePluginUpdate({
-    ...args,
-    policy,
-    ...preflightNotification(args),
-  });
+  const preflight = await preparePluginUpdate({ ...args, policy });
   if (isUpdatePreflightOutcome(preflight)) {
     return preflight;
   }
@@ -199,23 +191,6 @@ function settleNoticesFirst(
  */
 function revisionMoved(move: RevisionMove): boolean {
   return move.toCommit !== move.fromCommit || move.toVersion !== move.fromVersion;
-}
-
-/**
- * The command's notification context for the preflight, when it has one. Its
- * presence only decides whether the constraint gate lists a git source's tags
- * (`listsSourceTags`).
- */
-function preflightNotification(
-  args: ThreePhaseArgs,
-): Pick<PreparePluginUpdateOptions, "notification"> {
-  if (!args.cascade) {
-    return { notification: { ctx: args.ctx, run: args.run } };
-  }
-
-  return args.preflightNotification === undefined
-    ? {}
-    : { notification: args.preflightNotification };
 }
 
 /**

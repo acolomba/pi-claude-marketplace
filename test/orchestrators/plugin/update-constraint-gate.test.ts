@@ -357,7 +357,6 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        listsSourceTags: true,
       }),
     );
 
@@ -411,7 +410,6 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source: gitSource() },
         seam,
-        listsSourceTags: true,
       }),
     );
 
@@ -463,7 +461,6 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        listsSourceTags: true,
       }),
     );
 
@@ -481,17 +478,20 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(calls[0]?.source, source);
   });
 
-  test("UPDT-01: the git arm skips the tag query in a run that lists no source tags", async () => {
-    // arrange -- `options()` leaves `listsSourceTags` unset.
+  test("D-SG-30: a run with no notification context lists the git source's tags", async () => {
+    // arrange -- `options()` carries no notification context, as the
+    // background autoupdate cascade's run does not.
     const declarations = new Map<string, readonly AddressedDependency[]>([
       ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
     ]);
     const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
     const source = gitSource();
+    const ranges: string[] = [];
     const seam: UpdateConstraintSeam = {
       buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
-      probeDependencyTags: () => {
-        throw new Error("not expected: the run lists no source tags");
+      probeDependencyTags: (probeOptions) => {
+        ranges.push(probeOptions.range);
+        return Promise.resolve({ kind: "no-matching-tag" });
       },
       probeMarketplaceTags: () => {
         throw new Error("not expected on a git-backed entry source");
@@ -503,7 +503,9 @@ describe("evaluateUpdateConstraint", () => {
       options({ state, entry: { name: "target", source }, seam }),
     );
 
-    // assert -- defers to a later stage instead of failing outright.
+    // assert -- no satisfying tag leaves the outcome to a later stage, and a
+    // git source claims no fallback to the marketplace's current copy.
+    assert.deepStrictEqual(ranges, [">=1.0.0 <2.0.0-0"]);
     assert.deepStrictEqual(verdict, {
       kind: "admits",
       range: ">=1.0.0 <2.0.0-0",
@@ -556,7 +558,7 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(calls[0]?.marketplaceSource, pathSource("/cwd/mp"));
   });
 
-  test("D-SG-09: a path entry source hands the probe a git marketplace's source in a run that lists no source tags", async () => {
+  test("D-SG-09: a path entry source hands the probe a git marketplace's source", async () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>([
       ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
@@ -601,7 +603,6 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source: gitSource() },
         seam: seamReturning(declarations),
-        listsSourceTags: true,
       }),
     );
 
@@ -673,7 +674,6 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        listsSourceTags: true,
       }),
     );
 
@@ -740,7 +740,6 @@ describe("evaluateUpdateConstraint", () => {
         state,
         entry: { name: "target", source },
         seam,
-        listsSourceTags: true,
       }),
     );
 
@@ -810,10 +809,10 @@ describe("evaluateUpdateConstraint", () => {
 
     // act
     await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo }),
     );
     await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo }),
     );
 
     // assert
@@ -884,10 +883,10 @@ describe("evaluateUpdateConstraint", () => {
 
     // act
     const first = await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo }),
     );
     const second = await evaluateUpdateConstraint(
-      options({ state, entry: { name: "target", source }, seam, tagMemo, listsSourceTags: true }),
+      options({ state, entry: { name: "target", source }, seam, tagMemo }),
     );
 
     // assert -- the failed attempt wrote no memo entry, so the second
