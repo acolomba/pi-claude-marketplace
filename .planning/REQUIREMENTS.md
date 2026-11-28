@@ -48,9 +48,9 @@
 
 ### Credentials (SG-AUTH)
 
-- [ ] **SG-AUTH-01**: A user authenticates git only through what the machine already holds (ssh keys and agent, git credential helpers such as gh's or Git Credential Manager); the extension has no git token of its own and never reads `GITHUB_TOKEN` or similar into a URL or header.
-- [ ] **SG-AUTH-02**: The GitHub OAuth Device Flow is removed, or kept in the form chosen per discuss (Q2), and the AAP, autoapply, and autoupdate rules (D-PL8-12) are restated for the outcome.
-- [ ] **SG-AUTH-03**: A user who stored a token through Device Flow keeps working over HTTPS with no action, the extension never deletes a stored credential, and any one-time notice follows discuss (Q5).
+- [x] **SG-AUTH-01**: A user authenticates git only through what the machine already holds (ssh keys and agent, git credential helpers such as gh's or Git Credential Manager); the extension has no git token of its own and never reads `GITHUB_TOKEN` or similar into a URL or header.
+- [x] **SG-AUTH-02**: The GitHub OAuth Device Flow is removed, or kept in the form chosen per discuss (Q2), and the AAP, autoapply, and autoupdate rules (D-PL8-12) are restated for the outcome.
+- [x] **SG-AUTH-03**: A user who stored a token through Device Flow keeps working over HTTPS with no action, the extension never deletes a stored credential, and any one-time notice follows discuss (Q5).
 
 ### Errors (SG-ERR)
 
@@ -122,9 +122,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SG-SSH-04 | Phase 4 | Complete |
 | SG-SSH-05 | Phase 4 | Complete |
 | SG-SSH-06 | Phase 4 | Complete |
-| SG-AUTH-01 | Phase 5 | Pending |
-| SG-AUTH-02 | Phase 5 | Pending |
-| SG-AUTH-03 | Phase 5 | Pending |
+| SG-AUTH-01 | Phase 5 | Complete |
+| SG-AUTH-02 | Phase 5 | Complete |
+| SG-AUTH-03 | Phase 5 | Complete |
 | SG-ERR-01 | Phase 6 | Pending |
 | SG-ERR-02 | Phase 6 | Pending |
 | SG-SUB-01 | Phase 7 | Pending |
