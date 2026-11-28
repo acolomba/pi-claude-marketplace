@@ -7,6 +7,9 @@ import { redactCredentials } from "../../extensions/pi-claude-marketplace/shared
 const BODY_36 = "0123456789abcdefghijklmnopqrstuvwxyz";
 const BODY_16 = "0123456789abcdef";
 const BODY_15 = "0123456789abcde";
+const HEX_64 = "0123456789abcdef".repeat(4);
+const WORD_93 = BODY_36.repeat(3).slice(0, 93);
+const BASIC_BODY = "dXNlcjpwYXNzd29yZC0xMjM0NTY=";
 
 for (const { name, input, expected } of [
   {
@@ -120,6 +123,86 @@ for (const { name, input, expected } of [
     expected: "remote 1https://***@host/x failed",
   },
   {
+    name: "D-SG-35 replaces userinfo that uses %40 as its separator with ***%40",
+    input: "clone https://alice:pw%40host/x failed",
+    expected: "clone https://***%40host/x failed",
+  },
+  {
+    name: "D-SG-35 replaces userinfo up to the last %40 before the host",
+    input: "clone https://alice:p%40ss%40host/x failed",
+    expected: "clone https://***%40host/x failed",
+  },
+  {
+    name: "D-SG-35 replaces the value of every query pair and keeps each name",
+    input: "clone https://host/x.git?private_token=tok&ref=main failed",
+    expected: "clone https://host/x.git?private_token=***&ref=*** failed",
+  },
+  {
+    name: "D-SG-35 replaces a query value as git prints it, through the trailing slash",
+    input: "fatal: repository 'https://127.0.0.1:1/acme/tools.git?private_token=word/' not found",
+    expected: "fatal: repository 'https://127.0.0.1:1/acme/tools.git?private_token=***' not found",
+  },
+  {
+    name: "D-SG-35 replaces the query value and the userinfo of one URL",
+    input: "clone https://alice:pw@host/x.git?private_token=tok failed",
+    expected: "clone https://***@host/x.git?private_token=*** failed",
+  },
+  {
+    name: "D-SG-35 replaces the value of a name=value fragment pair",
+    input: "clone https://host/x.git#access_token=tok failed",
+    expected: "clone https://host/x.git#access_token=*** failed",
+  },
+  {
+    name: "D-SG-35 keeps a bare fragment ref",
+    input: "clone https://host/x.git#stable failed",
+    expected: "clone https://host/x.git#stable failed",
+  },
+  {
+    name: "D-SG-35 keeps a query name with no value",
+    input: "clone https://host/x.git?private_token= failed",
+    expected: "clone https://host/x.git?private_token= failed",
+  },
+  {
+    name: "D-SG-35 keeps a query name with no equals sign",
+    input: "clone https://host/x.git?private_token failed",
+    expected: "clone https://host/x.git?private_token failed",
+  },
+  {
+    name: "D-SG-35 keeps an equals sign in a path segment",
+    input: "clone https://host/a=b/x.git failed",
+    expected: "clone https://host/a=b/x.git failed",
+  },
+  {
+    name: "D-SG-35 keeps a query pair outside a scheme:// token",
+    input: "read ./tools.json?v=2 failed",
+    expected: "read ./tools.json?v=2 failed",
+  },
+  {
+    name: "D-SG-35 replaces a short Authorization: Basic value",
+    input: "sent Authorization: Basic dXNlcjpwYXNz to host",
+    expected: "sent Authorization: Basic *** to host",
+  },
+  {
+    name: "D-SG-35 matches a lower-case authorization: basic header",
+    input: "sent authorization: basic dXNlcjpwYXNz to host",
+    expected: "sent authorization: basic *** to host",
+  },
+  {
+    name: "D-SG-35 replaces a Basic value of 20 or more token characters",
+    input: `sent Basic ${BASIC_BODY} to host`,
+    expected: "sent Basic *** to host",
+  },
+  {
+    name: "D-SG-35 keeps a short Basic value outside an Authorization header",
+    input: "sent Basic dXNlcjpwYXNz to host",
+    expected: "sent Basic dXNlcjpwYXNz to host",
+  },
+  {
+    name: "D-SG-35 keeps a Basic challenge realm",
+    input: 'WWW-Authenticate: Basic realm="git host"',
+    expected: 'WWW-Authenticate: Basic realm="git host"',
+  },
+  {
     name: "PMOD-04 leaves the scp-style subject git@host:owner/repo unchanged",
     input: "marketplace git@github.com:foo/bar.git failed",
     expected: "marketplace git@github.com:foo/bar.git failed",
@@ -204,6 +287,81 @@ for (const { name, input, expected } of [
 
     // assert
     assert.strictEqual(redacted, expected);
+  });
+}
+
+for (const { provider, prefix, body } of [
+  { provider: "aws-access-token", prefix: "AKIA", body: "ABCDEFGHIJKLMNOP" },
+  { provider: "gcp-api-key", prefix: "AIza", body: BODY_36.slice(0, 35) },
+  { provider: "google-oauth-client-secret", prefix: "GOCSPX-", body: BODY_36.slice(0, 28) },
+  { provider: "digitalocean-pat", prefix: "dop_v1_", body: HEX_64 },
+  { provider: "digitalocean-access-token", prefix: "doo_v1_", body: HEX_64 },
+  { provider: "anthropic-api-key", prefix: "sk-ant-api03-", body: `${WORD_93}AA` },
+  { provider: "anthropic-admin-api-key", prefix: "sk-ant-admin01-", body: `${WORD_93}AA` },
+  { provider: "anthropic-oauth-token", prefix: "sk-ant-oat01-", body: BODY_36 },
+  { provider: "openai-api-key", prefix: "sk-", body: "abcdefghT3BlbkFJijklmnop" },
+  {
+    provider: "huggingface-access-token",
+    prefix: "hf_",
+    body: "abcdefghijklmnopqrstuvwxyzABCDEFGH",
+  },
+  { provider: "supabase-secret-key", prefix: "sb_secret_", body: BODY_36 },
+  { provider: "supabase-pat", prefix: "sbp_", body: `${BODY_36}abcd` },
+  { provider: "gitlab glpat-", prefix: "glpat-", body: BODY_36 },
+  {
+    provider: "gitlab glpat- with its routing suffix",
+    prefix: "glpat-",
+    body: `${BODY_36}.0123abcde`,
+  },
+  { provider: "gitlab gldt-", prefix: "gldt-", body: BODY_36 },
+  { provider: "gitlab glrt-", prefix: "glrt-", body: BODY_36 },
+  { provider: "gitlab gloas-", prefix: "gloas-", body: BODY_36 },
+  { provider: "gitlab glptt-", prefix: "glptt-", body: BODY_36 },
+  { provider: "gitlab glagent-", prefix: "glagent-", body: BODY_36 },
+  { provider: "gitlab glimt-", prefix: "glimt-", body: BODY_36 },
+  { provider: "gitlab glsoat-", prefix: "glsoat-", body: BODY_36 },
+  { provider: "gitlab glcbt-", prefix: "glcbt-", body: BODY_36 },
+  { provider: "gitlab glft-", prefix: "glft-", body: BODY_36 },
+  { provider: "gitlab glffct-", prefix: "glffct-", body: BODY_36 },
+  { provider: "slack-bot-token", prefix: "xoxb-", body: "1234567890-1234567890abcDEF" },
+  {
+    provider: "slack-user-token",
+    prefix: "xoxp-",
+    body: `1234567890-1234567890-1234567890-${BODY_36.slice(0, 28)}`,
+  },
+  { provider: "slack-config-token", prefix: "xoxe.xoxp-", body: `1-${BODY_36.slice(0, 28)}` },
+  { provider: "slack-app-token", prefix: "xapp-", body: "1-A0123BCD-1234-abc123" },
+  { provider: "slack-webhook-token", prefix: "xwfp-", body: BODY_36.slice(0, 20) },
+  { provider: "npm-access-token", prefix: "npm_", body: BODY_36 },
+  { provider: "pypi-upload-token", prefix: "pypi-AgEIcHlwaS5vcmc", body: `${BODY_36}${BODY_36}` },
+  { provider: "sendgrid-api-token", prefix: "SG.", body: `${BODY_36}${BODY_36}`.slice(0, 66) },
+  { provider: "databricks-api-token", prefix: "dapi", body: HEX_64.slice(0, 32) },
+  { provider: "pulumi-api-token", prefix: "pul-", body: HEX_64.slice(0, 40) },
+  {
+    provider: "postman-api-token",
+    prefix: "PMAK-",
+    body: `${HEX_64.slice(0, 24)}-${HEX_64.slice(0, 34)}`,
+  },
+  { provider: "grafana-cloud-api-token", prefix: "glc_", body: `${BODY_36}==` },
+  {
+    provider: "grafana-service-account-token",
+    prefix: "glsa_",
+    body: `${BODY_36.slice(0, 32)}_0123abcd`,
+  },
+  { provider: "sentry-user-token", prefix: "sntryu_", body: HEX_64 },
+  { provider: "stripe-access-token", prefix: "sk_live_", body: BODY_36 },
+  { provider: "shopify-access-token", prefix: "shpat_", body: HEX_64.slice(0, 32) },
+  { provider: "shopify-shared-secret", prefix: "shpss_", body: HEX_64.slice(0, 32) },
+] as const) {
+  test(`D-SG-35 replaces a token of the ${provider} shape and keeps the text around it`, () => {
+    // arrange
+    const text = `token ${prefix}${body}; bad`;
+
+    // act
+    const redacted = redactCredentials(text);
+
+    // assert
+    assert.strictEqual(redacted, "token ***; bad");
   });
 }
 

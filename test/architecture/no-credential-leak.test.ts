@@ -419,6 +419,10 @@ const FAILED_ADD_SOURCE = "https://alice:s3cret@gitlab.example.com/team/private-
 // the URL userinfo, so the plugin half keeps the password with no `@` after it.
 const SPLIT_KEY_PLUGIN = "foo@https://alice:s3cret";
 const SPLIT_KEY_MARKETPLACE = "github.com/o/r.git";
+const QUERY_TOKEN_URL = "https://gitlab.example.com/team/mp.git?private_token=qsecret123";
+const QUERY_TOKEN = ["qsecret123"];
+const ENCODED_USERINFO_URL = "https://alice:s3cret%40gitlab.example.com/team/mp.git";
+const ENCODED_USERINFO = ["alice:s3cret", "s3cret"];
 
 function probePresentation(message: NotificationMessage): LeakProbe {
   const presentation = presentNotification(runWithAllLoaded(), message);
@@ -789,6 +793,64 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
           plugins: [],
         },
       ]),
+  },
+  {
+    site: "the block name of a failed add whose URL carries a query token",
+    planted: QUERY_TOKEN,
+    probe: () =>
+      probeReconcileAppliedSubject([
+        {
+          name: QUERY_TOKEN_URL,
+          scope: "project",
+          status: "failed",
+          reasons: ["source missing"],
+          severity: "error",
+          plugins: [],
+        },
+      ]),
+  },
+  {
+    site: "a failed row's cause whose URL carries a query token",
+    planted: QUERY_TOKEN,
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "failed",
+          severity: "error",
+          reasons: [],
+          cause: new Error(`clone ${QUERY_TOKEN_URL} failed`),
+        }),
+      ),
+  },
+  {
+    site: "the block name of a failed add whose password ends at %40",
+    planted: ENCODED_USERINFO,
+    probe: () =>
+      probeReconcileAppliedSubject([
+        {
+          name: ENCODED_USERINFO_URL,
+          scope: "project",
+          status: "failed",
+          reasons: ["authentication required"],
+          severity: "error",
+          plugins: [],
+        },
+      ]),
+  },
+  {
+    site: "a failed row's cause whose password ends at %40",
+    planted: ENCODED_USERINFO,
+    probe: () =>
+      probePresentation(
+        rowCascade({
+          name: "alpha",
+          status: "failed",
+          severity: "error",
+          reasons: [],
+          cause: new Error(`clone ${ENCODED_USERINFO_URL} failed`),
+        }),
+      ),
   },
   {
     site: "a plugin row name",
