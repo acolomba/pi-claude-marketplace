@@ -144,6 +144,33 @@ Feature: Marketplace credentials
     Then the user scope holds no marketplace record
     Then the user scope holds no marketplace checkout
 
+  # git runs the helper once to get the credential and once to erase the one
+  # the host refused. A `git credential reject` of the extension's own would
+  # run it to erase a second time (D-SG-28).
+  Scenario: Adding a marketplace whose host refuses the credential helper's credential leaves the erase to git (SG-AUTH-03)
+    Given the marketplace "tools" is published as a url source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the user's git configuration names a credential helper that answers the user "alice" with the password "expired-token"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope user"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope | status | reasons                 |
+      | https://{git host}/acme/tools.git | user  | failed | authentication required |
+    Then no result of the command contains "expired-token"
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then the credential helper has recorded these runs:
+      | action |
+      | get    |
+      | erase  |
+    Then the user scope holds no marketplace record
+
   Scenario: Adding a private GitHub marketplace with a stored credential clones it and asks for nothing
     Given the marketplace "tools" is published as a github source
     Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"

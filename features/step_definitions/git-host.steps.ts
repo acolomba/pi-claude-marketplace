@@ -47,6 +47,7 @@ import {
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
 import type { GitHostArm } from "../lib/https-git-host/server.ts";
+import type { UserGitCredential, UserGitProgramKind } from "../lib/user-git-programs.ts";
 import type { GitRepositoryReference } from "../support/git-repository.ts";
 import type { ProfilePiVariables, ScenarioWorld } from "../support/world.ts";
 
@@ -303,27 +304,45 @@ Given(
   },
 );
 
-// SG-PRC-02: the askpass program and the config that names it lie in the
-// sandbox HOME, which Pi's git reads through its global config (DRV-03). The
-// config keeps what an earlier credential-store step wrote, and its release
-// puts it back as it was.
+// The program of `kind` and the config that names it lie in the sandbox HOME,
+// which Pi's git reads through its global config (DRV-03). The config keeps
+// what an earlier credential-store step wrote, and its release puts it back
+// as it was.
+async function nameUserGitProgram(
+  world: ScenarioWorld,
+  kind: UserGitProgramKind,
+  credential: UserGitCredential,
+): Promise<void> {
+  const { home } = world.tokens;
+  const program = await writeUserGitProgram(home, kind, credential);
+  world.onRelease(() => removeUserGitProgram(home, kind));
+  const config = path.join(home, ".gitconfig");
+  const previous = await readOptionalText(config);
+  const setting = kind === "askpass" ? `[core]\n\taskPass` : `[credential]\n\thelper`;
+  const text = `${previous ?? ""}${setting} = ${program}\n`;
+  world.onRelease(() =>
+    previous === undefined ? rm(config, { force: true }) : writeFile(config, previous),
+  );
+  await writeFile(config, text);
+  assert.deepStrictEqual(
+    [await readFile(config, "utf8"), await readUserGitProgramRuns(home, kind)],
+    [text, []],
+  );
+}
+
+// SG-PRC-02: the product never runs the askpass program.
 Given(
   "the user's git configuration names an askpass program that answers the user {string} with the password {string}",
   async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
-    const { home } = this.tokens;
-    const program = await writeUserGitProgram(home, "askpass", { user, password });
-    this.onRelease(() => removeUserGitProgram(home, "askpass"));
-    const config = path.join(home, ".gitconfig");
-    const previous = await readOptionalText(config);
-    const text = `${previous ?? ""}[core]\n\taskPass = ${program}\n`;
-    this.onRelease(() =>
-      previous === undefined ? rm(config, { force: true }) : writeFile(config, previous),
-    );
-    await writeFile(config, text);
-    assert.deepStrictEqual(
-      [await readFile(config, "utf8"), await readUserGitProgramRuns(home, "askpass")],
-      [text, []],
-    );
+    await nameUserGitProgram(this, "askpass", { user, password });
+  },
+);
+
+// SG-AUTH-03: git asks this helper for every https request.
+Given(
+  "the user's git configuration names a credential helper that answers the user {string} with the password {string}",
+  async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
+    await nameUserGitProgram(this, "credential-helper", { user, password });
   },
 );
 
@@ -590,6 +609,16 @@ Then(
   "the credential helper has recorded no run",
   async function (this: ScenarioWorld): Promise<void> {
     assert.deepStrictEqual(await readUserGitProgramRuns(this.tokens.home, "credential-helper"), []);
+  },
+);
+
+// SG-AUTH-03: git runs the helper with one action per run. A `git credential
+// reject` of the extension's own would add an `erase` run to git's.
+Then(
+  "the credential helper has recorded these runs:",
+  async function (this: ScenarioWorld, table: DataTable): Promise<void> {
+    const runs = await readUserGitProgramRuns(this.tokens.home, "credential-helper");
+    assert.deepStrictEqual([["action"], ...runs.map((action) => [action])], table.raw());
   },
 );
 

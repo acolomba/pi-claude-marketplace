@@ -2,9 +2,11 @@
  * @fileoverview Stand-ins for programs a user configured for git: an askpass
  * program (`core.askPass`) and a credential helper (`credential.helper`). Each
  * answers with a given user and password, as the user's own program would,
- * and records every run to a file beside it. The product must never run
- * either during a credential lookup (SG-PRC-02, SG-PRC-03), so a scenario
- * states that the record holds no run.
+ * and records every run to a file beside it. The product must never run an
+ * askpass program, or a helper that only the project repository names, during
+ * a credential lookup (SG-PRC-02, SG-PRC-03), so a scenario states that the
+ * record holds no run. A helper that the user's own git config names is one
+ * git asks, and a scenario states each action git ran it with (SG-AUTH-03).
  *
  * A program lives in the sandbox HOME, and its record beside it. Both are
  * shell scripts that use only shell builtins, so they run on any PATH.
