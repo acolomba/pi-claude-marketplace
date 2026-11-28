@@ -4,16 +4,16 @@ milestone: system-git
 milestone_name: System Git
 current_phase: 6
 current_phase_name: Failure-Message Parity
-status: ready_to_discuss
-stopped_at: Phase 6 context gathered
-last_updated: "2026-11-28T13:26:02.171Z"
+status: ready_to_execute
+stopped_at: Phase 6 planned (12 plans, 10 waves)
+last_updated: "2026-11-28T16:11:09.026Z"
 last_activity: 2026-11-28
-last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: 621beb47dea3488586fc55244261d38942bb49e8
+last_activity_desc: Phase 6 planned, 12 plans in 10 waves
+state_head: c81a51ab9d2a60936920d5fa78aa1127fb3966dc
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 72
+  total_plans: 84
   completed_plans: 72
   percent: 63
 ---
@@ -31,10 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 6 — Failure-Message Parity
+Phase: 6 (Failure-Message Parity) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to discuss Phase 6
-Last activity: 2026-11-28 — Phase 5 complete, transitioned to Phase 6
+Status: Ready to execute Phase 6
+Last activity: 2026-11-28 — Phase 6 planned, 12 plans in 10 waves
 
 Progress: [██████░░░░] 63%
 
@@ -1409,7 +1409,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-28T13:25:28.136Z
-Stopped at: Phase 6 context gathered
+Stopped at: Phase 6 planned (12 plans, 10 waves)
 Resume file: .planning/phases/06-failure-message-parity/06-CONTEXT.md
 
 ### Phase 2 completion-helper notes

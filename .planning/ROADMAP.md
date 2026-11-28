@@ -461,7 +461,40 @@ Plans:
   1. For each failure class that discuss kept (Q4), such as auth, SSH auth, not found, network, timeout, ref missing, both transports failed, and git missing, `marketplace add`, `marketplace update`, and a git-source plugin install report Claude Code's message, adapted only where Pi has no equivalent; a cucumber scenario pins each class (SG-ERR-01).
   2. The same failure gives the same reason wherever it is reported (the command's own notice, the `apply` and `import` cascades, and the background autoupdate pass), because each reason comes from the typed failure kind (SG-ERR-01).
   3. A failure whose URL carries userinfo, or whose git stderr carries a token or a password, shows neither in the notice, the JSON-mode output, or the debug log, and git's own output never reaches stdout or stderr directly (SG-ERR-02).
-**Plans**: TBD
+**Plans**: 12 plans in 10 waves
+
+Plans:
+**Wave 1**
+- [ ] 06-01-PLAN.md — Redaction first: wider credential redaction, the URL-spelling pass, `GitRemote` on `GitCommandError`, a class-keeping `redactCauseChain`, the shared output-bounding leaf (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 06-02-PLAN.md — One redacted `[git]` debug line for each failed git run, and central redaction in `hookDebugLog` (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 06-03-PLAN.md — One HTTPS authentication message: `StoredCredentialRejectedError` becomes a `GitCommandError`, and the D-1-02 recipe and GAUTH-04 cause text go (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 06-04-PLAN.md — The remedy sentences (D-SG-33) and `git printed:` in the cause chain, with every git cause-chain pin rewritten (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 06-05-PLAN.md — Every `marketplace add` git failure shows its cause, plus the AUTH-09 scan and the planted git-output row (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 06-06-PLAN.md — Direct plugin install, update, reinstall, and cascade rows keep a git failure's cause (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 06-07-PLAN.md — `apply` and `import` rows keep a git failure's cause; IMP-09 amended (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 06-08-PLAN.md — One scenario for each failure class, in TUI, JSON, and print mode (wave 8)
+- [ ] 06-09-PLAN.md — Output catalog and output docs moved from isomorphic-git messages to system git (wave 8)
+- [ ] 06-10-PLAN.md — `enable`'s re-clone failure reads install's reason (direct and through `apply`) (wave 8)
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 06-11-PLAN.md — Background autoupdate and install-versus-`apply` parity scenarios (wave 9)
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 06-12-PLAN.md — Decision rows D-SG-31..35 and amendments, CHANGELOG, READMEs, codebase docs (wave 10)
 
 ### Phase 7: Submodules and Marketplace Pins
 
