@@ -5,11 +5,11 @@ milestone_name: System Git
 current_phase: 6
 current_phase_name: Failure-Message Parity
 status: ready_to_discuss
-stopped_at: Phase 5 complete, ready to discuss Phase 6
-last_updated: "2026-11-28T04:09:05.045Z"
+stopped_at: Phase 6 context gathered
+last_updated: "2026-11-28T13:26:02.171Z"
 last_activity: 2026-11-28
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: 263c890878278c855d205f03eabc245b9781eed9
+state_head: 621beb47dea3488586fc55244261d38942bb49e8
 progress:
   total_phases: 8
   completed_phases: 5
@@ -1408,9 +1408,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-27T12:18:02.760Z
-Stopped at: Phase 5 complete, ready to discuss Phase 6
-Resume file: .planning/phases/05-credential-surface/05-CONTEXT.md
+Last session: 2026-11-28T13:25:28.136Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/phases/06-failure-message-parity/06-CONTEXT.md
 
 ### Phase 2 completion-helper notes
 
