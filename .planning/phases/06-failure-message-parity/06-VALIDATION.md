@@ -57,6 +57,7 @@ created: "2026-11-28"
 | SG-ERR-02 | Widened patterns, `#ref` kept, query values redacted, `Basic`, `%40`, token table rows | unit | `node --test test/shared/redact-credentials.test.ts` | ✅ (extend) |
 | SG-ERR-02 | URL spellings replaced before credentials | unit | `node --test test/shared/redact-credentials.test.ts`, `test/platform/git-process.test.ts` | ✅ (extend) |
 | SG-ERR-02 | Central debug redaction | unit | `node --test test/shared/debug-log.test.ts` | ✅ (extend) |
+| SG-ERR-02 | A remedy interpolates only `host`, `label`, `seconds`, `unit`, and `code` (AUTH-09), and a secret planted in a `GitCommandError`'s stderr reaches no presentation, payload, or text | architecture | `node --test test/architecture/no-credential-leak.test.ts` | ✅ (extend) |
 | SG-ERR-02 | Credential in URL userinfo and a query token, absent from the notice, the JSON-mode output, and the print-mode debug log | cucumber | new scenario (url source `https://user:secret@{git host}/acme/tools.git?private_token=glpat-…` against a 404 arm; JSON mode step; print mode with `PI_CLAUDE_MARKETPLACE_DEBUG=1`) | ❌ Wave 0 (a debug-log assertion step) |
 | SG-ERR-02 | git output never reaches stdout/stderr directly | cucumber | `pi's print mode exits with code 0 and prints nothing` after a failing clone (debug off) | ✅ step exists |
 
