@@ -388,7 +388,7 @@ Feature: Marketplace git source
       | github      | acme/tools                    | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, fetched https://{git host}/acme/tools.git |
       | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, fetched https://{git host}/acme/tools.git |
 
-  Scenario Outline: Updating a git marketplace whose host answers 403 before any credential is sent fails as authentication required
+  Scenario Outline: Updating a git marketplace whose host answers 403 before any credential is sent fails as authentication required and says how to give git a credential
     Given the marketplace "tools" is published as a <source kind> source
     Given the user has run "/claude:plugin marketplace add <source> --scope project"
     Given the user has stored a credential for the git host with the user "alice" and the password "s3cret"
@@ -409,8 +409,8 @@ Feature: Marketplace git source
 
     @url
     Examples:
-      | source kind | source                            | cause chain                                                                            |
-      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128 |
+      | source kind | source                            | cause chain                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, HTTPS authentication with {git host} failed. Make sure that your git credential helper has a valid credential for {git host}, for example a personal access token. This extension runs git with terminal prompts and askpass programs turned off, and it tells credential helpers not to prompt. So git can only use a credential that it gets without asking you, such as one that a credential helper already holds., git printed: fatal: unable to access 'https://{git host}/acme/tools.git/': The requested URL returned error: 403 |
 
   Scenario: Updating a marketplace whose checkout cannot be moved aside keeps it and warns, and the next update replaces it
     Given the marketplace "tools" is published as a url source

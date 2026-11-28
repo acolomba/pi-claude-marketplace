@@ -1,5 +1,8 @@
+import { boundedNote, compactOutput } from "./child-output.ts";
+import { gitFailureRemedy } from "./git-failure-remedy.ts";
 import { redactCredentials } from "./redact-credentials.ts";
 
+import type { GitRemedyClass } from "./git-failure-remedy.ts";
 import type { ContentReason } from "./notification-types.ts";
 
 /** Rejects a host mode before an operation starts or output is delivered. */
@@ -145,7 +148,7 @@ export function cleanupFailuresFromError(err: unknown): readonly CleanupFailure[
 
 /**
  * D-11: one `Error.cause` chain as display data. `causeChain` holds the
- * rendered text of each link, head first. `truncated` is set when the walk
+ * rendered entries of each link, head first. `truncated` is set when the walk
  * stopped at the depth bound and the last link still carries an onward cause.
  */
 export interface SerializedCauseChain {
@@ -162,9 +165,12 @@ export interface SerializedCauseChain {
  *   - Depth bound 5 prevents pathological cycles (T-13-04 DoS mitigation).
  *   - Cycle detection: `current.cause !== current` -- an Error whose own
  *     `.cause` is itself terminates the walk at depth 1.
- *   - Each link is its `Error.message` verbatim. A `CleanupContextError` link
- *     appends its `(cleanup: ...)` facts with every path reduced to its
- *     basename. A `string` cause renders verbatim; any other value renders
+ *   - Each link is its `Error.message` verbatim. A `GitCommandError` link
+ *     yields up to three entries in this order: its typed line, the remedy
+ *     of its class, and `git printed: <output>` (D-SG-31, D-SG-32,
+ *     `gitFailureDetails`). The depth bound counts links, not entries. A
+ *     `CleanupContextError` link appends its `(cleanup: ...)` facts with
+ *     every path reduced to its basename. A `string` cause renders verbatim; any other value renders
  *     via `Object.prototype.toString.call(c)`, so a `{x: 1}` cause renders as
  *     `[object Object]` without the `String()` coercion the ESLint rule
  *     `@typescript-eslint/no-base-to-string` forbids.
@@ -172,9 +178,10 @@ export interface SerializedCauseChain {
  *     last link still has an onward cause.
  *
  * NFR-9: surfaces only `Error.message` (or the `String` /
- * `Object.prototype.toString` fallback for non-Error). No `.stack`, no
- * absolute cleanup paths. This is the single serialization site for cause
- * chains, and it redacts the credentials of every link (PMOD-04, D-07).
+ * `Object.prototype.toString` fallback for non-Error) and the details of a
+ * git link. No `.stack`, no absolute cleanup paths. This is the single
+ * serialization site for cause chains, and it redacts the credentials of
+ * every entry (PMOD-04, D-07, D-SG-35).
  * `linkMessage` stays unredacted, because `redactCauseChain` rebuilds links
  * from it before they are serialized here.
  */
@@ -188,7 +195,7 @@ export function serializeCauseChain(err: unknown): SerializedCauseChain | undefi
   // onward cause, which is exactly the truncation condition.
   const links = [...causeChain(err)];
   return {
-    causeChain: links.map((link) => redactCredentials(linkMessage(link))),
+    causeChain: links.flatMap(linkEntries).map((entry) => redactCredentials(entry)),
     truncated: hasOnwardCause(links.at(-1)),
   };
 }
@@ -238,6 +245,14 @@ export function linkMessage(link: unknown): string {
   }
 
   return Object.prototype.toString.call(link);
+}
+
+// A git link expands into its typed line and its details; any other link is
+// one entry.
+function linkEntries(link: unknown): readonly string[] {
+  return link instanceof GitCommandError
+    ? [link.message, ...gitFailureDetails(link)]
+    : [linkMessage(link)];
 }
 
 function renderCleanupFailure(failure: CleanupFailure): string {
@@ -1332,12 +1347,13 @@ export interface GitRemote {
  * GitCommandError` and then read `kind` (or `failure` for the fields of a
  * kind), never the error's name or message.
  *
- * The error holds facts, and the wording is chosen when it is shown. `stderr`
- * is git's stderr with its credentials redacted (PMOD-04, D-SG-35), and
- * `remote`, when the command reached one, is that remote with its URL's
- * credentials redacted. The message holds the operation, the kind, a
- * timeout's limit, and the exit code only, never stderr, an operand, or
- * stdin, because a cause chain is shown to the user.
+ * The error holds facts, and the wording of each kind is chosen when it is
+ * shown. `stderr` is git's stderr with its credentials redacted (PMOD-04,
+ * D-SG-35), and `remote`, when the command reached one, is that remote with
+ * its URL's credentials redacted. The message holds the operation, the kind,
+ * a timeout's limit, and the exit code only, never stderr, an operand, or
+ * stdin. A cause chain shows the message, then the remedy of the kind and
+ * git's bounded output (`gitFailureDetails`, D-SG-31, D-SG-32).
  *
  * A `git-missing` message names the requirement in Claude Code's words
  * (D-SG-01): its macOS text for the xcrun shim, and otherwise its
@@ -1401,6 +1417,64 @@ function gitCommandMessage(
 }
 
 /**
+ * D-SG-33, D-SG-34: the remedy class of each kind. A kind Claude Code gives no
+ * remedy is `"none"`, so its cause chain shows git's output only. The
+ * `satisfies Record` makes a new kind a compile error.
+ */
+const GIT_REMEDY_CLASSES = {
+  "git-missing": "none",
+  timeout: "timeout",
+  network: "network",
+  "repository-not-found": "none",
+  "https-auth": "https-auth",
+  "ssh-auth": "ssh-auth",
+  "git-too-old": "none",
+  aborted: "none",
+  "ssh-host-key-unknown": "ssh-host-key-unknown",
+  "ssh-host-key-changed": "ssh-host-key-changed",
+  "proxy-refused": "none",
+  "remote-ref-missing": "none",
+  "local-ref-missing": "none",
+  "commit-missing": "none",
+  "pin-mismatch": "none",
+  "refused-input": "none",
+  "protocol-refused": "none",
+  "dubious-ownership": "none",
+  "not-a-repository": "none",
+  "remote-error": "none",
+  "no-stderr": "no-stderr",
+  failed: "none",
+} as const satisfies Record<GitFailure["kind"], GitRemedyClass | "none">;
+
+/**
+ * D-SG-31, D-SG-32: what a cause chain shows after the typed line of `error`:
+ * the remedy of its class when it has one, then `git printed: <output>` when
+ * git printed anything. The output is git's redacted stderr as one line, cut
+ * to its last 500 characters, because git prints its reason last. A
+ * `git-missing` failure has no output entry, because git did not run.
+ */
+// fallow-ignore-next-line unused-export -- serializeCauseChain above expands each git link through it in production, and the module test reads it directly.
+export function gitFailureDetails(error: GitCommandError): readonly string[] {
+  const remedyClass = GIT_REMEDY_CLASSES[error.kind];
+  const remedy =
+    remedyClass === "none"
+      ? undefined
+      : gitFailureRemedy({
+          remedyClass,
+          ...(error.failure.kind === "timeout" && { timeoutMs: error.failure.timeoutMs }),
+          exitCode: error.exitCode,
+          stderr: error.stderr,
+          ...(error.remote !== undefined && { remote: error.remote }),
+        });
+  const output =
+    error.kind === "git-missing" ? "" : boundedNote(compactOutput(error.stderr), "tail");
+  return [
+    ...(remedy === undefined ? [] : [remedy]),
+    ...(output === "" ? [] : [`git printed: ${output}`]),
+  ];
+}
+
+/**
  * GAUTH-04, as amended by the one-message HTTPS auth decision of D-SG-31: the
  * host refused the credential one of the user's credential helpers gave, so
  * the credential was found and sent, and the host refused it. The keychain
@@ -1443,9 +1517,10 @@ export interface GitHubTransportAttemptFailure {
  * The message is Claude Code's for the surface. A marketplace names each
  * attempt's transport, URL, and message. A plugin shows the first message,
  * then the retry's, named by its transport (Claude Code's `The retry over SSH
- * failed too` for its HTTPS-then-SSH pair), then the remedy that ends `Then
- * install again.` The whole text is redacted, so a URL's userinfo never shows
- * (T-04-06).
+ * failed too` for its HTTPS-then-SSH pair), then Claude Code's remedy. Its
+ * last sentence names no verb, where upstream's names install, because
+ * install, update, reinstall, apply, and import all show it. The whole text
+ * is redacted, so a URL's userinfo never shows (T-04-06).
  *
  * As Claude Code does, a marketplace clone whose two messages are equal
  * throws the second error unchanged, so a marketplace error of this class
@@ -1503,7 +1578,7 @@ function gitHubTransportsMessage(
 ): string {
   if (surface === "plugin") {
     // eslint-disable-next-line local/no-github-literal -- GHB-02: Claude Code's user-facing remedy names github.com verbatim
-    return `${first.error.message}\nThe retry over ${GITHUB_TRANSPORT_LABELS[last.transport]} failed too: ${last.error.message}\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.`;
+    return `${first.error.message}\nThe retry over ${GITHUB_TRANSPORT_LABELS[last.transport]} failed too: ${last.error.message}\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then run the command again.`;
   }
 
   return `Fetching the marketplace from GitHub failed on both attempts. ${attemptText(first)}\n\n${attemptText(last)}`;

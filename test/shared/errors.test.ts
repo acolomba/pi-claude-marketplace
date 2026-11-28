@@ -21,6 +21,7 @@ import {
   findManualRecoveryError,
   formatCauseChain,
   GitCommandError,
+  gitFailureDetails,
   GitHubTransportsFailedError,
   hasFetchedUrlCause,
   HostedManifestFetchError,
@@ -488,6 +489,256 @@ describe("serializeCauseChain", () => {
       truncated: false,
     });
   });
+
+  test("D-SG-31, D-SG-32 expands a git link into its typed line, its remedy, and git's output", () => {
+    // arrange
+    const error = new Error("Failed to update marketplace", {
+      cause: new GitCommandError(
+        { kind: "https-auth", detail: "no-credential" },
+        {
+          operation: "ls-remote",
+          exitCode: 128,
+          stderr:
+            "remote: Forbidden\nfatal: unable to access 'x': The requested URL returned error: 403\n",
+          remote: { url: "https://127.0.0.1:8443/acme/tools.git", gitHub: false },
+        },
+      ),
+    });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "Failed to update marketplace",
+        "git ls-remote failed: https-auth, exit code 128",
+        "HTTPS authentication with 127.0.0.1:8443 failed. Make sure that your git credential helper has a valid credential for 127.0.0.1:8443, for example a personal access token. This extension runs git with terminal prompts and askpass programs turned off, and it tells credential helpers not to prompt. So git can only use a credential that it gets without asking you, such as one that a credential helper already holds.",
+        "git printed: remote: Forbidden; fatal: unable to access 'x': The requested URL returned error: 403",
+      ],
+      truncated: false,
+    });
+  });
+
+  test("D-SG-32 adds no output entry when git printed only blank lines", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "https-auth", detail: "rejected" },
+      {
+        operation: "clone",
+        exitCode: 128,
+        stderr: " \n\t\n",
+        remote: { url: "https://127.0.0.1:8443/acme/tools.git", gitHub: false },
+      },
+    );
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "git clone failed: https-auth, exit code 128",
+        "HTTPS authentication with 127.0.0.1:8443 failed. Make sure that your git credential helper has a valid credential for 127.0.0.1:8443, for example a personal access token. This extension runs git with terminal prompts and askpass programs turned off, and it tells credential helpers not to prompt. So git can only use a credential that it gets without asking you, such as one that a credential helper already holds.",
+      ],
+      truncated: false,
+    });
+  });
+
+  test("D-SG-07 shows a git-missing link as its own text alone", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "git-missing", detail: "macos-shim" },
+      { operation: "lookup", exitCode: 1, stderr: "xcrun: error: invalid active developer path" },
+    );
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "git is not installed on this Mac. To install it, run xcode-select --install, then try again.",
+      ],
+      truncated: false,
+    });
+  });
+
+  test("D-SG-34 shows a kind with no remedy as its typed line and git's output", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "dubious-ownership" },
+      {
+        operation: "rev-parse",
+        exitCode: 128,
+        stderr: "fatal: detected dubious ownership in repository at 'clone'",
+      },
+    );
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "git rev-parse failed: dubious-ownership, exit code 128",
+        "git printed: fatal: detected dubious ownership in repository at 'clone'",
+      ],
+      truncated: false,
+    });
+  });
+
+  test("D-SG-31 counts a git link once toward the depth bound and keeps the truncation mark", () => {
+    // arrange
+    const error = new Error("link-1", {
+      cause: new Error("link-2", {
+        cause: new Error("link-3", {
+          cause: new Error("link-4", {
+            cause: new GitCommandError(
+              { kind: "failed" },
+              { operation: "fetch", exitCode: 1, stderr: "fatal: odd" },
+              { cause: new Error("link-6") },
+            ),
+          }),
+        }),
+      }),
+    });
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "link-1",
+        "link-2",
+        "link-3",
+        "link-4",
+        "git fetch failed: failed, exit code 1",
+        "git printed: fatal: odd",
+      ],
+      truncated: true,
+    });
+  });
+
+  test("PMOD-04 redacts a token that git's output shows only once its escape codes are gone", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "failed" },
+      {
+        operation: "clone",
+        exitCode: 128,
+        stderr: "fatal: token ghp_\u001b[0m0123456789abcdefghijklmnopqrstuvwxyz refused",
+      },
+    );
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "git clone failed: failed, exit code 128",
+        "git printed: fatal: token *** refused",
+      ],
+      truncated: false,
+    });
+  });
+
+  test("D-SG-22 expands only the last attempt of a both-transports failure", () => {
+    // arrange
+    const first = new GitCommandError(
+      { kind: "ssh-auth", detail: "publickey" },
+      { operation: "clone", exitCode: 128, stderr: "git@host: Permission denied (publickey)." },
+    );
+    const last = new GitCommandError(
+      { kind: "repository-not-found", httpStatus: 404 },
+      { operation: "clone", exitCode: 128, stderr: "fatal: repository 'x' not found" },
+    );
+    const error = new GitHubTransportsFailedError("marketplace", [
+      { transport: "ssh", url: "git@github.com:acme/tools.git", error: first },
+      { transport: "https", url: "https://github.com/acme/tools.git", error: last },
+    ]);
+
+    // act
+    const chain = serializeCauseChain(error);
+
+    // assert
+    assert.deepStrictEqual(chain, {
+      causeChain: [
+        "Fetching the marketplace from GitHub failed on both attempts. SSH (git@github.com:acme/tools.git): git clone failed: ssh-auth, exit code 128\n\nHTTPS (https://github.com/acme/tools.git): git clone failed: repository-not-found, exit code 128",
+        "git clone failed: repository-not-found, exit code 128",
+        "git printed: fatal: repository 'x' not found",
+      ],
+      truncated: false,
+    });
+  });
+});
+
+describe("gitFailureDetails", () => {
+  test("D-SG-33 gives a timeout the remedy that names its limit in seconds", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "timeout", timeoutMs: 120_000 },
+      { operation: "clone", stderr: "Cloning into 'x'..." },
+    );
+
+    // act
+    const details = gitFailureDetails(error);
+
+    // assert
+    assert.deepStrictEqual(details, [
+      "This extension stopped git after 120 seconds, the time limit for one git command. A large repository can need more time. To raise the limit, start Pi with CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS set to a number of milliseconds, for example 300000 for 5 minutes.",
+      "git printed: Cloning into 'x'...",
+    ]);
+  });
+
+  test("D-SG-33 gives a failure with no output the remedy that names its exit code", () => {
+    // arrange
+    const error = new GitCommandError({ kind: "no-stderr" }, { operation: "clone", exitCode: 1 });
+
+    // act
+    const details = gitFailureDetails(error);
+
+    // assert
+    assert.deepStrictEqual(details, [
+      "git exited with code 1 and printed no error output. To see the git command that failed, start Pi with PI_CLAUDE_MARKETPLACE_DEBUG=1. Then run the command again.",
+    ]);
+  });
+
+  test("D-SG-34 gives a network failure with no remedy text its output only", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "network", httpStatus: 502 },
+      {
+        operation: "clone",
+        exitCode: 128,
+        stderr: "fatal: unable to access 'x': The requested URL returned error: 502",
+      },
+    );
+
+    // act
+    const details = gitFailureDetails(error);
+
+    // assert
+    assert.deepStrictEqual(details, [
+      "git printed: fatal: unable to access 'x': The requested URL returned error: 502",
+    ]);
+  });
+
+  test("D-SG-32 keeps the last 500 characters of a long output", () => {
+    // arrange
+    const error = new GitCommandError(
+      { kind: "failed" },
+      { operation: "clone", exitCode: 1, stderr: `${"a".repeat(600)}\nfatal: end` },
+    );
+
+    // act
+    const details = gitFailureDetails(error);
+
+    // assert
+    assert.deepStrictEqual(details, [`git printed: ${"a".repeat(488)}; fatal: end`]);
+  });
 });
 
 describe("formatCauseChain", () => {
@@ -949,7 +1200,7 @@ describe("GitHubTransportsFailedError", () => {
     assert.strictEqual(error.cause, httpsError);
   });
 
-  test("OQ-8: composes the plugin message with the SSH retry and the install remedy", () => {
+  test("OQ-8: composes the plugin message with the SSH retry and a remedy that names no verb", () => {
     // arrange
     const httpsError = new Error("https refused");
     const sshError = new Error("ssh refused");
@@ -966,7 +1217,7 @@ describe("GitHubTransportsFailedError", () => {
       {
         surface: "plugin",
         message:
-          "https refused\nThe retry over SSH failed too: ssh refused\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.",
+          "https refused\nThe retry over SSH failed too: ssh refused\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then run the command again.",
       },
     );
     assert.strictEqual(error.cause, sshError);
@@ -986,7 +1237,7 @@ describe("GitHubTransportsFailedError", () => {
     // assert
     assert.strictEqual(
       error.message,
-      "ssh refused\nThe retry over HTTPS failed too: https refused\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.",
+      "ssh refused\nThe retry over HTTPS failed too: https refused\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then run the command again.",
     );
   });
 
