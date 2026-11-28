@@ -238,7 +238,8 @@ export function runWithGitAbortSignal<T>(signal: AbortSignal, run: () => Promise
  * GHB-01: runs one network call. When the call sends `wireUrl` in place of the
  * caller's `url` and fails with an error that has no cause, the error gains a
  * `FetchedUrlCause` naming `wireUrl`, so a wrong base shows in the failure
- * output. The code-bearing error stays at depth 0 for the failure classifiers.
+ * output. A refused stored credential (`StoredCredentialRejectedError`) has no
+ * cause either, so it gains the link too. The code-bearing error stays at depth 0 for the failure classifiers.
  * An unrewritten call runs with no `try` and its failure is unchanged (GHB-04).
  * A `git-missing` failure fetched nothing, so it gains no cause (SG-PRC-06).
  */
@@ -353,7 +354,9 @@ function bundleOrigin(wireUrl: string, host: string): string | undefined {
  * failure of a request to its own host, `wireUrl` after the D-SG-16 rewrite
  * (D-1-03, T-79-04):
  *   - `rejected`: the host refused the credential a helper gave, the GAUTH-04
- *     `StoredCredentialRejectedError` with the git failure as its cause.
+ *     `StoredCredentialRejectedError`: the git failure itself, with its
+ *     typed line and no cause link, so `runRemote` adds the GHB-01
+ *     `FetchedUrlCause` to it as to any other failure of a rewritten request.
  *   - anything else, a missing bundle, a helper miss, and a request to
  *     another host included, is thrown as it failed. The extension erases no
  *     stored credential (git's own helpers may, as under Claude Code).
@@ -374,7 +377,7 @@ async function runWithAuthBundle(
       error.failure.detail === "rejected" &&
       bundleOrigin(wireUrl, auth.host) !== undefined
     ) {
-      throw new StoredCredentialRejectedError(auth.host, { cause: error });
+      throw new StoredCredentialRejectedError(auth.host, error);
     }
 
     throw error;

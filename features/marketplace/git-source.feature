@@ -331,7 +331,7 @@ Feature: Marketplace git source
       | github      | acme/tools                    | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
       | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
 
-  Scenario Outline: Updating a git marketplace whose host rejects the stored credential names the rejection
+  Scenario Outline: Updating a git marketplace whose host rejects the stored credential fails as authentication required
     Given the marketplace "tools" is published as a <source kind> source
     Given the user has run "/claude:plugin marketplace add <source> --scope project"
     Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
@@ -356,10 +356,10 @@ Feature: Marketplace git source
 
     @url
     Examples:
-      | source kind | source                            | cause chain                                                                      |
-      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
+      | source kind | source                            | cause chain                                                                            |
+      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128 |
 
-  Scenario Outline: Updating a github marketplace whose host rejects the stored credential names the rejection and the clone it tried
+  Scenario Outline: Updating a github marketplace whose host rejects the stored credential fails as authentication required and names the clone it tried
     Given the marketplace "tools" is published as a <source kind> source
     Given the user has run "/claude:plugin marketplace add <source> --scope project"
     Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
@@ -384,9 +384,9 @@ Feature: Marketplace git source
 
     @github
     Examples:
-      | source kind | source                        | cause chain                                                                                                                 |
-      | github      | acme/tools                    | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
-      | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
+      | source kind | source                        | cause chain                                                                                                                       |
+      | github      | acme/tools                    | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, fetched https://{git host}/acme/tools.git |
+      | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, fetched https://{git host}/acme/tools.git |
 
   Scenario Outline: Updating a git marketplace whose host answers 403 before any credential is sent names the command that stores one
     Given the marketplace "tools" is published as a <source kind> source

@@ -1382,7 +1382,7 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
     assert.strictEqual(recorded.requests.length, 1);
   });
 
-  test("GAUTH-04: a refused stored credential throws StoredCredentialRejectedError with the git failure as its cause, and git runs once", async (t) => {
+  test("GAUTH-04, D-SG-31: a refused stored credential throws StoredCredentialRejectedError with the git failure's typed line and no cause, and git runs once", async (t) => {
     // arrange
     const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
     const recorded = recordingGitProcess(standIn.gitProcess);
@@ -1399,10 +1399,15 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
     // assert
     await assert.rejects(resolution, (error: unknown) => {
       assert.ok(error instanceof StoredCredentialRejectedError);
-      assert.ok(error.cause instanceof GitCommandError);
+      assert.ok(error instanceof GitCommandError);
       assert.deepStrictEqual(
-        { host: error.host, failure: error.cause.failure },
-        { host: standIn.host.address, failure: { kind: "https-auth", detail: "rejected" } },
+        { host: error.host, failure: error.failure, message: error.message, cause: error.cause },
+        {
+          host: standIn.host.address,
+          failure: { kind: "https-auth", detail: "rejected" },
+          message: "git ls-remote failed: https-auth, exit code 128",
+          cause: undefined,
+        },
       );
       return true;
     });
@@ -1423,12 +1428,47 @@ describe("GAUTH-04 and D-1-03: an auth failure of a remote request", () => {
     await assert.rejects(fetching, (error: unknown) => {
       assert.ok(error instanceof StoredCredentialRejectedError);
       assert.deepStrictEqual(
-        { host: error.host, causeIsFailure: error.cause === failing.failures[0] },
-        { host: HOST, causeIsFailure: true },
+        {
+          host: error.host,
+          failure: error.failure,
+          operation: error.operation,
+          exitCode: error.exitCode,
+          cause: error.cause,
+        },
+        {
+          host: HOST,
+          failure: failing.failures[0]?.failure,
+          operation: "fetch",
+          exitCode: 128,
+          cause: undefined,
+        },
       );
       return true;
     });
     assert.strictEqual(fetchRequests(failing.requests).length, 1);
+  });
+
+  test("GHB-01, GAUTH-04: a refused stored credential at the GitHub base names the URL git fetched", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, `https://${HOST}`);
+    const failing = failingAuthGitProcess("rejected");
+
+    // act
+    const resolution = resolveRemoteRef(
+      { url: GITHUB_TOOLS_URL, auth: boundAuth() },
+      failing.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof StoredCredentialRejectedError);
+      assert.ok(error.cause instanceof FetchedUrlCause);
+      assert.deepStrictEqual(
+        { host: error.host, kind: error.kind, url: error.cause.url },
+        { host: HOST, kind: "https-auth", url: `https://${HOST}/acme/tools.git` },
+      );
+      return true;
+    });
   });
 
   test("D-1-03: a bundle for another host throws a refused credential's failure unchanged", async (t) => {
@@ -1811,7 +1851,14 @@ describe("listRemoteTags", () => {
     // assert
     await assert.rejects(listing, (error: unknown) => {
       assert.ok(error instanceof StoredCredentialRejectedError);
-      assert.strictEqual(error.cause, failing.failures[0]);
+      assert.deepStrictEqual(
+        { failure: error.failure, message: error.message, cause: error.cause },
+        {
+          failure: { kind: "https-auth", detail: "rejected" },
+          message: failing.failures[0]?.message,
+          cause: undefined,
+        },
+      );
       return true;
     });
   });

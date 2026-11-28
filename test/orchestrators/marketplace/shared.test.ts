@@ -520,7 +520,14 @@ for (const { title, makeError, lacks } of [
   },
   {
     title: "GAUTH-04: does not report a stored credential the host rejected",
-    makeError: (): unknown => new StoredCredentialRejectedError("gitlab.example.com"),
+    makeError: (): unknown =>
+      new StoredCredentialRejectedError(
+        "gitlab.example.com",
+        new GitCommandError(
+          { kind: "https-auth", detail: "rejected" },
+          { operation: "ls-remote", exitCode: 128 },
+        ),
+      ),
     lacks: false,
   },
   {
@@ -552,7 +559,16 @@ for (const { title, makeError, lacks } of [
     makeError: (): unknown =>
       bothTransportsFailed(
         { transport: "ssh", error: sshPublicKeyDenied() },
-        { transport: "https", error: new StoredCredentialRejectedError("github.com") },
+        {
+          transport: "https",
+          error: new StoredCredentialRejectedError(
+            "github.com",
+            new GitCommandError(
+              { kind: "https-auth", detail: "rejected" },
+              { operation: "clone", exitCode: 128 },
+            ),
+          ),
+        },
       ),
     lacks: false,
   },

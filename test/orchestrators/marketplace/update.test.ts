@@ -1984,13 +1984,16 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
   });
 });
 
-test("GAUTH-04: a stored credential that a url host rejects renders {authentication required} without the stored-credential cause line", async () => {
+test("GAUTH-04, D-SG-31: a stored credential that a url host rejects renders {authentication required} with the typed ls-remote line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedUrlMarketplace({ cwd, name: "urlmp-rejected", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
-      remoteThrows: new StoredCredentialRejectedError("gitlab.example.com"),
+      remoteThrows: new StoredCredentialRejectedError(
+        "gitlab.example.com",
+        remoteFailure({ kind: "https-auth", detail: "rejected" }),
+      ),
     });
 
     // act
@@ -2008,7 +2011,7 @@ test("GAUTH-04: a stored credential that a url host rejects renders {authenticat
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-rejected [project] (failed)\n  ⊘ urlmp-rejected (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-rejected". -> gitlab.example.com rejected the stored credential',
+          'Some operations have failed.\n\n⊘ urlmp-rejected [project] (failed)\n  ⊘ urlmp-rejected (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-rejected". -> git ls-remote failed: https-auth, exit code 128',
         severity: "error",
       },
     ]);
@@ -6147,13 +6150,16 @@ test("UPD-12 / GHB-01: a GitHub update under the override that the host answers 
   });
 });
 
-test("UPD-12 / GHB-01: a stored credential that the override host rejects keeps its chain without the stored-credential line", async (t) => {
+test("UPD-12 / GHB-01: a stored credential that the override host rejects shows the typed ls-remote line and the URL git fetched", async (t) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     setGitHubBaseUrl(t, "https://mirror.example:8443/git");
     await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    const rejection = new StoredCredentialRejectedError("mirror.example:8443");
+    const rejection = new StoredCredentialRejectedError(
+      "mirror.example:8443",
+      remoteFailure({ kind: "https-auth", detail: "rejected" }),
+    );
     rejection.cause = new FetchedUrlCause(OVERRIDE_WIRE_URL);
     const { gitOps } = createGitOps({ remoteThrows: rejection });
 
@@ -6171,7 +6177,7 @@ test("UPD-12 / GHB-01: a stored credential that the override host rejects keeps 
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> mirror.example:8443 rejected the stored credential -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n${HTTPS_CLONE_LINE}\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);

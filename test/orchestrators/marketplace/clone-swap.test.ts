@@ -827,9 +827,10 @@ test("D-SG-15: an ls-remote whose stored credential the host refused keeps a val
   // arrange
   const swap = await swapRoot(t);
   await writeCheckout(swap.liveDir, MANIFEST_A);
-  const lsRemoteError = new StoredCredentialRejectedError("git.example", {
-    cause: lsRemoteFailure({ kind: "https-auth", detail: "rejected" }),
-  });
+  const lsRemoteError = new StoredCredentialRejectedError(
+    "git.example",
+    lsRemoteFailure({ kind: "https-auth", detail: "rejected" }),
+  );
   const git = gitAt({
     localHead: COMMIT_A,
     remoteHead: COMMIT_B,
@@ -1444,9 +1445,10 @@ test("D-SG-22, OQ-8: a refresh whose check and re-clone fail over both transport
 
 test("GAUTH-04: a refresh whose check met a refused stored credential throws that refusal, not the re-clone's error", async (t) => {
   // arrange
-  const rejected = new StoredCredentialRejectedError("github.com", {
-    cause: lsRemoteFailure({ kind: "https-auth", detail: "rejected" }),
-  });
+  const rejected = new StoredCredentialRejectedError(
+    "github.com",
+    lsRemoteFailure({ kind: "https-auth", detail: "rejected" }),
+  );
   const { swap, gitOps } = await failingOverBoth(t, {
     httpsClone: new GitCommandError(
       { kind: "network" },

@@ -569,23 +569,6 @@ export class MarketplaceBaselineUnreadableError extends Error {
 }
 
 /**
- * GAUTH-04: the host answered a stored credential with a second challenge, so
- * the credential was found and sent, and the host refused it. The keychain
- * keeps it, because nothing can mint a replacement (D-1-01). Classified as
- * `{authentication required}`.
- *
- * AUTH-09: the message names the host and nothing else.
- */
-export class StoredCredentialRejectedError extends Error {
-  readonly host: string;
-  constructor(host: string, opts?: { cause?: unknown }) {
-    super(`${host} rejected the stored credential`, opts);
-    this.name = "StoredCredentialRejectedError";
-    this.host = host;
-  }
-}
-
-/**
  * D-PL5-07 / D-PL5-10: the host answered a hosted catalog download with a
  * status that is not 2xx. `shared/git-failure-classifiers.ts` reads
  * `data.statusCode` as it reads a git host's status: 401/403, 404/410, or any
@@ -1413,6 +1396,33 @@ function gitCommandMessage(
   return exitCode === null
     ? `git ${operation} failed: ${failure.kind}`
     : `git ${operation} failed: ${failure.kind}, exit code ${exitCode}`;
+}
+
+/**
+ * GAUTH-04, as amended by the one-message HTTPS auth decision of D-SG-31: the
+ * host refused the credential one of the user's credential helpers gave, so
+ * the credential was found and sent, and the host refused it. The keychain
+ * keeps it, because nothing can mint a replacement (D-1-01).
+ *
+ * It is the refused `GitCommandError` itself, with the same failure,
+ * operation, exit code, stderr, and remote and no cause link, so its message
+ * is the typed line every HTTPS auth failure shows and it is classified as
+ * `{authentication required}` like any other `https-auth` failure. `host` and
+ * the class stay internal: D-SG-26 reads the class to prefer a refused
+ * credential over a later failure of the same refresh.
+ */
+export class StoredCredentialRejectedError extends GitCommandError {
+  readonly host: string;
+  constructor(host: string, refused: GitCommandError) {
+    super(refused.failure, {
+      operation: refused.operation,
+      ...(refused.exitCode !== null && { exitCode: refused.exitCode }),
+      stderr: refused.stderr,
+      ...(refused.remote !== undefined && { remote: refused.remote }),
+    });
+    this.name = "StoredCredentialRejectedError";
+    this.host = host;
+  }
 }
 
 /** D-SG-22 / OQ-8: one failed attempt to clone a GitHub source over one transport. */

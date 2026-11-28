@@ -28,6 +28,13 @@ function gitCommandFailure(failure: GitFailure): GitCommandError {
   return new GitCommandError(failure, { operation: "clone", exitCode: 128 });
 }
 
+function refusedCredential(): StoredCredentialRejectedError {
+  return new StoredCredentialRejectedError(
+    "git.example.com",
+    gitCommandFailure({ kind: "https-auth", detail: "rejected" }),
+  );
+}
+
 const PLUGIN_CLONE_RULE = { notFound: "source missing" } as const;
 const MARKETPLACE_ADD_RULE = { notFound: "source missing", missingRef: "source missing" } as const;
 const MARKETPLACE_REFRESH_RULE = { notFound: "network error" } as const;
@@ -92,7 +99,7 @@ describe("classifyGitFailure", () => {
     {
       title:
         "GAUTH-04: classifies a stored credential the host rejected as authentication required",
-      createFailure: () => new StoredCredentialRejectedError("git.example.com"),
+      createFailure: refusedCredential,
       rule: PLUGIN_CLONE_RULE,
       remoteUrl: REMOTE_URL,
       expected: { reason: "authentication required" },
@@ -160,8 +167,7 @@ describe("classifyGitFailure", () => {
     },
     {
       title: "INR-02: classifies a refused stored credential behind a cleanup leak",
-      createFailure: () =>
-        appendLeakToError(new StoredCredentialRejectedError("git.example.com"), "staging leaked"),
+      createFailure: () => appendLeakToError(refusedCredential(), "staging leaked"),
       rule: PLUGIN_CLONE_RULE,
       remoteUrl: undefined,
       expected: { reason: "authentication required" },

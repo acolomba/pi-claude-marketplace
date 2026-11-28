@@ -1609,41 +1609,62 @@ describe("MarketplaceBaselineUnreadableError", () => {
 });
 
 describe("StoredCredentialRejectedError", () => {
-  test("names the host that rejected the stored credential", () => {
+  test("GAUTH-04, D-SG-31: is the refused git failure with its typed line, its facts, the host, and no cause", () => {
     // arrange
-    const host = "git.example.com:8443";
+    const remote = { url: "https://git.example.com:8443/acme/tools.git", gitHub: false };
+    const refused = new GitCommandError(
+      { kind: "https-auth", detail: "rejected" },
+      { operation: "ls-remote", exitCode: 128, stderr: "fatal: Authentication failed", remote },
+    );
 
     // act
-    const error = new StoredCredentialRejectedError(host);
+    const error = new StoredCredentialRejectedError("git.example.com:8443", refused);
 
     // assert
     assert.ok(error instanceof StoredCredentialRejectedError);
-    assert.ok(error instanceof Error);
+    assert.ok(error instanceof GitCommandError);
     assert.deepStrictEqual(
-      { name: error.name, message: error.message, host: error.host, cause: error.cause },
+      {
+        name: error.name,
+        message: error.message,
+        host: error.host,
+        failure: error.failure,
+        kind: error.kind,
+        operation: error.operation,
+        exitCode: error.exitCode,
+        stderr: error.stderr,
+        remote: error.remote,
+        cause: error.cause,
+      },
       {
         name: "StoredCredentialRejectedError",
-        message: "git.example.com:8443 rejected the stored credential",
-        host,
+        message: "git ls-remote failed: https-auth, exit code 128",
+        host: "git.example.com:8443",
+        failure: { kind: "https-auth", detail: "rejected" },
+        kind: "https-auth",
+        operation: "ls-remote",
+        exitCode: 128,
+        stderr: "fatal: Authentication failed",
+        remote,
         cause: undefined,
       },
     );
   });
 
-  test("GAUTH-04: keeps the git failure it is given as its cause", () => {
+  test("GAUTH-04: keeps a refused failure that has no exit code and no remote without either", () => {
     // arrange
-    const failure = new GitCommandError(
+    const refused = new GitCommandError(
       { kind: "https-auth", detail: "rejected" },
-      { operation: "ls-remote", exitCode: 128 },
+      { operation: "fetch" },
     );
 
     // act
-    const error = new StoredCredentialRejectedError("git.example.com", { cause: failure });
+    const error = new StoredCredentialRejectedError("git.example.com", refused);
 
     // assert
     assert.deepStrictEqual(
-      { message: error.message, cause: error.cause },
-      { message: "git.example.com rejected the stored credential", cause: failure },
+      { message: error.message, exitCode: error.exitCode, remote: error.remote },
+      { message: "git fetch failed: https-auth", exitCode: null, remote: undefined },
     );
   });
 });

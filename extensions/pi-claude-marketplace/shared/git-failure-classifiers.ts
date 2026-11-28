@@ -13,12 +13,13 @@
 // Every rung narrows a project error by `instanceof`, one rung per producer
 // that can still reach the ladder: a `GitCommandError` from the system git
 // process by its closed `kind` (SG-PRC-05, D-SG-01), `PinnedCommitMissingError`
-// from the pinned fetch, `StoredCredentialRejectedError` from the GAUTH-04
-// refusal in `platform/git.ts`, and `HostedManifestHttpError` from the hosted
-// catalog download (D-PL5-07). A `GitHubTransportsFailedError` from a GitHub
-// clone that failed over both transports takes its last attempt's rung (OQ-8),
-// and an `InvalidGitHubRepositoryError` from a plugin clone plan that refused
-// a `github` repository is `unsupported source` (IN-A-01). Any other error
+// from the pinned fetch, and `HostedManifestHttpError` from the hosted catalog
+// download (D-PL5-07). The GAUTH-04 refusal in `platform/git.ts`,
+// `StoredCredentialRejectedError`, is a `GitCommandError` and takes that rung.
+// A `GitHubTransportsFailedError` from a GitHub clone that failed over both
+// transports takes its last attempt's rung (OQ-8), and an
+// `InvalidGitHubRepositoryError` from a plugin clone plan that refused a
+// `github` repository is `unsupported source` (IN-A-01). Any other error
 // reaches only the `rule.unknown` fallback.
 
 import {
@@ -27,7 +28,6 @@ import {
   HostedManifestHttpError,
   InvalidGitHubRepositoryError,
   PinnedCommitMissingError,
-  StoredCredentialRejectedError,
   withoutCleanupLeaks,
   type GitFailure,
   type HostedManifestFetchError,
@@ -62,11 +62,10 @@ const SOURCE_MISSING_HTTP_STATUSES = new Set([404, 410]);
  *     transports -> the classification of its last attempt, with that
  *     attempt's URL as `remoteUrl` when the caller passes one (OQ-8);
  *   - a `GitCommandError` from the system git process -> the reason of its
- *     kind (`classifyGitCommandFailure`, SG-PRC-05);
+ *     kind (`classifyGitCommandFailure`, SG-PRC-05), a refused stored
+ *     credential (GAUTH-04) included, which reads `authentication required`;
  *   - a `PinnedCommitMissingError`, a pin that the fresh clone does not hold
  *     -> `source missing` (INR-03);
- *   - a `StoredCredentialRejectedError`, the host refusing the stored
- *     credential a helper gave -> `authentication required` (GAUTH-04);
  *   - a `HostedManifestHttpError`, the hosted catalog download's non-2xx
  *     answer -> `classifyHostedStatus` (D-PL5-10);
  *   - any other error without an errno code -> `network error` when
@@ -123,10 +122,6 @@ export function classifyGitFailure(
 
   if (error instanceof PinnedCommitMissingError) {
     return { reason: "source missing" };
-  }
-
-  if (error instanceof StoredCredentialRejectedError) {
-    return { reason: "authentication required" };
   }
 
   if (error instanceof HostedManifestHttpError) {
