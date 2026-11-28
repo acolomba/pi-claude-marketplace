@@ -1,9 +1,8 @@
 Feature: Plugin credentials
 
-  Installing a plugin from a private git source authenticates git only with what the machine holds,
-  such as the user's git credential helpers, and asks the user for nothing (SG-AUTH-01, SG-AUTH-03).
-  The scenarios run against the run's https git host, the ssh stand-in, and a profile Pi whose
-  github.com requests are routed to the git host.
+  Installing or updating a plugin from a private git source authenticates git only with the user's
+  ssh setup and git credential helpers, and asks for nothing (SG-AUTH-01, SG-AUTH-03). The scenarios
+  run against the https git host, the ssh stand-in, and a profile Pi whose github.com requests go to it.
 
   Scenario: Installing a plugin from a private GitHub source with a stored credential clones it and asks for nothing
     Given the git repository "ghp" holds these plugins:

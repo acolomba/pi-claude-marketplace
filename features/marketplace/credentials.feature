@@ -1,9 +1,8 @@
 Feature: Marketplace credentials
 
-  The extension authenticates git only with what the machine holds, an ssh key or agent and the
-  user's git credential helpers, and keeps no token of its own (SG-AUTH-01, SG-AUTH-02, SG-AUTH-03).
-  The scenarios run against the run's https git host, the ssh stand-in, and a profile Pi whose
-  github.com requests are routed to the git host.
+  Git authenticates only with the user's ssh setup and git credential helpers, and the extension
+  keeps no token of its own (SG-AUTH-01, SG-AUTH-02, SG-AUTH-03). The scenarios run against the https
+  git host, the ssh stand-in, and a profile Pi whose github.com requests go to the git host.
 
   Scenario: With only GITHUB_TOKEN and GH_TOKEN set, adding a private url marketplace fails as authentication required and no request carries either token
     Given the marketplace "tools" is published as a url source
@@ -28,6 +27,7 @@ Feature: Marketplace credentials
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then pi routes no github request
     Then the user's ssh receives no launch
     Then the user scope holds no marketplace record
 
@@ -234,8 +234,6 @@ Feature: Marketplace credentials
   # repository the git host answers 404 for: git never sends the credential,
   # and the entry it leaves proves the extension deletes nothing (D-SG-28).
   Scenario: A failed add that never sends the stored GitHub credential leaves it in the credential store
-    Given the marketplace "tools" is published as a github source
-    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
     Given the marketplace "extras" is published as a github source
     Given the git host answers 404 for the marketplace "extras"
     Given the user's ssh is denied for "github.com"

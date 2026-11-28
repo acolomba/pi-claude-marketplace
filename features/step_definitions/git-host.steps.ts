@@ -586,6 +586,18 @@ Then(
   },
 );
 
+// A command whose every request goes to the git host's loopback address
+// passes the redirect unchanged, so a routed or refused line would be a
+// request of its own, such as one to GitHub's API.
+Then("pi routes no github request", async function (this: ScenarioWorld): Promise<void> {
+  const log = await readRedirectLog(this.profileHarness());
+  const lines = log.slice(this.harnessLogLinesBeforeLastWhen(GITHUB_REDIRECT_LOG));
+  assert.deepStrictEqual(
+    lines.filter((line) => line.decision !== "loaded"),
+    [],
+  );
+});
+
 // A request over a kept-alive socket shows only in the requests, and a non-TLS
 // attempt that never becomes a request shows only in the connection count, so
 // the step asserts both.
