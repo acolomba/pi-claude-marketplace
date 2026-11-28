@@ -329,6 +329,9 @@ export class ScenarioWorld extends World {
   uncomparedSessionResults: readonly string[] = [];
   // A TUI message may produce background notices; its assertion compares the complete set.
   uncomparedTuiNotices = false;
+  // Where the TUI output stood when the scenario sent its message, so a notice
+  // step reads only what the message caused.
+  tuiMessageMark: number | undefined = undefined;
   backgroundForegroundWaitMs: number | undefined = undefined;
   backgroundRequestWindow: RequestWindow | undefined = undefined;
   // The scope bytes the config steps remembered, by scope.

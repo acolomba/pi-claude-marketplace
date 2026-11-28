@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 
-import { backgroundUpdateNoticeTexts } from "../../lib/pi-tui.ts";
+import { backgroundUpdateNoticeTexts, tuiNoticeTexts } from "../../lib/pi-tui.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -42,6 +42,7 @@ When(
   async function (this: ScenarioWorld, message: string): Promise<void> {
     const tui = await this.startTuiSession();
     this.expectTuiNotices();
+    this.tuiMessageMark = tui.markOutput();
     tui.sendLine(message);
   },
 );
@@ -107,12 +108,24 @@ Then(
 
 // Pi runs its input handlers, which arm the background pass with a delay of 0 ms in these
 // scenarios, before it refuses the message for want of a model. Waiting for that refusal
-// starts the quiet window after the pass has been armed or declined, not before.
+// starts the quiet window after the pass has been armed or declined, not before. Pi's
+// refusal is the only error or warning the message may add, and no background update
+// notice may appear at all. Pi redraws the whole screen at times, so the notices the
+// terminal showed before the message are left out rather than counted.
 Then("the tui session reports no notice", async function (this: ScenarioWorld): Promise<void> {
   const tui = this.requireTuiSession();
-  await tui.waitForText(MESSAGE_REFUSED, 15_000);
+  const mark = this.tuiMessageMark;
+  assert.ok(mark !== undefined, "no message was sent in the tui session");
+  await tui.waitForTextAfter(MESSAGE_REFUSED, mark, 15_000);
   await tui.waitForQuiet(2_000, 15_000);
-  assert.deepStrictEqual(backgroundUpdateNoticeTexts(tui.text), []);
+  const shownBefore = new Set(tuiNoticeTexts(tui.textBefore(mark)));
+  assert.deepStrictEqual(
+    {
+      added: tuiNoticeTexts(tui.textAfter(mark)).filter((notice) => !shownBefore.has(notice)),
+      backgroundUpdates: backgroundUpdateNoticeTexts(tui.text),
+    },
+    { added: [`Error: ${MESSAGE_REFUSED}`], backgroundUpdates: [] },
+  );
   this.markTuiNoticesCompared();
 });
 

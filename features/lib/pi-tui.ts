@@ -332,6 +332,19 @@ export function backgroundUpdateNoticeTexts(terminalOutput: string): readonly st
   return [...new Set(notices)];
 }
 
+/**
+ * Returns the distinct error and warning notices in terminal output. Pi's TUI
+ * shows a notice at error severity as `Error: <text>` and one at warning
+ * severity as `Warning: <text>`, whether Pi or an extension sent it. Pi pads
+ * each row it draws to the terminal's width, so a notice ends at a run of two
+ * or more spaces, at a line feed, or at the end of the output.
+ */
+export function tuiNoticeTexts(terminalOutput: string): readonly string[] {
+  const notices =
+    removeTerminalControls(terminalOutput).match(/\b(?:Error|Warning): .*?(?= {2,}|\n|$)/g) ?? [];
+  return [...new Set(notices)];
+}
+
 /** One Pi TUI whose stdio is a real pseudoterminal. */
 export class PiTuiSession {
   private readonly child: TuiChild;
@@ -475,6 +488,11 @@ export class PiTuiSession {
   /** Marks the current raw terminal position for a later event-driven wait. */
   markOutput(): number {
     return this.output.length;
+  }
+
+  /** Returns the terminal text written before `mark`, with control sequences removed. */
+  textBefore(mark: number): string {
+    return removeTerminalControls(this.output.slice(0, mark));
   }
 
   /** Returns the terminal text written after `mark`, with control sequences removed. */

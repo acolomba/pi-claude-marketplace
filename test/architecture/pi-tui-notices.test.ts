@@ -1,9 +1,9 @@
-/** @fileoverview Pins the TUI notice-text oracle and its emission-count limit. */
+/** @fileoverview Pins the TUI notice-text oracles and their emission-count limit. */
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { backgroundUpdateNoticeTexts } from "../../features/lib/pi-tui.ts";
+import { backgroundUpdateNoticeTexts, tuiNoticeTexts } from "../../features/lib/pi-tui.ts";
 
 function screenWrite(notice: string): string {
   return `\u001b[?2026h\u001b[34;1H\u001b[2K \u001b[39m\u001b[2m${notice}\u001b[22;39m\u001b[0m\u001b]8;;\u0007\u001b[37;1H\u001b[?25l\u001b[?2026l`;
@@ -58,4 +58,34 @@ test("separate notices for distinct plugins cannot pass the combined-notice asse
   assert.throws(() => {
     assert.deepStrictEqual(notices, ["Plugins updated: alpha and beta · Run /reload to apply"]);
   }, assert.AssertionError);
+});
+
+test("reads every error and warning notice once, and no plain status text", () => {
+  // arrange
+  const output = [
+    screenWrite("Plugin list"),
+    screenWrite("Error: No API key found for the selected model."),
+    screenWrite("Warning: the background update of tools failed"),
+    screenWrite("Error: No API key found for the selected model."),
+  ].join("\r\n");
+
+  // act
+  const notices = tuiNoticeTexts(output);
+
+  // assert
+  assert.deepStrictEqual(notices, [
+    "Error: No API key found for the selected model.",
+    "Warning: the background update of tools failed",
+  ]);
+});
+
+test("ends a notice at the padding of its row", () => {
+  // arrange
+  const output = `${screenWrite(`Error: first row${" ".repeat(8)}`)}${screenWrite("Use /login")}`;
+
+  // act
+  const notices = tuiNoticeTexts(output);
+
+  // assert
+  assert.deepStrictEqual(notices, ["Error: first row"]);
 });
