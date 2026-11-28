@@ -27,8 +27,9 @@
 // `SubcommandHandlers`, so a case asserting that record has every key would
 // restate a compiler guarantee and is deliberately absent.
 //
-// NFR-5: every case installs a fail-fast replacement of `https.request`, the
-// door the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT. No
+// NFR-5: every case installs fail-fast replacements of `NODE_GIT_PROCESS.run`,
+// which starts every git process, and of `https.request`, Node's in-process
+// HTTPS client. NO CASE ASSERTS A CALL COUNT AGAINST THEM. No
 // input to this module opens a transport -- the completion path reads the two
 // scope roots off disk and the git operations are injected and never invoked --
 // so a zero here could not rise, which is why none is asserted. What the
@@ -67,6 +68,7 @@ import {
   loadState,
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { NODE_GIT_PROCESS } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { UnsupportedModeError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
@@ -241,8 +243,8 @@ const CHOSEN_ITEM: AutocompleteItem = { label: "alpha", value: "install alpha " 
 const SESSION_START: SessionStartEvent = { type: "session_start", reason: "startup" };
 
 /**
- * Replace the door the git transport opens with a fail-fast throw owned by the
- * test context, which restores it after the case.
+ * Replace both network doors with fail-fast throws owned by the test context,
+ * which restores them after the case.
  *
  * A HERMETICITY DEVICE, not an offline proof, and no case asserts a call count
  * against it. No input to this module opens a transport -- the completion path
@@ -251,14 +253,16 @@ const SESSION_START: SessionStartEvent = { type: "session_start", reason: "start
  * value of the replacement is that a dial-out reached from any of these cases
  * fails where it happens.
  *
- * The door is `https.request`, Node's in-process HTTPS client. git runs as a
- * child process that `platform/git-process.ts` starts (D-SG-01), which the
- * trap does not see, so the trap guards in-process HTTP only.
- * `globalThis.fetch` is NOT watched -- its only production caller is the
- * hosted catalog download in `platform/hosted-manifest-fetch.ts`,
- * which no registration or completion enters.
+ * The doors are `NODE_GIT_PROCESS.run`, which starts every git process the
+ * default port runs (D-SG-01), and `https.request`, Node's in-process HTTPS
+ * client. `globalThis.fetch` is NOT watched -- its only production caller is
+ * the hosted catalog download in `platform/hosted-manifest-fetch.ts`, which no
+ * registration or completion enters.
  */
 function installNetworkTrap(t: TestContext): void {
+  t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>
+    Promise.reject(new Error("the registration glue must not start a git process")),
+  );
   t.mock.method(https, "request", (): never => {
     throw new Error("the registration glue must not open a network connection");
   });

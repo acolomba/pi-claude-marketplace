@@ -53,15 +53,15 @@
 // act: this verb reads a merged config and a state file and must add nothing,
 // and the sibling apply path DOES write a migrated config from the same inputs,
 // so the assertion has a real target on the delegating path. The NETWORK half is
-// a counting fail-fast replacement for `https.request`, asserted at zero in every
-// case. `globalThis.fetch` is deliberately NOT the door watched: its only
-// production caller is the hosted catalog download in
-// `platform/hosted-manifest-fetch.ts`, which no pending invocation enters. git
-// runs as a child process that `platform/git-process.ts` starts (D-SG-01),
-// which the trap does not see, so the trap guards in-process HTTP only. One
-// fixture declares a COLD git source as a planned install, which is the input this verb resolves through the no-network
-// resolver, so the zero is asserted over an input that would need the network to
-// resolve any further. This verb has no flag that turns materialization on, so
+// two counting fail-fast replacements, asserted at zero together in every case:
+// `NODE_GIT_PROCESS.run`, which starts every git process the default port runs
+// (D-SG-01), and `https.request`, Node's in-process HTTPS client.
+// `globalThis.fetch` is deliberately NOT a door watched: its only production
+// caller is the hosted catalog download in `platform/hosted-manifest-fetch.ts`,
+// which no pending invocation enters. One fixture declares a COLD git source as
+// a planned install, which is the input this verb resolves through the
+// no-network resolver, so the zero is asserted over an input that would need
+// the network to resolve any further. This verb has no flag that turns materialization on, so
 // no positive control is available: the zero is a regression guard on NFR-5, and
 // the offline `(will install)` row beside it is what says the workflow answered
 // from disk.
@@ -88,6 +88,7 @@ import { test, type TestContext } from "node:test";
 
 import { SCOPE_TARGET_FLAG } from "../../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
 import { makePendingHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/pending.ts";
+import { NODE_GIT_PROCESS } from "../../../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
 import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
@@ -106,18 +107,21 @@ interface HermeticWorkspace {
   readonly projectRoot: string;
   /** `<HOME>/.pi/agent` -- the user scope root (SC-1). */
   readonly userRoot: string;
-  /** Calls recorded by the fail-fast git transport door (NFR-5). */
+  /** Calls recorded by the fail-fast git process and HTTPS doors together (NFR-5). */
   readonly transportCalls: () => number;
 }
 
 /**
  * One temporary working directory and one temporary home per case, with the
- * agent-directory variable cleared and the git transport door replaced by a
- * counting fail-fast throw. Removal and both environment restores are registered
- * before the handler runs.
+ * agent-directory variable cleared and the git process and HTTPS doors each
+ * replaced by a counting fail-fast throw. Removal and both environment
+ * restores are registered before the handler runs.
  */
 async function createHermeticWorkspace(t: TestContext, label: string): Promise<HermeticWorkspace> {
   const { cwd, home, agentDir } = await createHermeticEnvironment(t, `plugin-pending-${label}-`);
+  const gitSpy = t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>
+    Promise.reject(new Error("pending must not start a git process")),
+  );
   const requestSpy = t.mock.method(https, "request", (): never => {
     throw new Error("pending must not open a network connection");
   });
@@ -126,7 +130,7 @@ async function createHermeticWorkspace(t: TestContext, label: string): Promise<H
     home,
     projectRoot: path.join(cwd, ".pi"),
     userRoot: agentDir,
-    transportCalls: (): number => requestSpy.mock.callCount(),
+    transportCalls: (): number => gitSpy.mock.callCount() + requestSpy.mock.callCount(),
   };
 }
 
