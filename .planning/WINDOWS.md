@@ -1,10 +1,10 @@
 ---
 schema_version: 1
 open_count: 29
-waived_count: 52
+waived_count: 53
 fixed_count: 58
-total_count: 139
-last_updated: 2026-11-26T22:21:50.606Z
+total_count: 140
+last_updated: 2026-11-28T04:09:38.872Z
 ---
 
 # Broken Windows Ledger
@@ -137,7 +137,7 @@ last_updated: 2026-11-26T22:21:50.606Z
 | 120 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-process.ts |  | [system-git] the manual macOS and Windows check of the git process module (02-08 steps 1-10: no-git message, shim and lookup rules, no credential window, no console window, no process left after a hanging helper) is deferred to the pull request | open |  | 2026-11-23T18:29:44.674Z |  |
 | 121 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-neutral-directory.ts |  | [system-git] the Windows branches added by the code-review fixes (neutral directory without owner/mode checks, GIT_ALLOW_PROTOCOL spelling intersection, lookup with unreadable real paths) have fake-host unit cases only; the manual Windows check covers them | open |  | 2026-11-23T20:17:06.190Z |  |
 | 122 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git.ts |  | [system-git] a copy of an old clone checks out with core.symlinks unset, so Git for Windows' system config decides symlinks; the manual Windows check covers it (A9) | open |  | 2026-11-24T03:43:08.597Z |  |
-| 123 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts |  | [system-git] the Device Flow retry's '!'-prefixed one-shot credential helper runs through Git for Windows' sh with a Windows path in single quotes; the manual Windows check covers it (A4) | open |  | 2026-11-24T05:05:07.972Z |  |
+| 123 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts |  | [system-git] the Device Flow retry's '!'-prefixed one-shot credential helper runs through Git for Windows' sh with a Windows path in single quotes; the manual Windows check covers it (A4) | waived | [system-git] the one-shot credential helper was removed with the Device Flow sign-in (D-SG-27); nothing remains to check | 2026-11-24T05:05:07.972Z | 2026-11-28T04:09:38.702Z |
 | 124 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts |  | [system-git] a marketplace checkout held open by another process (EBUSY/EPERM on rename) is kept and retried on the next update; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T08:44:49.906Z |  |
 | 125 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts |  | [system-git] a plugin mirror held open by another process (EBUSY/EPERM on rename) fails the plugin's row as permission denied and is retried by the next command; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T10:40:23.053Z |  |
 | 126 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/github-transport.ts |  | [system-git] The 'SSH configured for GitHub, using SSH for <subject>' debug line keys on the via-ssh note, so it now prints for an scp GitHub url add that ran no probe; key it on the probe (04-04 note) | open |  | 2026-11-25T20:05:15.462Z |  |
@@ -154,6 +154,7 @@ last_updated: 2026-11-26T22:21:50.606Z
 | 137 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts |  | [system-git] An enable that fails after its ledger (a transaction-level throw) shows no clone note on its failed row (D-SG-22) | fixed |  | 2026-11-26T02:56:01.845Z | 2026-11-26T22:21:50.481Z |
 | 138 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts |  | [system-git] An apply or import install whose dependency's rollback failed shows the dependency's row with no clone note (D-SG-22) | fixed |  | 2026-11-26T04:22:27.255Z | 2026-11-26T22:21:50.606Z |
 | 139 | 4 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.messaging.ts |  | [system-git] An enable that re-clones a github plugin whose repository is not owner/repo shows no unsupported source: narrowEnableFailure classifies no clone failure (IN-A-01, D-SG-18) | open |  | 2026-11-26T19:09:36.657Z |  |
+| 140 | 5 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/auth-host.ts |  | [system-git] a real gh or Git Credential Manager credential helper answering a private GitHub clone, with no prompt and no device code, is a manual check on the pull request (05-VALIDATION manual item) | open |  | 2026-11-28T04:09:38.872Z |  |
 
 ````json
 [
@@ -1694,10 +1695,10 @@ last_updated: 2026-11-26T22:21:50.606Z
     "file": "extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts",
     "line": null,
     "description": "[system-git] the Device Flow retry's '!'-prefixed one-shot credential helper runs through Git for Windows' sh with a Windows path in single quotes; the manual Windows check covers it (A4)",
-    "status": "open",
-    "reason": "",
+    "status": "waived",
+    "reason": "[system-git] the one-shot credential helper was removed with the Device Flow sign-in (D-SG-27); nothing remains to check",
     "recorded_at": "2026-11-24T05:05:07.972Z",
-    "resolved_at": null,
+    "resolved_at": "2026-11-28T04:09:38.702Z",
     "milestone": null
   },
   {
@@ -1905,6 +1906,19 @@ last_updated: 2026-11-26T22:21:50.606Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-26T19:09:36.657Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 140,
+    "kind": "unrun-verify",
+    "phase": "5",
+    "file": "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
+    "line": null,
+    "description": "[system-git] a real gh or Git Credential Manager credential helper answering a private GitHub clone, with no prompt and no device code, is a manual check on the pull request (05-VALIDATION manual item)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-28T04:09:38.872Z",
     "resolved_at": null,
     "milestone": null
   }

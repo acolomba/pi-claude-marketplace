@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: system-git
 milestone_name: System Git
-current_phase: 5
-current_phase_name: Credential Surface
+current_phase: 6
+current_phase_name: Failure-Message Parity
 status: ready_to_discuss
-stopped_at: Phase 5 context gathered
-last_updated: "2026-11-27T14:33:28.231Z"
-last_activity: 2026-11-27
-last_activity_desc: Phase 4 complete, transitioned to Phase 5
-state_head: 82e2388a1dddd1ec615ac65b8b3a445e7dda16e6
+stopped_at: Phase 5 complete, ready to discuss Phase 6
+last_updated: "2026-11-28T04:09:05.045Z"
+last_activity: 2026-11-28
+last_activity_desc: Phase 5 complete, transitioned to Phase 6
+state_head: 263c890878278c855d205f03eabc245b9781eed9
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 72
-  completed_plans: 59
-  percent: 50
+  completed_plans: 72
+  percent: 63
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 5 (Credential Surface) — READY TO EXECUTE
+Phase: 6 — Failure-Message Parity
 Plan: Not started
-Status: Ready to discuss Phase 5
-Last activity: 2026-11-27 — Phase 4 complete, transitioned to Phase 5
+Status: Ready to discuss Phase 6
+Last activity: 2026-11-28 — Phase 5 complete, transitioned to Phase 6
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 63%
 
 
 ### system-git Phase 1 (Harness on System Git): records for Phase 3
@@ -1409,7 +1409,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-27T12:18:02.760Z
-Stopped at: Phase 5 context gathered
+Stopped at: Phase 5 complete, ready to discuss Phase 6
 Resume file: .planning/phases/05-credential-surface/05-CONTEXT.md
 
 ### Phase 2 completion-helper notes

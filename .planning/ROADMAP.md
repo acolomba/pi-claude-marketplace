@@ -105,7 +105,7 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
 - [x] **Phase 2: Git Process Seam and Typed Failures** - Every git process starts from one hardened module that cannot prompt, hang, or run repository code, a git failure arrives as a typed error with a kind, and a missing git gets a clear message (completed 2026-11-23)
 - [x] **Phase 3: System Git Transport and Clone Shape** - Marketplaces and git-source plugins clone, fetch, and update with system git in Claude Code's shape, and clones made before the upgrade keep working (completed 2026-11-24)
 - [x] **Phase 4: SSH Sources and Transport Selection** - A user adds a marketplace or installs a plugin from an SSH URL, and `owner/repo` sources choose SSH or HTTPS as Claude Code does (completed 2026-11-27)
-- [ ] **Phase 5: Credential Surface** - Git authenticates only through what the machine holds, Device Flow is removed or kept as discuss decides, and tokens stored through it keep working
+- [x] **Phase 5: Credential Surface** - Git authenticates only through what the machine holds, Device Flow is removed or kept as discuss decides, and tokens stored through it keep working (completed 2026-11-28)
 - [ ] **Phase 6: Failure-Message Parity** - Clone and fetch failures report Claude Code's message for each failure class, and no output shows a credential
 - [ ] **Phase 7: Submodules and Marketplace Pins** - Plugin clones fetch their submodules, marketplace clones fetch only the submodules that hold plugin files, and a SHA-pinned marketplace follows upstream's path
 - [ ] **Phase 8: Close** - `isomorphic-git` is gone, and the records, READMEs, codebase docs, and CHANGELOG describe the system git transport
@@ -407,7 +407,7 @@ Plans:
   1. A user whose machine holds an SSH key or agent, or a git credential helper such as gh's or Git Credential Manager, adds a private marketplace and installs from it with no prompt from the extension; with only `GITHUB_TOKEN` or `GH_TOKEN` set and no helper, the private clone fails as an auth failure, and the token appears in no URL, header, or argument (SG-AUTH-01).
   2. Device Flow is gone, with no device-code prompt on any command, or it remains in the form discuss chose (Q2); either way a load with `autoapply` on and the background autoupdate pass never wait for user input, and PROJECT.md restates the AAP, autoapply, and D-PL8-12 rules for the outcome (SG-AUTH-02).
   3. A user who stored a token through Device Flow before the upgrade still clones and updates over HTTPS with no action, the extension deletes no stored credential, and the one-time notice, if discuss chose one (Q5), appears once; cucumber scenarios pin each (SG-AUTH-03).
-**Plans**: 13/13 plans executed in 13 sequential waves (each plan depends on the one before it)
+**Plans**: 13/13 plans complete in 13 sequential waves (each plan depends on the one before it)
 
 Plans:
 **Wave 1**
@@ -499,7 +499,7 @@ Plans:
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
 | 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
 | 4. SSH Sources and Transport Selection | 26/26 | Complete    | 2026-11-27 |
-| 5. Credential Surface | 13/13 | In Progress | - |
+| 5. Credential Surface | 13/13 | Complete    | 2026-11-28 |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
 | 7. Submodules and Marketplace Pins | 0/TBD | Not started | - |
 | 8. Close | 0/TBD | Not started | - |
