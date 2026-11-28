@@ -16,7 +16,7 @@ The surfaces are:
 - the `apply` and `import` cascades;
 - the background autoupdate pass.
 
-This phase adds no new failure kinds and no new transports. It changes no retry rules (D-SG-18, D-SG-22) and no reason tokens (D-PL7-01).
+This phase adds no new failure kinds and no new transports. It changes no retry rules (D-SG-18, D-SG-22). It changes no reason tokens (D-PL7-01), with one exception: the `enable` re-clone failure (see the follow-up decisions).
 
 </domain>
 
@@ -98,6 +98,7 @@ This phase adds no new failure kinds and no new transports. It changes no retry 
   - The empty-stderr remedy points to `PI_CLAUDE_MARKETPLACE_DEBUG=1`. Pi therefore adds one redacted `[git]` debug line for each failed git run, naming the git subcommand and its exit code, so the remedy is true.
   - Central path redaction in `hookDebugLog` goes ahead; the unit tests that capture debug output and check absolute paths are updated in the same commits.
   - The amended D-79-03 bare-auth-row rule and IMP-09 are amended so that the auth rows keep their cause and remedy (06-RESEARCH).
+- **Enable re-clone reason (maintainer, after planning).** When `enable` (direct, or through `apply`) re-clones a git-source plugin and the clone fails, the row takes the reason `install` gives for the same git failure (for example `{source missing}` for a 404, not `{unreadable}`). It uses the same classifier as install, and the row also gets the shared cause line and remedy. This is the one reason-token change in this phase, and it serves success criterion 2 (the same reason on every surface).
 
 ### Claude's Discretion
 
