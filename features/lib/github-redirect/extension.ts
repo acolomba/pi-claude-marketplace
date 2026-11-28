@@ -20,7 +20,8 @@
  * the git host's certificate. A request to a loopback host passes unchanged.
  * Any other request through the replaced functions is refused with an error
  * that names its host, and so is every non-loopback request when the config
- * is missing. At load it appends one `loaded` line with its process id, and it
+ * is missing. At load it appends one `loaded` line with its process id and
+ * the names of the token variables Pi's environment holds, and it
  * appends one line per routed or refused request, synchronously, to
  * `<harness dir>/github-redirect.jsonl`, so a scenario can state that nothing
  * left the machine.
@@ -46,11 +47,20 @@ import type { RequestOptions } from "node:https";
 export const GITHUB_REDIRECT_EXTENSION = fileURLToPath(import.meta.url);
 
 const CONFIG_FILE = "github-redirect.json";
+// SG-AUTH-01: the token variables a user's shell may hold, which the loaded
+// line names so a scenario can show that they reached Pi.
+const TOKEN_VARIABLES: readonly string[] = ["GITHUB_TOKEN", "GH_TOKEN", "GITLAB_TOKEN"];
 /** The name of the redirect's log in the harness directory. */
 export const GITHUB_REDIRECT_LOG = "github-redirect.jsonl";
 /** One line of the redirect's log. */
 export type RedirectLogLine =
-  | { readonly decision: "loaded"; readonly pid: number; readonly configured: boolean }
+  | {
+      readonly decision: "loaded";
+      readonly pid: number;
+      readonly configured: boolean;
+      /** The token variables Pi's environment holds, by name, never by value. */
+      readonly tokenVariables: readonly string[];
+    }
   | {
       readonly decision: "routed";
       readonly method: string;
@@ -265,5 +275,10 @@ export default function githubRedirect(): void {
   Object.assign(http, { request: httpRequest, get: redirect.get(httpRequest) });
   syncBuiltinESMExports();
   globalThis.fetch = redirect.fetch(globalThis.fetch.bind(globalThis));
-  redirect.append({ decision: "loaded", pid: process.pid, configured: config !== undefined });
+  redirect.append({
+    decision: "loaded",
+    pid: process.pid,
+    configured: config !== undefined,
+    tokenVariables: TOKEN_VARIABLES.filter((name) => process.env[name] !== undefined),
+  });
 }

@@ -396,6 +396,10 @@ Given(
   },
 );
 
+// SG-AUTH-01: the token variables a user's shell may hold. The product reads
+// none of them, so any non-empty value serves.
+const TOKEN_VARIABLES: ReadonlySet<string> = new Set(["GITHUB_TOKEN", "GH_TOKEN"]);
+
 // D-BG-01: the pi runs without the GitHub base override, so SG-SSH-02 runs
 // the ssh probe, and the redirect keeps every request on this machine. A
 // system git of that pi reaches `github.com` through the CONNECT proxy, which
@@ -420,9 +424,15 @@ async function startPiWithGitHubRouted(
   const loads = (await readRedirectLog(world.profileHarness())).flatMap((line) =>
     line.decision === "loaded" ? [line] : [],
   );
+  // SG-AUTH-01: a token scenario proves nothing unless its variables reached Pi.
+  const tokenVariables = Object.keys(variables ?? {}).filter((name) => TOKEN_VARIABLES.has(name));
   assert.deepStrictEqual(
-    loads.map((line) => ({ configured: line.configured, ownProcess: line.pid === process.pid })),
-    [{ configured: true, ownProcess: false }],
+    loads.map((line) => ({
+      configured: line.configured,
+      ownProcess: line.pid === process.pid,
+      tokenVariables: [...line.tokenVariables].sort(),
+    })),
+    [{ configured: true, ownProcess: false, tokenVariables: tokenVariables.sort() }],
   );
 }
 
@@ -442,10 +452,6 @@ Given(
 // `ssh` first on Pi's path, or is empty, so git never runs another program.
 const SSH_VARIABLES: ReadonlySet<string> = new Set(["GIT_SSH_COMMAND", "GIT_SSH"]);
 const SSH_VARIABLE_VALUES: ReadonlySet<string> = new Set(["ssh", ""]);
-
-// SG-AUTH-01: the token variables a user's shell may hold. The product reads
-// none of them, so any non-empty value serves.
-const TOKEN_VARIABLES: ReadonlySet<string> = new Set(["GITHUB_TOKEN", "GH_TOKEN"]);
 
 /**
  * D-SG-24, D-SG-18, SG-AUTH-01: the one upstream, ssh, or token variable
