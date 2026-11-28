@@ -50,7 +50,6 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { stripVTControlCharacters } from "node:util";
 
 import { sanitizeLockfile } from "../../domain/package-lockfile.ts";
 import {
@@ -59,6 +58,7 @@ import {
   NODE_PACKAGE_MANAGER_SPAWN,
 } from "../../platform/package-manager.ts";
 import { stripBom } from "../../shared/bom.ts";
+import { boundedNote, compactOutput } from "../../shared/child-output.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning } from "../../shared/staging-warnings.ts";
@@ -137,7 +137,6 @@ const PACKAGE_INSTALL_TIMEOUT_MS = 60_000;
 // Claude Code's limit on `npm config get registry`.
 const REGISTRY_QUERY_TIMEOUT_MS = 30_000;
 const PACKAGE_INSTALL_KILL_GRACE_MS = 5_000;
-const NOTE_LIMIT = 500;
 // Claude Code's 32 MB cap on package.json and on the lockfile.
 const MAX_INPUT_FILE_BYTES = 33_554_432;
 const SKIPPED_PREFIX = "Skipped installing this plugin's dependencies: ";
@@ -244,12 +243,8 @@ function listsPackages(manifest: Readonly<Record<string, unknown>>): boolean {
   return LISTING_FIELDS.some((field) => listsSomething(manifest[field]));
 }
 
-function boundedNote(note: string): string {
-  return note.slice(0, NOTE_LIMIT).replace(/[\uD800-\uDBFF]$/u, "");
-}
-
 function skippedNote(reason: string): string {
-  return boundedNote(`${SKIPPED_PREFIX}${reason}.`);
+  return boundedNote(`${SKIPPED_PREFIX}${reason}.`, "head");
 }
 
 // lstat then read leaves a narrow window in which the file could be swapped;
@@ -391,30 +386,16 @@ async function detectInstall(target: PackageStepTarget): Promise<Detection> {
 }
 
 function failedNote(command: string, detail: string): string {
-  return boundedNote(`Plugin dependency install failed (${command}): ${detail}`);
+  return boundedNote(`Plugin dependency install failed (${command}): ${detail}`, "head");
 }
 
 function runFailed(run: PackageManagerRun): boolean {
   return run.code !== 0 || run.timedOut || run.error !== undefined;
 }
 
-const NPM_WARN_LINE = /^npm warn\b/i;
-const NPM_ERROR_PREFIX = /^npm (?:ERR!|error) ?/;
-
-// The output as one line for a note: escape sequences and control characters
-// gone, npm's own prefixes dropped, and npm's warnings left out when anything
-// else was printed, so the error is what the 500-character cut keeps.
-function compactOutput(output: string): string {
-  const lines = stripVTControlCharacters(output)
-    .split(/[\r\n]+/)
-    .map((line) => line.replaceAll(/\p{Cc}/gu, " ").trim())
-    .filter((line) => line !== "");
-  const errors = lines.filter((line) => !NPM_WARN_LINE.test(line));
-  return (errors.length > 0 ? errors : lines)
-    .map((line) => line.replace(NPM_ERROR_PREFIX, ""))
-    .join("; ");
-}
-
+// The tool's output compacted to one line (shared/child-output.ts), stderr
+// first and stdout when stderr held nothing, so the error is what the
+// 500-character cut keeps.
 function failureDetail(run: PackageManagerRun): string {
   if (run.timedOut) {
     return `timed out after ${PACKAGE_INSTALL_TIMEOUT_MS / 1_000} seconds`;

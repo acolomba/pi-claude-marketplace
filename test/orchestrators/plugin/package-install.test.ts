@@ -626,33 +626,6 @@ describe("createPackagesPhase", () => {
       note: "Plugin dependency install failed (npm): ETARGET",
     },
     {
-      situation: "npm's error lines without its warnings, prefixes, or control characters",
-      run: {
-        code: 1,
-        stdout: "",
-        stderr: [
-          "npm warn config production Use `--omit=dev` instead.",
-          "\u001b[31mnpm error\u001b[39m code E404",
-          "npm ERR! 404 Not Found\t- GET http://127.0.0.1/pkd-dep\u0007",
-          "",
-          "npm error A complete log of this run can be found in: /home/user/.npm/_logs/debug.log",
-          "",
-        ].join("\r\n"),
-        timedOut: false,
-      },
-      note: "Plugin dependency install failed (npm): code E404; 404 Not Found - GET http://127.0.0.1/pkd-dep; A complete log of this run can be found in: /home/user/.npm/_logs/debug.log",
-    },
-    {
-      situation: "npm's warnings when it printed nothing else",
-      run: {
-        code: 1,
-        stdout: "",
-        stderr: "npm warn old lockfile\nnpm warn tarball corrupt\n",
-        timedOut: false,
-      },
-      note: "Plugin dependency install failed (npm): npm warn old lockfile; npm warn tarball corrupt",
-    },
-    {
       situation: "the error of a process that could not start",
       run: {
         code: null,
